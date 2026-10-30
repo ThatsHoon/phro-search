@@ -14,7 +14,7 @@ One entry for research. First work out what the user actually needs (intake), th
 | dig | an unfamiliar field, prior art, canonical papers, practitioners' own methods, the originals behind a claim | `references/dig.md` |
 | watch | new posts from venues a topic already knows | `references/watch.md` |
 | report | a decision-ready answer: compare options, map a landscape or a standard | `references/report.md` |
-| pulse | what people said, shipped or argued about in the last N days | not in this version: hand the brief to the last30days skill and say so |
+| pulse | what people said, shipped or argued about in the last N days | `references/pulse.md` |
 | docs | a technical fact the open code depends on (API behavior, spec detail, library internals) | `references/docs.md` |
 | models | a backbone model for a task under constraints | not in this version: hand the brief to the huggingface-best skill and say so |
 
@@ -51,7 +51,7 @@ Users rarely know exactly what they are looking for or which context matters. Pi
 
 ## Topic folder
 
-`~/research/<topic>/` by default, or the root a caller passes (`<topic>` is lowercase ASCII with hyphens; the title lives in the brief). Inside: `map.md` (brief, terms, people, venues, sources, next leads), `log.md` (append only), `sources/` (originals only, never summaries), `extracts.json`, `report.html`, for report `notes/`, `claims.json` and `report-<date>.md`, and for watch `watch.tsv`, `watch-state.json` and `watch/`. Formats are in `references/formats.md`.
+`~/research/<topic>/` by default, or the root a caller passes (`<topic>` is lowercase ASCII with hyphens; the title lives in the brief). Inside: `map.md` (brief, terms, people, venues, sources, next leads), `log.md` (append only), `sources/` (originals only, never summaries), `extracts.json`, `report.html`, for report `notes/`, `claims.json` and `report-<date>.md`, for watch `watch.tsv`, `watch-state.json` and `watch/`, and for pulse `pulse/` (plan, results, evidence files and briefs). Formats are in `references/formats.md`.
 
 ## Scripts
 
@@ -61,7 +61,8 @@ Run them as `python -I ${CLAUDE_PLUGIN_ROOT}/scripts/<name>.py`, one call per co
 - `chain.py find|refs|cites|author`: find a paper, walk its references and citing works, or an author's works (OpenAlex, no key).
 - `report.py <topic_dir> [--check]`: check every extract against its source line and every claims.json verdict against its votes, then build `report.html`.
 - `watch.py add|list|check`: venue feeds and what is new since the last check.
-- `check.py [--kind report] <file>`: style check of the exact reply or brief after its last edit (`-` reads standard input); quotes, report.html and sources are never checked. `--kind report` also checks a report's BLUF, citations and verdicts against the claims.json beside it. Read `${CLAUDE_PLUGIN_ROOT}/STYLE.md` before writing a deliverable.
+- `pulse.py <topic_dir> --plan <file> [--days N] [--quick | --deep]`: community items of the last N days from keyless lanes, scored, merged and clustered into `pulse/<date>.json` and an evidence file.
+- `check.py [--kind report|pulse] <file>`: style check of the exact reply or brief after its last edit (`-` reads standard input); quotes, report.html and sources are never checked. `--kind report` also checks a report's BLUF, citations and verdicts against the claims.json beside it; `--kind pulse` checks a brief's lane coverage line and verbatim quotes against the pulse result beside it. Read `${CLAUDE_PLUGIN_ROOT}/STYLE.md` before writing a deliverable.
 
 ## Rules for every mode
 
@@ -71,5 +72,5 @@ Run them as `python -I ${CLAUDE_PLUGIN_ROOT}/scripts/<name>.py`, one call per co
 - No logins, account creation, CAPTCHA or bot-check workarounds, paywall workarounds or piracy sites. A walled item goes to the user with its URL and why it matters; the user may open it in a browser and hand the saved file to `fetch.py`.
 - Subagents search and return compact lists; downloads, decisions and delivery stay in the main session.
 - Before delivering, stop every background agent or process this run started and log what was stopped.
-- Deliverables are in the user's language, pass `check.py`, and never narrate tool internals.
+- Deliverables are in the user's language, pass `check.py`, and never narrate tool internals. The text sent is the text that printed OK: write the whole reply, closing question included, check it, and check again after any change.
 - Close the run with the feedback question (did this match what you were after, what is missing or off) and log the answer verbatim.

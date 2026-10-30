@@ -118,6 +118,7 @@ Empty slots are left out. Required claims for dig: the first is always the venue
 ## 8. During the run
 
 - dig: after round 0, show the map (terms, people, venues) and the two directions, then confirm the direction and the required claims in one round, unless dig.md's skip condition holds.
+- pulse: when an ambiguity survives the pre-flight, show the resolved entity, subreddits, repositories and anchors in one round before running.
 - A finding that changes the question: ask once before re-scoping, log the reason; reworded, added or dropped claims count as brief drift.
 - A hand-off to another mode copies the brief and asks only what changes.
 - Log the intake line after the gate and add re-scopes and drift at delivery (`references/formats.md`).

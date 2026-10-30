@@ -76,7 +76,7 @@ intake-end: rescopes=<n>; drift=<claims added, dropped, reworded>
 feedback: "<the user's answer, verbatim>"
 ```
 
-The `brief:` and `feedback:` lines start at column 0 so that later intakes can grep them. Report mode writes `research`, `archive`, `verify` and `write` sections in the round's shape (spawned, came back, fetched, decisions); `verify` adds `votes: <n> central claims; <s> survived, <r> refuted, <u> unverified; <m> missing votes`.
+The `brief:` and `feedback:` lines start at column 0 so that later intakes can grep them. Report mode writes `research`, `archive`, `verify` and `write` sections in the round's shape (spawned, came back, fetched, decisions); `verify` adds `votes: <n> central claims; <s> survived, <r> refuted, <u> unverified; <m> missing votes`. Pulse mode writes one `pulse` section: `- run: pulse/<stem>.json; lanes: <lane> <status>, ...; clusters: <n> over the floor, <m> weak; supplements: <queries>; brief: pulse/<stem>.md`.
 
 ## extracts.json
 
@@ -121,6 +121,25 @@ Takeaway: <one or two sentences>
 Inferences: <marked as inference>
 Gaps: <looked for and not found, with the queries tried>
 ```
+
+## Pulse files
+
+`pulse/plan.json`, written by this session:
+
+```
+{"intent": "<what the user wants to learn>", "entity": "<head word first; optional>", "freshness": "balanced", "days": 30,
+ "subqueries": [{"label": "main", "search_query": "<keywords with the anchor>", "ranking_query": "<what an on-topic item is about>",
+                 "lanes": ["hn", "reddit", "github", "arxiv", "youtube"], "weight": 1.0}],
+ "subreddits": ["<broad>"], "dedicated_subreddits": ["<the entity's own>"], "reddit_queries": ["<one or two words>"], "github_repos": ["<owner/name>"],
+ "youtube_queries": ["<spoken phrasing>"]}
+```
+
+- `label` is unique and not `dedicated`, `reddit`, `repo` or `youtube`. `lanes` defaults to all five, `weight` to 1.0, `ranking_query` to the search query, `reddit_queries` (at most 3) to the entity, else the first subquery; subreddits are names, a leading `r/` is dropped.
+- `pulse/<stem>.json`, written by `pulse.py`: `{topic, as_of, window: {from, to}, days, freshness, plan, lanes: {<lane>: {status, count, note}}, items, clusters, weak}`. The stem is the as-of date, with `-2` and on for later runs that day. `lanes` lists the lanes the plan used.
+- An item: `{id, lane, lanes, url, links: {<lane>: <its page there>}, title, author, date, engagement: {<lane>: {<count>: n}}, snippet, comments: [{author, score, text, url}], exempt, score, relevance, subquery, grounded, pool}`. `date` is a UTC `YYYY-MM-DD`, or null when undated. A comment's `score` is its reactions on GitHub, its score on Reddit (as arctic-shift archived it, often below the live one) and its reply count on Hacker News. `exempt` marks dedicated subreddits and named repositories; `grounded` false keeps an item out of clusters; `pool` marks the items clustered.
+- A cluster: `{id, title, score, lanes, items: [<item ids>, best first], labels}`, labels `single-lane` and `thin`. `clusters` are over the floor, `weak` under it.
+- `pulse/<stem>-evidence.md`: the lanes, then each cluster with its items, links, snippets and comments, then the weak signals.
+- `pulse/<stem>.md`: the brief (`references/pulse.md`).
 
 ## Watch files
 

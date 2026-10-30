@@ -1,6 +1,6 @@
 """Lint a Markdown or plain-text deliverable for AI writing tells and print each spot.
 
-usage: check.py [--kind report] <file>      (a lone - reads standard input)
+usage: check.py [--kind report|pulse] <file>      (a lone - reads standard input)
 output, one line per problem:  <line>:<rule>: <detail>   (line 0 for whole-document counts)
 then  FAIL<TAB><n> problems  and exit 1, or  OK  and exit 0.
 rules: phrase, symbol, dash, invisible: one hit fails.
@@ -11,11 +11,16 @@ Fenced code, quote lines (">"), inline code and URLs are not checked, except for
        section: a conclusion section exists (a ## heading that starts with the word for conclusion),
                 and it and every ## section before it cite a claim;
        claim: every cited id is in claims.json, and the BLUF and the conclusion cite survived claims only.
+--kind pulse also checks a pulse brief against the pulse.py result (<stem>.json) beside it:
+       lanes: one line names every lane the run listed (Hacker News, Reddit, GitHub, arXiv, YouTube);
+       quote: every quote (> lines) is found verbatim in the result's titles, snippets or comments ("..." may
+              join pieces kept in order), with the quoted item's or comment's link on the line after it;
+              a result with clusters needs at least one quote.
 """
 import argparse, itertools, json, re, sys
 from pathlib import Path
 
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 
 # One hit fails. English entries match whole words; Korean entries match anywhere in the text.
 HARD_PHRASES = [
@@ -163,10 +168,68 @@ def report_problems(raw, verdicts):
     return found
 
 
+# --kind pulse. pulse.py's lane names:
+NAMES = {"hn": "Hacker News", "reddit": "Reddit", "github": "GitHub", "arxiv": "arXiv", "youtube": "YouTube"}
+LINK = re.compile(r"https?://[^\s)>\]]+")
+ELLIPSIS = re.compile(r"\.\.\.|\U00002026")
+WRAP = "\"'\U0000201c\U0000201d\U00002018\U00002019"  # quote marks around a whole quote
+
+
+def in_order(pieces, text):
+    at = 0
+    for p in pieces:
+        at = text.find(p, at)
+        if at < 0:
+            return False
+        at += len(p)
+    return True
+
+
+def pulse_problems(raw, result):
+    """A pulse brief's structure as (line, rule, detail) tuples, against the pulse.py result beside it."""
+    lines = FENCE.sub(lambda m: "\n" * m.group().count("\n"), raw.replace("\r\n", "\n")).split("\n")
+    found = []
+    want = [NAMES.get(k, k) for k in result.get("lanes", {})]
+    best = max(lines, key=lambda t: sum(n in t for n in want), default="")
+    missing = [n for n in want if n not in best]
+    if missing:
+        found.append((0, "lanes", f"no line names every lane the run listed; name {', '.join(missing)} on the coverage line"))
+    sources = []  # (text, links) of everything a brief may quote
+    for i in result.get("items", []):
+        urls = {i.get("url"), *(i.get("links") or {}).values()}
+        sources += [(t, urls) for t in (i.get("title"), i.get("snippet"))]
+        sources += [(c.get("text"), urls | {c.get("url")}) for c in i.get("comments") or []]
+    sources = [(" ".join(str(t or "").split()), u) for t, u in sources]
+    quotes, n = 0, 0
+    while n < len(lines):
+        if not QUOTE.match(lines[n]):
+            n += 1
+            continue
+        start = n
+        while n < len(lines) and QUOTE.match(lines[n]):
+            n += 1
+        quotes += 1
+        text = " ".join(re.sub(r"^[ \t]*>[ \t]?", "", t) for t in lines[start:n])
+        pieces = [p for p in (" ".join(s.split()) for s in ELLIPSIS.split(text.strip().strip(WRAP))) if p]
+        if pieces:
+            pieces[-1] = pieces[-1].rstrip(".,;:!? ") or pieces[-1]  # a full stop the brief adds is not a misquote
+        hits = [u for t, u in sources if pieces and in_order(pieces, t)]
+        after = next((t for t in lines[n:] if t.strip()), "")
+        links = {u.rstrip(".,;:") for u in LINK.findall(after)}
+        if not hits:
+            found.append((start + 1, "quote", f'not found verbatim in the pulse results: "{snippet(text, 0)}"'))
+        elif not any(links & u for u in hits):
+            found.append((start + 1, "quote", "put the quoted item's or comment's link on the line after the quote"))
+    if result.get("clusters") and not quotes:
+        found.append((0, "quote", "no quote; quote an item or comment of each cluster on a > line, with its link"))
+    return found
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("file", help="Markdown or text file; - reads standard input")
-    ap.add_argument("--kind", choices=["report"], help="report: also check the structure against claims.json beside the file")
+    ap.add_argument("--kind", choices=["report", "pulse"], help="report: also check the structure against claims.json beside "
+                    "the file; pulse: against the pulse.py result (<stem>.json) beside the brief")
     args = ap.parse_args(argv)
     try:
         data = sys.stdin.buffer.read() if args.file == "-" else Path(args.file).read_bytes()
@@ -187,6 +250,16 @@ def main(argv=None):
             print(f"FAIL\tcannot read {path}: {e}")
             return 1
         problems += report_problems(raw, verdicts)
+    if args.kind == "pulse":
+        if args.file == "-":
+            print("FAIL\t--kind pulse reads the pulse.py result beside the brief; pass the file, not -")
+            return 1
+        path = Path(args.file).with_suffix(".json")
+        try:
+            problems += pulse_problems(raw, json.loads(path.read_text(encoding="utf-8-sig")))
+        except (OSError, ValueError, TypeError, AttributeError) as e:
+            print(f"FAIL\tcannot read {path}: {e}")
+            return 1
     for line, rule, detail in problems:
         print(f"{line}:{rule}: {detail}")
     print(f"FAIL\t{len(problems)} problems" if problems else "OK")

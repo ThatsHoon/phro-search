@@ -314,3 +314,72 @@ class ReportKindTest(unittest.TestCase):
     def test_style_rules_still_apply(self):
         code, out = self.run_report(REPORT.replace("faster [c1]", "faster [c1] \U00002014 by far"))
         self.assertEqual((code, out[0][:7]), (1, "3:dash:"))
+
+
+BRIEF = """# 위젯 엔진 30일 동향
+
+위젯 엔진 2가 나왔고 반응이 좋다.
+
+출처: Hacker News 1건, Reddit 실패(http 503), YouTube 건너뜀(yt-dlp 없음)
+
+## 위젯 엔진 2 출시
+
+> "Works well for me, and the new scheduler halves latency."
+
+amy, Hacker News: https://news.ycombinator.com/item?id=12
+"""
+RESULT = {"lanes": {"hn": {"status": "ok"}, "reddit": {"status": "failed: http 503"}, "youtube": {"status": "skipped"}},
+          "items": [{"url": "https://example.com/we2", "links": {"hn": "https://news.ycombinator.com/item?id=1"},
+                     "title": "Widget engine 2 is out", "snippet": "A rewrite of the   scheduler.",
+                     "comments": [{"author": "amy", "text": "Works well for me, and the new scheduler halves latency.",
+                                   "url": "https://news.ycombinator.com/item?id=12"}]},
+                    {"url": "https://example.com/other", "links": {"hn": "https://news.ycombinator.com/item?id=2"},
+                     "title": "Other story", "snippet": "", "comments": []}],
+          "clusters": [{"id": "k1", "items": ["hn:1"]}]}
+
+
+class PulseKindTest(unittest.TestCase):
+    """--kind pulse: one line names every lane the run listed; quotes are verbatim and linked."""
+
+    def problems(self, text, result=RESULT):
+        return [(line, rule) for line, rule, _ in m.pulse_problems(text, result)]
+
+    def test_good_brief_passes(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "2026-10-30.md"
+            path.write_text(BRIEF, encoding="utf-8")
+            (Path(d) / "2026-10-30.json").write_text(json.dumps(RESULT), encoding="utf-8")
+            self.assertEqual(run("--kind", "pulse", str(path))[:2], (0, ["OK"]))
+
+    def test_one_line_names_every_lane(self):
+        self.assertEqual(m.pulse_problems(BRIEF.replace(", Reddit 실패(http 503)", ""), RESULT),
+                         [(0, "lanes", "no line names every lane the run listed; name Reddit on the coverage line")])
+        self.assertEqual(self.problems(BRIEF.replace("출처: Hacker News 1건, ", "출처: ")), [(0, "lanes")])
+
+    def test_quotes_are_verbatim(self):
+        self.assertEqual(self.problems(BRIEF.replace("halves latency", "cuts latency in half")), [(9, "quote")])
+        self.assertEqual(self.problems(BRIEF.replace("for me, and the new", "for me ... the new")), [])
+        self.assertEqual(self.problems(BRIEF.replace("Works well for me, and the new", "the new ... Works well")), [(9, "quote")])
+        self.assertEqual(self.problems(BRIEF.replace("for me, and", "for me,\n>   and")), [])
+        snippet = BRIEF.replace('"Works well for me, and the new scheduler halves latency."', "A rewrite of the scheduler")
+        self.assertEqual(self.problems(snippet.replace("item?id=12", "item?id=1")), [])
+        self.assertEqual(self.problems(BRIEF + "\n```\n> not checked\n```\n"), [])
+
+    def test_quotes_carry_their_link(self):
+        self.assertEqual(self.problems(BRIEF.replace("item?id=12", "item?id=2")), [(9, "quote")])  # another item's link
+        self.assertEqual(self.problems(BRIEF.replace("Hacker News: https://news.ycombinator.com/item?id=12", "Hacker News")),
+                         [(9, "quote")])
+
+    def test_a_result_with_clusters_needs_a_quote(self):
+        no_quote = BRIEF.split("\n> ")[0]
+        self.assertEqual(self.problems(no_quote), [(0, "quote")])
+        self.assertEqual(self.problems(no_quote, {**RESULT, "clusters": []}), [])
+
+    def test_the_result_is_required(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "2026-10-30.md"
+            path.write_text(BRIEF, encoding="utf-8")
+            code, out, _ = run("--kind", "pulse", str(path))
+        self.assertEqual((code, out[0][:17]), (1, "FAIL\tcannot read "))
+        code, out, _ = run("--kind", "pulse", "-", data=BRIEF.encode("utf-8"))
+        self.assertEqual((code, out), (1, ["FAIL\t--kind pulse reads the pulse.py result beside the brief; pass the file, not -"]))
