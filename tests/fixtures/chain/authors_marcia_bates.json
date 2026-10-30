@@ -1,0 +1,35 @@
+{
+ "meta": {
+  "count": 3
+ },
+ "results": [
+  {
+   "id": "https://openalex.org/A5046418008",
+   "display_name": "Marcia J. Bates",
+   "works_count": 110,
+   "last_known_institutions": [
+    {
+     "id": "https://openalex.org/I161318765",
+     "display_name": "University of California, Los Angeles"
+    }
+   ]
+  },
+  {
+   "id": "https://openalex.org/A5062361148",
+   "display_name": "Marcia H. Bates",
+   "works_count": 12,
+   "last_known_institutions": []
+  },
+  {
+   "id": "https://openalex.org/A5106234332",
+   "display_name": "Marcia Bates",
+   "works_count": 1,
+   "last_known_institutions": [
+    {
+     "id": "https://openalex.org/I137902535",
+     "display_name": "North Carolina State University"
+    }
+   ]
+  }
+ ]
+}

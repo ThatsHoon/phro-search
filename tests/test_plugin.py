@@ -1,14 +1,19 @@
-import json, re, subprocess, sys, unittest
+import ast, json, re, subprocess, sys, unittest
 from tests._load import ROOT
 
 SKILL = ROOT / "skills/search/SKILL.md"
 REFS = ROOT / "skills/search/references"
 SCRIPTS = ROOT / "scripts"
 MODES = ("dig", "report", "pulse", "docs", "models", "watch")
-KO = re.compile(r"[ᄀ-ᇿ㄰-㆏가-힣]")
-JA = re.compile(r"[぀-ヿㇰ-ㇿｦ-ﾟ]")
-KO_JA = re.compile(r"[ᄀ-ᇿ㄰-㆏가-힣぀-ヿㇰ-ㇿｦ-ﾟ]")
-TELLS = re.compile(r"[–—☀-➿⭐️\U0001f300-\U0001faff]")
+KO = re.compile(r"[\U00001100-\U000011ff\U00003130-\U0000318f\U0000ac00-\U0000d7a3]")
+JA = re.compile(r"[\U00003040-\U000030ff\U000031f0-\U000031ff\U0000ff66-\U0000ff9f]")
+KO_JA = re.compile(r"[\U00001100-\U000011ff\U00003130-\U0000318f\U0000ac00-\U0000d7a3\U00003040-\U000030ff\U000031f0-\U000031ff\U0000ff66-\U0000ff9f]")
+TELLS = re.compile(r"[\U00002013\U00002014\U00002600-\U000027bf\U00002b50\U0000fe0f\U0001f300-\U0001faff]")
+INVISIBLE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\U0000061c\U0000200b-\U0000200f\U0000202a-\U0000202e"
+                       r"\U00002060-\U00002064\U00002066-\U00002069\U0000feff]")
+# Scripts run standalone, so they carry copies of shared code: (names, the original, scripts that must carry it).
+SHARED = ((("egress_terms", "_edge", "egress_hit"), "hooks/egress.py", {"chain.py", "fetch.py", "watch.py"}),
+          (("_CTRL", "_QUOTES", "clean"), "scripts/chain.py", set()))
 
 
 def read(path):
@@ -56,6 +61,20 @@ def help_info(script):
     m = re.search(r"\{([\w,-]+)\}", top)
     subs = m.group(1).split(",") if m else []
     return subs, top + "".join(run(s) for s in subs)
+
+
+def shared(path, names):
+    """Source text of the top-level functions and assignments of a file that are called one of names."""
+    text = read(path)
+    out = {}
+    for node in ast.parse(text).body:
+        if isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name):
+            name = node.targets[0].id
+        else:
+            name = getattr(node, "name", None)
+        if name in names:
+            out[name] = ast.get_source_segment(text, node)
+    return out
 
 
 class PluginTest(unittest.TestCase):
@@ -133,3 +152,20 @@ class PluginTest(unittest.TestCase):
                and not {".git", "tests", "__pycache__"} & set(p.relative_to(ROOT).parts)
                and TELLS.search(read(p))]
         self.assertEqual(bad, [])
+
+    def test_no_invisible_characters(self):
+        # Tests too: a literal bidi or zero-width character hides what code does. Write escapes instead.
+        bad = [str(p.relative_to(ROOT)) for p in sorted(ROOT.rglob("*"))
+               if p.is_file() and p.suffix in (".md", ".py", ".json")
+               and not {".git", "__pycache__"} & set(p.relative_to(ROOT).parts) and INVISIBLE.search(read(p))]
+        self.assertEqual(bad, [])
+
+    def test_shared_code_copies_match(self):
+        for names, original, needed in SHARED:
+            want = shared(ROOT / original, names)
+            self.assertEqual(sorted(want), sorted(names), original)
+            copies = {p.name: got for p in sorted(SCRIPTS.glob("*.py")) if (got := shared(p, names))}
+            self.assertLessEqual(needed, set(copies))
+            for name, got in copies.items():
+                with self.subTest(copy=name, of=original):
+                    self.assertEqual(got, want)

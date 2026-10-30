@@ -1,0 +1,22 @@
+{
+ "id": "https://openalex.org/W1964729842",
+ "display_name": "The design of browsing and berrypicking techniques for the online search interface",
+ "publication_year": 1989,
+ "cited_by_count": 1761,
+ "doi": "https://doi.org/10.1108/eb024320",
+ "best_oa_location": null,
+ "open_access": {
+  "is_oa": false,
+  "oa_status": "closed",
+  "oa_url": null,
+  "any_repository_has_fulltext": false
+ },
+ "referenced_works": [
+  "https://openalex.org/W195302104",
+  "https://openalex.org/W1570378841",
+  "https://openalex.org/W1602667807",
+  "https://openalex.org/W1964020902",
+  "https://openalex.org/W1974170312",
+  "https://openalex.org/W1979070506"
+ ]
+}

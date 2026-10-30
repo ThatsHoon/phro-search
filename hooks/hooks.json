@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "WebSearch|WebFetch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "P=python; [ \"$OS\" != Windows_NT ] && command -v python3 >/dev/null 2>&1 && P=python3; exec \"$P\" -I -X utf8 \"${CLAUDE_PLUGIN_ROOT}/hooks/egress.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

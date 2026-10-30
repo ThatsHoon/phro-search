@@ -1,0 +1,24 @@
+{
+ "data": [
+  {
+   "title": "Ask\u001b[2J me\u202e anything",
+   "selftext": "First &amp; only line\n\nMore below.",
+   "created_utc": 1793349255,
+   "permalink": "/r/Python/comments/abc123/ask_me_anything/",
+   "url": "https://www.reddit.com/r/Python/comments/abc123/ask_me_anything/",
+   "author": "user_a",
+   "score": 3,
+   "num_comments": 1
+  },
+  {
+   "title": "A link post",
+   "selftext": "",
+   "created_utc": 1792000000,
+   "permalink": "/r/Python/comments/def456/a_link_post/",
+   "url": "https://example.com/article",
+   "author": "user_b",
+   "score": 10,
+   "num_comments": 4
+  }
+ ]
+}

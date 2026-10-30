@@ -1,0 +1,133 @@
+{
+ "meta": {
+  "count": 6
+ },
+ "results": [
+  {
+   "id": "https://openalex.org/W1602667807",
+   "display_name": "Automatic information organization and retrieval",
+   "publication_year": 1968,
+   "cited_by_count": 931,
+   "doi": null,
+   "best_oa_location": null,
+   "open_access": {
+    "is_oa": false,
+    "oa_status": "closed",
+    "oa_url": null,
+    "any_repository_has_fulltext": false
+   }
+  },
+  {
+   "id": "https://openalex.org/W1974170312",
+   "display_name": "The spatial metaphor for user interfaces: experimental tests of reference by location versus name",
+   "publication_year": 1986,
+   "cited_by_count": 144,
+   "doi": "https://doi.org/10.1145/5401.5405",
+   "best_oa_location": {
+    "id": "doi:10.1145/5401.5405",
+    "doi": "https://doi.org/10.1145/5401.5405",
+    "is_oa": true,
+    "landing_page_url": "https://doi.org/10.1145/5401.5405",
+    "pdf_url": "https://dl.acm.org/doi/pdf/10.1145/5401.5405",
+    "source": {
+     "id": "https://openalex.org/S4394735545",
+     "display_name": "ACM Transactions on Information Systems",
+     "issn_l": "1046-8188",
+     "issn": [
+      "1046-8188",
+      "1558-2868"
+     ],
+     "is_oa": false,
+     "is_in_doaj": false,
+     "is_core": false,
+     "listed_in": [
+      "abdc-c",
+      "anvur-class-a",
+      "anvur-scientific",
+      "ccf-a",
+      "dongbi-a",
+      "jufo-3",
+      "norway-2",
+      "poland-140",
+      "russia-white-list-1",
+      "vabb-shw"
+     ],
+     "host_organization": null,
+     "host_organization_name": null,
+     "host_organization_lineage": [],
+     "host_organization_lineage_names": [],
+     "type": "journal"
+    },
+    "license": null,
+    "license_id": null,
+    "version": "publishedVersion",
+    "is_accepted": true,
+    "is_published": true,
+    "raw_source_name": "ACM Transactions on Information Systems",
+    "raw_type": "journal-article"
+   },
+   "open_access": {
+    "is_oa": true,
+    "oa_status": "bronze",
+    "oa_url": "https://dl.acm.org/doi/pdf/10.1145/5401.5405",
+    "any_repository_has_fulltext": false
+   }
+  },
+  {
+   "id": "https://openalex.org/W195302104",
+   "display_name": "Information Retrieval Strategies File-Search Environment",
+   "publication_year": 1984,
+   "cited_by_count": 55,
+   "doi": "https://doi.org/10.1177/001872088402600204",
+   "best_oa_location": null,
+   "open_access": {
+    "is_oa": false,
+    "oa_status": "closed",
+    "oa_url": null,
+    "any_repository_has_fulltext": false
+   }
+  },
+  {
+   "id": "https://openalex.org/W1979070506",
+   "display_name": "Browsing through databases",
+   "publication_year": 1980,
+   "cited_by_count": 21,
+   "doi": "https://doi.org/10.5555/636669.636689",
+   "best_oa_location": null,
+   "open_access": {
+    "is_oa": false,
+    "oa_status": "closed",
+    "oa_url": null,
+    "any_repository_has_fulltext": false
+   }
+  },
+  {
+   "id": "https://openalex.org/W1570378841",
+   "display_name": "Spatial Data Management System",
+   "publication_year": 1978,
+   "cited_by_count": 20,
+   "doi": "https://doi.org/10.21236/ada070243",
+   "best_oa_location": null,
+   "open_access": {
+    "is_oa": false,
+    "oa_status": "closed",
+    "oa_url": null,
+    "any_repository_has_fulltext": false
+   }
+  },
+  {
+   "id": "https://openalex.org/W1964020902",
+   "display_name": "Knowledge gateways: the building blocks\u2217",
+   "publication_year": 1988,
+   "cited_by_count": 10,
+   "doi": "https://doi.org/10.1016/0306-4573(88)90048-9",
+   "best_oa_location": null,
+   "open_access": {
+    "is_oa": false,
+    "oa_status": "closed",
+    "oa_url": null,
+    "any_repository_has_fulltext": false
+   }
+  }
+ ]
+}

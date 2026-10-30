@@ -1,0 +1,182 @@
+"""scripts/report.py: quotes checked against their source lines, and the evidence page."""
+import contextlib
+import io
+import json
+import pathlib
+import re
+import subprocess
+import sys
+import tempfile
+import unittest
+
+from tests._load import ROOT, load
+
+m = load("scripts/report.py")
+ELL = "\U00002026"
+LEGACY_STATUS = ["付いた", "一部だけ", "付かなかった", "일부만"]  # sourced, partial, none, partial
+KO_SOURCE = "사고\U000000a0차량의 위치는\n자동으로 전송된다.\n"
+KO_QUOTE = "사고 차량의 위치는 자동으로 전송된다."
+KO_PARAPHRASE = "사고 차량의 위치가 자동으로 전송된다."
+JA_SOURCE = "はじめに\n事故車両の位置は\n自動的に送信される。\n"
+JA_QUOTE = "事故車両の位置は自動的に送信される。"
+KO_TRANSLATION = "알파의 번역"
+
+
+def quote(file, line, text, **extra):
+    return {"file": file, "line": line, "text": text, **extra}
+
+
+def claim(*quotes, status="sourced"):
+    return {"claim": "A claim", "status": status, "quotes": list(quotes)}
+
+
+class ReportTest(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = pathlib.Path(tmp.name)
+
+    def topic(self, sources, claims, **extra):
+        """A new topic folder with these source files, written byte for byte, and an extracts.json."""
+        topic = pathlib.Path(tempfile.mkdtemp(dir=self.root))
+        for name, text in sources.items():
+            path = topic / "sources" / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(text.encode("utf-8"))
+        data = {"title": "Evidence", "question": "Does it hold?", "stopped": "saturated", "claims": claims, **extra}
+        (topic / "extracts.json").write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        return topic
+
+    def report(self, topic, *flags):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = m.main([str(topic), *flags])
+        return code, out.getvalue()
+
+    def page(self, topic):
+        code, out = self.report(topic)
+        self.assertEqual(code, 0, out)
+        return (topic / "report.html").read_text(encoding="utf-8")
+
+    def test_verbatim_quote_passes_and_writes_page(self):
+        topic = self.topic({"a.md": "Intro\nThe model reaches 95 percent accuracy on the test set.\nEnd\n"},
+                           [claim(quote("a.md", 2, "reaches 95 percent accuracy"))])
+        self.assertEqual(self.report(topic), (0, f"OK\t1 quotes in 1 claims match\t{topic / 'report.html'}\n"))
+        html = (topic / "report.html").read_text(encoding="utf-8")
+        self.assertIn("<blockquote>reaches 95 percent accuracy</blockquote>", html)
+
+    def test_paraphrase_blocks_page_and_names_the_quote(self):
+        sources = {"a.md": "Intro\nThe model reaches 95 percent accuracy.\n", "b.md": "x\ny\nz\nThe method needs no labels.\n"}
+        topic = self.topic(sources, [claim(quote("a.md", 2, "reaches 95 percent accuracy"),
+                                           quote("b.md", 4, "The method requires no labels."))],
+                           disagreements=[{"topic": "Labels", "quotes": [quote("b.md", 1, "nothing like it", who="Lab A")]}])
+        expected = ["MISMATCH\tclaim 1 quote 2\tb.md:4\tnot found near the line\tThe method requires no labels.",
+                    "MISMATCH\tdisagreement 1 quote 1\tb.md:1\tnot found near the line\tnothing like it",
+                    "FAIL\t2 of 3 quotes do not match; report.html not written"]
+        code, out = self.report(topic)
+        self.assertEqual((code, out.splitlines()), (1, expected))
+        self.assertFalse((topic / "report.html").exists())
+        (topic / "report.html").write_text("previous page", encoding="utf-8")
+        self.assertEqual(self.report(topic)[0], 1)
+        self.assertEqual((topic / "report.html").read_text(encoding="utf-8"), "previous page")
+
+    def test_ellipsis_pieces_match_in_order_only(self):
+        sources = {"a.md": "left column one\nright column two\nleft column three\n"}
+        in_order = self.topic(sources, [claim(quote("a.md", 2, f"left column one {ELL} column three"))])
+        self.assertEqual(self.report(in_order, "--check")[0], 0)
+        swapped = self.topic(sources, [claim(quote("a.md", 2, f"column three {ELL} left column one"))])
+        code, out = self.report(swapped, "--check")
+        self.assertEqual((code, out.splitlines()[0].split("\t")[3]), (1, "piece 2 not found in order"))
+        only_ellipsis = self.topic(sources, [claim(quote("a.md", 2, f" {ELL} "))])
+        code, out = self.report(only_ellipsis, "--check")
+        self.assertEqual((code, out.splitlines()[0].split("\t")[3]), (1, "not found near the line"))
+
+    def test_legacy_status_values_and_ja_key(self):
+        claims = [claim(quote("a.md", 1, "alpha"), status=s) for s in LEGACY_STATUS]
+        claims[0]["quotes"][0].update(ja=KO_TRANSLATION, context_note="old extra key")
+        html = self.page(self.topic({"a.md": "alpha\n"}, claims))
+        self.assertEqual(re.findall(r'<span class="status \w+">(\w+)</span>', html), ["sourced", "partial", "none", "partial"])
+        self.assertIn(f'<p class="tr"><span class="tag">translation</span> {KO_TRANSLATION}</p>', html)
+        self.assertNotIn("old extra key", html)
+        unknown = self.topic({"a.md": "alpha\n"}, [claim(quote("a.md", 1, "alpha"), status="done")])
+        self.assertEqual(self.report(unknown), (1, 'FAIL\tclaim 1: unknown status "done"\n'))
+
+    def test_context_shows_neighbor_lines_and_marks_the_quote(self):
+        rows = "".join(f"row{n:02d}\n" for n in range(1, 31))
+        html = self.page(self.topic({"a.md": rows}, [claim(quote("a.md", 10, "row10 row11", end=11))]))
+        self.assertEqual(re.findall(r'<span class="n">(\d+)</span>', html), [str(n) for n in range(5, 17)])
+        self.assertEqual(re.findall(r'<mark><span class="n">(\d+)</span>row(\d+)</mark>', html), [("10", "10"), ("11", "11")])
+        self.assertIn('<span class="n">5</span>row05', html)
+        self.assertIn('<span class="n">16</span>row16', html)
+        self.assertNotIn("row04", html)
+        self.assertNotIn("row17", html)
+        self.assertIn('<a href="sources/a.md">sources/a.md:10-11</a>', html)
+
+    def test_form_feed_and_other_breaks_keep_grep_numbering(self):
+        # grep -n sees 10 lines; splitlines() would split at each separator and put the target at 19.
+        seps = ["\f", "\x0b", "\x1c", "\x1d", "\x1e", "\x85", "\U00002028", "\U00002029", "\r"]
+        text = "".join(f"page {i}{sep}more\n" for i, sep in enumerate(seps, 1)) + "target sentence here\r\n"
+        topic = self.topic({"a.txt": text}, [claim(quote("a.txt", 10, "target sentence here")),
+                                             claim(quote("a.txt", 11, "target sentence here"))])
+        code, out = self.report(topic, "--check")
+        self.assertEqual((code, out.splitlines()), (1, [
+            "MISMATCH\tclaim 2 quote 1\ta.txt:11\tline out of range (file has 10 lines)\ttarget sentence here",
+            "FAIL\t1 of 2 quotes do not match; report.html not written"]))
+
+    def test_cjk_quote_across_a_line_break(self):
+        topic = self.topic({"ko.md": KO_SOURCE, "ja.md": JA_SOURCE},
+                           [claim(quote("ko.md", 1, KO_QUOTE, end=2), quote("ja.md", 2, JA_QUOTE))])
+        self.assertEqual(self.report(topic, "--check"), (0, "OK\t2 quotes in 1 claims match\tcheck only\n"))
+        bad = self.topic({"ko.md": KO_SOURCE}, [claim(quote("ko.md", 1, KO_PARAPHRASE))])
+        run = subprocess.run([sys.executable, "-I", str(ROOT / "scripts/report.py"), str(bad), "--check"],
+                             capture_output=True, encoding="utf-8", timeout=60)
+        self.assertEqual(run.returncode, 1, run.stderr)
+        self.assertIn(f"\tnot found near the line\t{KO_PARAPHRASE}\n", run.stdout)
+
+    def test_caption_timestamps_are_ignored(self):
+        text = "[12:34] so the trick is\n[12:36] to warm the model up first\n[1:02:03] and then lower the rate\n"
+        topic = self.topic({"talk.txt": text}, [claim(quote("talk.txt", 1, "so the trick is to warm the model", end=2),
+                                                      quote("talk.txt", 2, "up first and then lower the rate", end=3))])
+        self.assertEqual(self.report(topic, "--check")[0], 0)
+
+    def test_bullet_list_across_lines(self):
+        text = "Steps:\n- check the airway\n* call for help\n\U00002022 keep them warm\n1. stay\n2) wait\n"
+        topic = self.topic({"l.md": text}, [
+            claim(quote("l.md", 2, "check the airway call for help keep them warm stay wait", end=6),
+                  quote("l.md", 2, "- check the airway\n* call for help", end=3))])
+        self.assertEqual(self.report(topic, "--check")[0], 0)
+
+    def test_paths_outside_sources_are_rejected(self):
+        files = ["../extracts.json", "sub/../a.md", "/etc/hosts", "C:/a.md", "gone.md"]
+        topic = self.topic({"a.md": "alpha\n"}, [claim(*(quote(f, 1, "alpha") for f in files))])
+        code, out = self.report(topic, "--check")
+        reasons = [line.split("\t")[3] for line in out.splitlines()[:-1]]
+        self.assertEqual((code, reasons), (1, ["bad file path"] * 4 + ["no file"]))
+
+    def test_check_writes_no_file(self):
+        topic = self.topic({"a.md": "alpha\n"}, [claim(quote("a.md", 1, "alpha"))])
+        self.assertEqual(self.report(topic, "--check"), (0, "OK\t1 quotes in 1 claims match\tcheck only\n"))
+        self.assertFalse((topic / "report.html").exists())
+
+    def test_page_escapes_html(self):
+        topic = self.topic({"x.md": "plain line\n<script>alert(1)</script>\n"},
+                           [claim(quote("x.md", 2, "<script>alert(1)</script>", mark="<b>fig</b>"))],
+                           disagreements=[{"topic": "<i>who</i>", "quotes": [quote("x.md", 1, "plain line", who="<u>Lab</u>")]}],
+                           unreached=["<em>paywalled</em>"])
+        html = self.page(topic)
+        self.assertIn("<blockquote>&lt;script&gt;alert(1)&lt;/script&gt;</blockquote>", html)
+        self.assertEqual([raw for raw in ("<script>", "<b>", "<i>", "<u>", "<em>") if raw in html], [])
+        self.assertIn("<h2>Disagreements</h2>", html)
+        self.assertIn("<h2>Not reached</h2>", html)
+
+    def test_bad_extracts_fail(self):
+        empty = pathlib.Path(tempfile.mkdtemp(dir=self.root))
+        self.assertEqual(self.report(empty), (1, f"FAIL\tcannot read {empty / 'extracts.json'}\n"))
+        (empty / "extracts.json").write_text("{not json", encoding="utf-8")
+        self.assertTrue(self.report(empty)[1].startswith("FAIL\textracts.json is not valid JSON: "))
+        topic = self.topic({"a.md": "alpha\n"}, [claim(quote("a.md", "1", "alpha"))])
+        self.assertEqual(self.report(topic), (1, "FAIL\tclaim 1 quote 1: line must be int\n"))
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,0 +1,77 @@
+{
+ "meta": {
+  "count": 1759
+ },
+ "results": [
+  {
+   "id": "https://openalex.org/W2111335329",
+   "display_name": "Beyond PICO",
+   "publication_year": 2012,
+   "cited_by_count": 2607,
+   "doi": "https://doi.org/10.1177/1049732312452938",
+   "best_oa_location": null,
+   "open_access": {
+    "is_oa": false,
+    "oa_status": "closed",
+    "oa_url": null,
+    "any_repository_has_fulltext": false
+   }
+  },
+  {
+   "id": "https://openalex.org/W1570418772",
+   "display_name": "Looking for Information: A Survey of Research on Information Seeking, Needs, and Behavior",
+   "publication_year": 2016,
+   "cited_by_count": 1543,
+   "doi": "https://doi.org/10.1108/s2055-53772016",
+   "best_oa_location": null,
+   "open_access": {
+    "is_oa": false,
+    "oa_status": "closed",
+    "oa_url": null,
+    "any_repository_has_fulltext": false
+   }
+  },
+  {
+   "id": "https://openalex.org/W2017022128",
+   "display_name": "Meta\u2010synthesis method for qualitative research: a literature review",
+   "publication_year": 2005,
+   "cited_by_count": 1245,
+   "doi": "https://doi.org/10.1111/j.1365-2648.2005.03380.x",
+   "best_oa_location": null,
+   "open_access": {
+    "is_oa": false,
+    "oa_status": "closed",
+    "oa_url": null,
+    "any_repository_has_fulltext": false
+   }
+  },
+  {
+   "id": "https://openalex.org/W2104217798",
+   "display_name": "Understanding user goals in web search",
+   "publication_year": 2004,
+   "cited_by_count": 941,
+   "doi": "https://doi.org/10.1145/988672.988675",
+   "best_oa_location": null,
+   "open_access": {
+    "is_oa": false,
+    "oa_status": "closed",
+    "oa_url": null,
+    "any_repository_has_fulltext": false
+   }
+  },
+  {
+   "id": "https://openalex.org/W1982896842",
+   "display_name": "Characterizing browsing strategies in the World-Wide web",
+   "publication_year": 1995,
+   "cited_by_count": 939,
+   "doi": "https://doi.org/10.1016/0169-7552(95)00043-7",
+   "best_oa_location": null,
+   "open_access": {
+    "is_oa": false,
+    "oa_status": "closed",
+    "oa_url": null,
+    "any_repository_has_fulltext": false
+   }
+  }
+ ]
+}

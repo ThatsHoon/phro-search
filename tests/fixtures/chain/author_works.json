@@ -1,0 +1,77 @@
+{
+ "meta": {
+  "count": 102
+ },
+ "results": [
+  {
+   "id": "https://openalex.org/W1964729842",
+   "display_name": "The design of browsing and berrypicking techniques for the online search interface",
+   "publication_year": 1989,
+   "cited_by_count": 1761,
+   "doi": "https://doi.org/10.1108/eb024320",
+   "best_oa_location": null,
+   "open_access": {
+    "is_oa": false,
+    "oa_status": "closed",
+    "oa_url": null,
+    "any_repository_has_fulltext": false
+   }
+  },
+  {
+   "id": "https://openalex.org/W423119105",
+   "display_name": "Encyclopedia of Library and Information Sciences",
+   "publication_year": 2009,
+   "cited_by_count": 732,
+   "doi": "https://doi.org/10.1201/9780203757635",
+   "best_oa_location": null,
+   "open_access": {
+    "is_oa": false,
+    "oa_status": "closed",
+    "oa_url": null,
+    "any_repository_has_fulltext": false
+   }
+  },
+  {
+   "id": "https://openalex.org/W2057323446",
+   "display_name": "Information search tactics",
+   "publication_year": 1979,
+   "cited_by_count": 429,
+   "doi": "https://doi.org/10.1002/asi.4630300406",
+   "best_oa_location": null,
+   "open_access": {
+    "is_oa": false,
+    "oa_status": "closed",
+    "oa_url": null,
+    "any_repository_has_fulltext": false
+   }
+  },
+  {
+   "id": "https://openalex.org/W2172197065",
+   "display_name": "The invisible substrate of information science",
+   "publication_year": 1999,
+   "cited_by_count": 409,
+   "doi": "https://doi.org/10.1002/(sici)1097-4571(1999)50:12<1043::aid-asi1>3.0.co;2-x",
+   "best_oa_location": null,
+   "open_access": {
+    "is_oa": false,
+    "oa_status": "closed",
+    "oa_url": null,
+    "any_repository_has_fulltext": false
+   }
+  },
+  {
+   "id": "https://openalex.org/W2066941314",
+   "display_name": "Where should the person stop and the information search interface start?",
+   "publication_year": 1990,
+   "cited_by_count": 342,
+   "doi": "https://doi.org/10.1016/0306-4573(90)90103-9",
+   "best_oa_location": null,
+   "open_access": {
+    "is_oa": false,
+    "oa_status": "closed",
+    "oa_url": null,
+    "any_repository_has_fulltext": false
+   }
+  }
+ ]
+}
