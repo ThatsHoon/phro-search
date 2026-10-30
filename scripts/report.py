@@ -4,6 +4,13 @@ Usage:
   report.py <topic_dir>          check every quote, then write <topic_dir>/report.html
   report.py <topic_dir> --check  check only; write nothing
 
+When the topic has a claims.json (report mode), a claim in extracts.json may carry
+its "id"; the page then shows that claim's verdict and votes. claims.json is checked
+too: each verdict must follow from its votes (2 refutations: refuted; fewer than 2
+votes: unverified; else survived), at most 3 votes per claim, at most 10 central
+claims, each central claim located by a quote in extracts.json, and every id in
+extracts.json present in claims.json.
+
 Lines count like grep -n. A quote matches when it appears within lines line-2 to
 end+2 of sources/<file>, both sides normalized the same way: on each line a leading
 caption timestamp ([mm:ss], [h:mm:ss]) and list marker are dropped, then every
@@ -13,9 +20,11 @@ report.html as it is.
 
 Output, tab-separated:
   MISMATCH\t<claim|disagreement> <i> quote <j>\t<file>:<line>\t<reason>\t<quote head>
+  CLAIM\t<where>\t<reason>                     a claims.json problem
   FAIL\t<k> of <m> quotes do not match; report.html not written
-  FAIL\t<reason>       extracts.json missing, not valid JSON or the wrong shape
-  OK\t<m> quotes in <c> claims match\t<report.html path or "check only">
+  FAIL\t<p> claims.json problems; report.html not written
+  FAIL\t<reason>       extracts.json or claims.json missing, not valid JSON or the wrong shape
+  OK\t<m> quotes in <c> claims match[; votes: <s> survived, <r> refuted, <u> unverified]\t<report.html path or "check only">
 Reasons: no file, bad file path, line out of range (file has N lines),
 not found near the line, piece <k> not found in order.
 """
@@ -28,7 +37,7 @@ import re
 import sys
 import urllib.parse
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 
 _CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\U0000061c\U0000200b-\U0000200f\U0000202a-\U0000202e\U00002060-\U00002064\U00002066-\U00002069\U0000feff]")
 _QUOTES = str.maketrans("\U00002018\U00002019\U0000201a\U0000201b\U00002032\U0000201c\U0000201d\U0000201e\U0000201f\U00002033\U0000ff02\U0000ff07", "'''''\"\"\"\"\"\"'")
@@ -44,9 +53,15 @@ STATUS = {"sourced": "sourced", "partial": "partial", "none": "none",
           "付いた": "sourced", "一部だけ": "partial", "付かなかった": "none", "일부만": "partial"}
 # Expected keys and types; a key ending in ? may be absent, unknown keys are ignored. "ja" is the legacy translation.
 TOP = {"title": str, "question": str, "stopped": str, "claims": list, "disagreements?": list, "unreached?": list}
-CLAIM = {"claim": str, "status": str, "note?": str, "quotes": list}
+CLAIM = {"claim": str, "status": str, "note?": str, "quotes": list, "id?": str}
 DISAGREEMENT = {"topic": str, "quotes": list}
 QUOTE = {"file": str, "line": int, "end?": int, "text": str, "translation?": str, "ja?": str, "mark?": str, "who?": str}
+# claims.json (report mode) is a list of CLAIMED, each with its verifiers' votes.
+CLAIMED = {"id": str, "claim": str, "quote": str, "url": str, "label": str, "importance": str, "votes?": list, "verdict?": str}
+VOTE = {"refuted": bool, "confidence": str, "evidence": str, "counter_source?": str}
+IMPORTANCE = ("central", "supporting", "tangential")
+VERDICTS = ("survived", "refuted", "unverified")
+MAX_CENTRAL, MAX_VOTES = 10, 3
 ELLIPSIS = "\U00002026"
 # A caption timestamp, then a list marker: a bullet glyph, or -, *, +, 1. or 1) with whitespace after it.
 _LEAD = re.compile(r"^\s*(?:\[(?:\d+:)?\d+:\d\d\])?\s*(?:[\U000000b7\U00002022\U00002023\U00002043\U000025a0\U000025a1"
@@ -65,7 +80,8 @@ h2{font-size:1.15rem;line-height:1.4;margin:2.5rem 0 .5rem;padding-top:1rem;bord
 h3{font-size:1rem;margin:1.5rem 0 .5rem}
 .lead,.note,figcaption,summary,.n{color:var(--muted)}
 .status{font-size:.75rem;font-weight:500;border:1px solid;border-radius:1em;padding:0 .6em;white-space:nowrap}
-.sourced{color:var(--accent)}.partial{color:var(--partial)}.none{color:var(--none)}
+.sourced,.survived{color:var(--accent)}.partial,.unverified{color:var(--partial)}.none,.refuted{color:var(--none)}
+.votes{font-size:.9rem}.votes p{margin:.3rem 0}.votes ul{margin:0;padding-left:1.2rem}
 figure{margin:1rem 0;padding:1rem;background:var(--card);border:1px solid var(--line);border-radius:8px}
 blockquote{margin:0;padding-left:.8rem;border-left:3px solid var(--accent);white-space:pre-wrap}
 .who{font-weight:600;margin:0 0 .5rem}
@@ -111,6 +127,56 @@ def load(path):
                 need(q, QUOTE, f"{name} {i} quote {j}")
                 quotes.append((f"{name} {i} quote {j}", q))
     return data, quotes
+
+
+def load_claims(path):
+    """claims.json as {id: claim}, or None when the topic has none; raises ValueError naming the first problem."""
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
+    except OSError:
+        raise ValueError(f"cannot read {path}") from None
+    except ValueError as e:
+        raise ValueError(f"claims.json is not valid JSON: {e}") from None
+    if type(data) is not list:
+        raise ValueError("claims.json must be a list")
+    claims = {}
+    for i, c in enumerate(data, 1):
+        need(c, CLAIMED, f"claims.json item {i}")
+        where = f'claims.json {clean(c["id"], 40)}'
+        if c["id"] in claims:
+            raise ValueError(f"{where}: the id appears twice")
+        if c["importance"] not in IMPORTANCE or c.get("verdict", VERDICTS[0]) not in VERDICTS:
+            raise ValueError(f"{where}: importance must be one of {', '.join(IMPORTANCE)}; verdict one of {', '.join(VERDICTS)}")
+        for j, v in enumerate(c.setdefault("votes", []), 1):  # a claim never sent to verifiers has none
+            need(v, VOTE, f"{where} vote {j}")
+        claims[c["id"]] = c
+    return claims
+
+
+def verdict(votes):
+    """The vote rule: 2 refutations kill a claim; fewer than 2 votes leave it unverified, never refuted."""
+    return "refuted" if sum(v["refuted"] for v in votes) >= 2 else "unverified" if len(votes) < 2 else "survived"
+
+
+def claim_problems(claims, data):
+    """Where claims.json breaks the report rules, as (where, reason) pairs."""
+    located = {c["id"] for c in data["claims"] if c.get("id") and c["quotes"]}
+    out = [(f"claim {i}", f'id "{clean(c["id"], 40)}" is not in claims.json')
+           for i, c in enumerate(data["claims"], 1) if "id" in c and c["id"] not in claims]
+    central = [c for c in claims.values() if c["importance"] == "central"]
+    if len(central) > MAX_CENTRAL:
+        out.append(("claims.json", f"{len(central)} central claims (limit {MAX_CENTRAL})"))
+    for c in claims.values():
+        where = f'claims.json {clean(c["id"], 40)}'
+        if c["importance"] == "central" and c["id"] not in located:
+            out.append((where, "central, but no claim in extracts.json carries this id with a quote"))
+        if len(c["votes"]) > MAX_VOTES:
+            out.append((where, f"{len(c['votes'])} votes (limit {MAX_VOTES})"))
+        if (c["votes"] or "verdict" in c) and c.get("verdict") != verdict(c["votes"]):
+            out.append((where, f'verdict {c.get("verdict", "missing")}, but the votes give {verdict(c["votes"])}'))
+    return out
 
 
 @functools.cache
@@ -178,8 +244,26 @@ def quote_html(src, q):
     return "\n".join(out)
 
 
-def page(src, data):
-    """report.html: the question, each claim with its quotes, then disagreements and what was not reached."""
+def link(url, text):
+    """A link for http and https URLs only; anything else stays plain text."""
+    return f'<a href="{esc(url)}">{esc(text)}</a>' if re.match(r"https?://", url) else esc(url)
+
+
+def votes_html(c):
+    """A claims.json claim: its verdict, importance, label and original URL, then each verifier's vote."""
+    v = c.get("verdict")
+    head = f'<span class="status {v}">{v}</span>' if v else '<span class="status">not checked</span>'
+    rows = []
+    for vote in c["votes"]:
+        src = vote.get("counter_source")
+        rows.append(f'<li>{"refuted" if vote["refuted"] else "held"} ({esc(vote["confidence"])}): {esc(vote["evidence"])}'
+                    + (f" ({link(src, 'counter source')})" if src else "") + "</li>")
+    return (f'<div class="votes"><p>Votes: {head} {esc(c["importance"])}, {esc(c["label"])}, {link(c["url"], "original")}</p>'
+            + (f'<ul>{"".join(rows)}</ul>' if rows else "") + "</div>")
+
+
+def page(src, data, claims=None):
+    """report.html: the question, each claim with its votes and quotes, then disagreements and what was not reached."""
     body = [f"<h1>{esc(data['title'])}</h1>",
             f'<p class="lead">Question: {esc(data["question"])}</p>',
             f'<p class="lead">Stopped: {esc(data["stopped"])}</p>']
@@ -188,6 +272,8 @@ def page(src, data):
         body.append(f'<section><h2>{esc(c["claim"])} <span class="status {status}">{status}</span></h2>')
         if c.get("note"):
             body.append(f'<p class="note">{esc(c["note"])}</p>')
+        if claims and c.get("id") in claims:
+            body.append(votes_html(claims[c["id"]]))
         body += [quote_html(src, q) for q in c["quotes"]]
         body.append("</section>")
     if data.get("disagreements"):
@@ -214,6 +300,7 @@ def main(argv=None):
     topic = pathlib.Path(args.topic_dir)
     try:
         data, quotes = load(topic / "extracts.json")
+        claims = load_claims(topic / "claims.json")
     except ValueError as e:
         print(f"FAIL\t{e}")
         return 1
@@ -224,13 +311,23 @@ def main(argv=None):
         if reason:
             bad += 1
             print(f"MISMATCH\t{where}\t{clean(q['file'])}:{q['line']}\t{reason}\t{clean(q['text'], 60)}")
+    problems = claim_problems(claims, data) if claims is not None else []
+    for where, reason in problems:
+        print(f"CLAIM\t{where}\t{reason}")
     if bad:
         print(f"FAIL\t{bad} of {len(quotes)} quotes do not match; report.html not written")
+    if problems:
+        print(f"FAIL\t{len(problems)} claims.json problems; report.html not written")
+    if bad or problems:
         return 1
     out = topic / "report.html"
     if not args.check:
-        out.write_text(page(src, data), encoding="utf-8")
-    print(f"OK\t{len(quotes)} quotes in {len(data['claims'])} claims match\t{'check only' if args.check else out}")
+        out.write_text(page(src, data, claims), encoding="utf-8")
+    tally = ""
+    if claims is not None:
+        n = [sum(c.get("verdict") == v for c in claims.values()) for v in VERDICTS]
+        tally = "; votes: {} survived, {} refuted, {} unverified".format(*n)
+    print(f"OK\t{len(quotes)} quotes in {len(data['claims'])} claims match{tally}\t{'check only' if args.check else out}")
     return 0
 
 

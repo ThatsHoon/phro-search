@@ -20,7 +20,7 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 
 ARCTIC = "https://arctic-shift.photon-reddit.com"
 YOUTUBE = "https://www.youtube.com/feeds/videos.xml"

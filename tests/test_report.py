@@ -178,5 +178,91 @@ class ReportTest(unittest.TestCase):
         self.assertEqual(self.report(topic), (1, "FAIL\tclaim 1 quote 1: line must be int\n"))
 
 
+def vote(refuted, evidence="checked the release notes", **extra):
+    return {"refuted": refuted, "confidence": "high", "evidence": evidence, **extra}
+
+
+def claimed(id, importance="central", votes=(), **extra):
+    return {"id": id, "claim": f"Claim {id}", "quote": "reaches 95 percent", "url": "https://example.org/a",
+            "label": "paper", "importance": importance, "votes": list(votes), **extra}
+
+
+class ClaimsTest(unittest.TestCase):
+    """claims.json (report mode): verdicts follow the votes, and the page shows them next to each claim."""
+    SOURCE = {"a.md": "Intro\nThe model reaches 95 percent accuracy.\n"}
+    setUp, report, page = ReportTest.setUp, ReportTest.report, ReportTest.page
+
+    def topic(self, claims_json, ids=("c1",)):
+        """A topic whose extracts.json claims carry these ids, all quoting the same line, and this claims.json."""
+        topic = ReportTest.topic(self, self.SOURCE, [dict(claim(quote("a.md", 2, "reaches 95 percent")), id=i) for i in ids])
+        (topic / "claims.json").write_text(json.dumps(claims_json), encoding="utf-8")
+        return topic
+
+    def test_votes_shown_next_to_the_claim(self):
+        held, against = vote(False), vote(True, "a later benchmark disagrees", counter_source="https://example.org/b")
+        topic = self.topic([claimed("c1", votes=[held, held, against], verdict="survived"), claimed("c2", "supporting")])
+        code, out = self.report(topic)
+        self.assertEqual((code, out), (0, f"OK\t1 quotes in 1 claims match; votes: 1 survived, 0 refuted, 0 unverified\t{topic / 'report.html'}\n"))
+        html = (topic / "report.html").read_text(encoding="utf-8")
+        votes = html[html.index('<div class="votes">'):html.index("<figure>")]
+        self.assertIn('<span class="status survived">survived</span> central, paper, <a href="https://example.org/a">original</a>', votes)
+        self.assertEqual(votes.count("<li>held (high): checked the release notes</li>"), 2)
+        self.assertIn('<li>refuted (high): a later benchmark disagrees (<a href="https://example.org/b">counter source</a>)</li>', votes)
+
+    def test_only_web_urls_become_links(self):
+        bad = vote(True, counter_source="javascript:alert(1)")
+        html = self.page(self.topic([claimed("c1", votes=[bad, bad], verdict="refuted", url="file:///etc/passwd")]))
+        self.assertNotIn('href="javascript', html)
+        self.assertNotIn('href="file', html)
+        self.assertIn("(javascript:alert(1))", html)
+
+    def test_verdict_must_follow_the_votes(self):
+        cases = [([vote(True), vote(True), vote(False)], "survived", "refuted"),
+                 ([vote(False)], "survived", "unverified"),
+                 ([], "refuted", "unverified"),
+                 ([vote(False), vote(True)], None, "survived")]
+        for votes, stored, expected in cases:
+            topic = self.topic([claimed("c1", votes=votes, **({"verdict": stored} if stored else {}))])
+            code, out = self.report(topic)
+            self.assertEqual((code, out.splitlines()),
+                             (1, [f"CLAIM\tclaims.json c1\tverdict {stored or 'missing'}, but the votes give {expected}",
+                                  "FAIL\t1 claims.json problems; report.html not written"]), (votes, stored))
+            self.assertFalse((topic / "report.html").exists())
+        self.assertEqual(self.report(self.topic([claimed("c1", votes=[vote(True)] * 2, verdict="refuted")]))[0], 0)
+        self.assertEqual(self.report(self.topic([claimed("c1", "supporting")]))[0], 0)  # not checked: no votes, no verdict
+        bare = {k: v for k, v in claimed("c1", "supporting").items() if k != "votes"}
+        self.assertEqual(self.report(self.topic([bare]))[0], 0)  # the votes key may be left out
+
+    def test_central_claims_are_located_capped_and_ids_known(self):
+        topic = self.topic([claimed("c1", verdict="unverified"), claimed("c2", verdict="unverified"),
+                            claimed("c3", "tangential", votes=[vote(False)] * 4, verdict="survived")], ids=("c1", "c9"))
+        self.assertEqual(self.report(topic, "--check")[1].splitlines(),
+                         ['CLAIM\tclaim 2\tid "c9" is not in claims.json',
+                          "CLAIM\tclaims.json c2\tcentral, but no claim in extracts.json carries this id with a quote",
+                          "CLAIM\tclaims.json c3\t4 votes (limit 3)",
+                          "FAIL\t3 claims.json problems; report.html not written"])
+        ids = [f"c{i}" for i in range(1, 12)]
+        out = self.report(self.topic([claimed(i, verdict="unverified") for i in ids], ids=ids))[1]
+        self.assertIn("CLAIM\tclaims.json\t11 central claims (limit 10)", out)
+
+    def test_bad_claims_json_fails(self):
+        cases = (({"c1": {}}, "claims.json must be a list"),
+                 ([claimed("c1"), claimed("c1")], "claims.json c1: the id appears twice"),
+                 ([claimed("c1", "key")], "claims.json c1: importance must be one of central, supporting, tangential;"
+                                          " verdict one of survived, refuted, unverified"),
+                 ([claimed("c1", votes=[{"refuted": "yes", "confidence": "high", "evidence": "x"}])],
+                  "claims.json c1 vote 1: refuted must be bool"),
+                 ([dict(claimed("c1"), url=None)], "claims.json item 1: url must be str"))
+        for data, reason in cases:
+            self.assertEqual(self.report(self.topic(data)), (1, f"FAIL\t{reason}\n"), reason)
+        topic = self.topic([])
+        (topic / "claims.json").write_text("[oops", encoding="utf-8")
+        self.assertTrue(self.report(topic)[1].startswith("FAIL\tclaims.json is not valid JSON: "))
+
+    def test_without_claims_json_ids_are_ignored(self):
+        topic = ReportTest.topic(self, self.SOURCE, [dict(claim(quote("a.md", 2, "reaches 95 percent")), id="c1")])
+        self.assertEqual(self.report(topic, "--check"), (0, "OK\t1 quotes in 1 claims match\tcheck only\n"))
+
+
 if __name__ == "__main__":
     unittest.main()

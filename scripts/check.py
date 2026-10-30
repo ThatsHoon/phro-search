@@ -1,16 +1,21 @@
 """Lint a Markdown or plain-text deliverable for AI writing tells and print each spot.
 
-usage: check.py <file>      (a lone - reads standard input)
+usage: check.py [--kind report] <file>      (a lone - reads standard input)
 output, one line per problem:  <line>:<rule>: <detail>   (line 0 for whole-document counts)
 then  FAIL<TAB><n> problems  and exit 1, or  OK  and exit 0.
 rules: phrase, symbol, dash, invisible: one hit fails.
        density, per-doc, opener, bold: fail over a limit; a line 0 summary, then each hit with a snippet.
 Fenced code, quote lines (">"), inline code and URLs are not checked, except for invisible characters.
+--kind report also checks a report's structure against the claims.json beside it:
+       bluf: the title is followed by one paragraph, and it cites a claim as [c1] or [c1, c2];
+       section: a conclusion section exists (a ## heading that starts with the word for conclusion),
+                and it and every ## section before it cite a claim;
+       claim: every cited id is in claims.json, and the BLUF and the conclusion cite survived claims only.
 """
-import argparse, re, sys
+import argparse, itertools, json, re, sys
 from pathlib import Path
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 
 # One hit fails. English entries match whole words; Korean entries match anywhere in the text.
 HARD_PHRASES = [
@@ -50,6 +55,10 @@ SENTENCE = r"(?:^[ \t]*(?:(?:[-*+]|\d+[.)]|#+)[ \t]+)?|(?<=[.!?])[ \t]+)"
 FENCE = re.compile(r"^[ \t]*(`{3,}|~{3,}).*?(?:^[ \t]*\1[`~]*[ \t]*$|\Z)", re.M | re.S)  # to its closing fence or the end
 QUOTE = re.compile(r"^[ \t]*>.*$", re.M)
 INLINE = re.compile(r"(`+).*?\1|https?://\S+")  # inline code and URLs
+# --kind report. A conclusion heading starts with one of these words, after any numbering.
+CONCLUSION = ("conclusion", "결론", "맺음", "結論", "まとめ")
+CITE = re.compile(r"\[\s*(c\d+(?:\s*,\s*c\d+)*)\s*\]", re.I)  # [c3] or [c3, c7]
+NOT_PROSE = re.compile(r"[ \t]*(?:[-*+](?=[ \t])|\d+[.)](?=[ \t])|[>|#])")  # a list, quote, table or heading line
 
 
 def pattern(words):
@@ -113,9 +122,51 @@ def check(raw):
     return list(dict.fromkeys(found))
 
 
+def report_problems(raw, verdicts):
+    """A report's structure as (line, rule, detail) tuples; verdicts maps each claims.json id, lowercase, to its verdict."""
+    lines = FENCE.sub(lambda m: "\n" * m.group().count("\n"), raw.replace("\r\n", "\n")).split("\n")
+    parts = [[0, 0, "", []]]  # heading line, level (0 before any heading), heading, body as (line, text) pairs
+    for n, line in enumerate(lines, 1):
+        h = re.match(r"(#{1,2})[ \t]+(.*)", line)
+        if h:
+            parts.append([n, len(h.group(1)), h.group(2).strip(), []])
+        else:
+            parts[-1][3].append((n, line))
+
+    def cites(block):
+        return [(n, c.strip().lower()) for n, t in block for m in CITE.finditer(t) for c in m.group(1).split(",")]
+
+    found = [(n, "claim", f"[{c}] is not in claims.json") for p in parts for n, c in cites(p[3]) if c not in verdicts]
+    title = next((p for p in parts if p[1] == 1), None)
+    if title is None:
+        return found + [(0, "bluf", "no title line (# title)")]
+    body = title[3]
+    start = next((i for i, (_, t) in enumerate(body) if t.strip()), len(body))
+    bluf = list(itertools.takewhile(lambda x: x[1].strip(), body[start:]))
+    if not bluf or NOT_PROSE.match(bluf[0][1]):
+        found.append((title[0], "bluf", "the title must be followed by one paragraph that answers the question"))
+        bluf = []
+    elif not cites(bluf):
+        found.append((bluf[0][0], "bluf", "the BLUF cites no claim; cite the claims it rests on as [c1]"))
+    sections = [p for p in parts if p[1] == 2]
+    end = next((k for k, p in enumerate(sections)
+                if re.sub(r"^[\d.)\s]+", "", p[2]).lower().startswith(CONCLUSION)), None)
+    if end is None:
+        return found + [(0, "section", "no conclusion: start one ## heading with the word for conclusion")]
+    for p in sections[:end + 1]:
+        if not cites(p[3]):
+            found.append((p[0], "section", f'"{snippet(p[2], 0)}" cites no claim; cite as [c1] or [c1, c2]'))
+    for where, block in (("BLUF", bluf), ("conclusion", sections[end][3])):
+        for n, c in cites(block):
+            if verdicts.get(c, "survived") != "survived":
+                found.append((n, "claim", f"[{c}] is {verdicts[c]}; the {where} may cite survived claims only"))
+    return found
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("file", help="Markdown or text file; - reads standard input")
+    ap.add_argument("--kind", choices=["report"], help="report: also check the structure against claims.json beside the file")
     args = ap.parse_args(argv)
     try:
         data = sys.stdin.buffer.read() if args.file == "-" else Path(args.file).read_bytes()
@@ -124,6 +175,18 @@ def main(argv=None):
         print(f"FAIL\tcannot read: {e}")
         return 1
     problems = check(raw)
+    if args.kind == "report":
+        if args.file == "-":
+            print("FAIL\t--kind report reads the claims.json beside the report; pass the file, not -")
+            return 1
+        path = Path(args.file).parent / "claims.json"
+        try:
+            verdicts = {c["id"].lower(): c.get("verdict", "not checked")
+                        for c in json.loads(path.read_text(encoding="utf-8-sig"))}
+        except (OSError, ValueError, TypeError, KeyError, AttributeError) as e:
+            print(f"FAIL\tcannot read {path}: {e}")
+            return 1
+        problems += report_problems(raw, verdicts)
     for line, rule, detail in problems:
         print(f"{line}:{rule}: {detail}")
     print(f"FAIL\t{len(problems)} problems" if problems else "OK")

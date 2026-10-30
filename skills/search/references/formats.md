@@ -70,13 +70,13 @@ intake: level=<formalized|conscious|compromised|visceral>; rounds=<n>; questions
 - next leads: <2 to 4 leads for the next round>
 
 ## <YYYY-MM-DD> stop
-stop: <claims sourced | saturation k of n | 4 rounds | wall | budget>
+stop: <dig: claims sourced | saturation k of n | 4 rounds | wall | budget; report: answered | budget>
 stopped agents: <none | which>
 intake-end: rescopes=<n>; drift=<claims added, dropped, reworded>
 feedback: "<the user's answer, verbatim>"
 ```
 
-The `brief:` and `feedback:` lines start at column 0 so that later intakes can grep them.
+The `brief:` and `feedback:` lines start at column 0 so that later intakes can grep them. Report mode writes `research`, `archive`, `verify` and `write` sections in the round's shape (spawned, came back, fetched, decisions); `verify` adds `votes: <n> central claims; <s> survived, <r> refuted, <u> unverified; <m> missing votes`.
 
 ## extracts.json
 
@@ -91,9 +91,36 @@ The `brief:` and `feedback:` lines start at column 0 so that later intakes can g
 - `status` is `sourced`, `partial` or `none`. One claim per required claim, in the user's language. `note` is one flat line on who did what: no conclusions, no ratings.
 - `text` is copied from the source exactly: the same characters and spelling, auto-caption errors kept. Whitespace and line breaks may differ. Skip text with the ellipsis character (…); the pieces must appear in order (two-column PDFs mix columns on one line).
 - `line` is the `grep -n` line of the first piece, `end` the last line when the extract spans lines; the check looks 2 lines either side.
+- In report mode each claim also carries `id`, its claims.json id, and holds that claim's located quotes; the evidence page then shows its votes.
 - `translation` goes with quotes that are not in the user's language; the page marks it as a translation.
 - `disagreements` set conflicting sources side by side without judging; `unreached` lists what could not be read and why.
 - `report.py` also reads the files of older topics (an older tool's status values and its translation key).
+
+## claims.json (report)
+
+```
+[{"id": "c1", "claim": "<one falsifiable claim, in English>", "quote": "<exact text: as located, or as the researcher copied it>",
+  "url": "<original URL>", "label": "paper", "importance": "central",
+  "votes": [{"refuted": false, "confidence": "high", "evidence": "<what the verifier checked>", "counter_source": "<URL>"}],
+  "verdict": "survived"}]
+```
+
+- Ids run c1, c2 and on in the order the findings are taken, and are never reused in a topic.
+- `importance` is `central` (the answer rests on it: at most 10, each located in extracts.json), `supporting` or `tangential`.
+- `votes` holds only replies that parsed, at most 3. `verdict`: 2 refutations, `refuted`; fewer than 2 votes, `unverified`; otherwise `survived`. A claim never sent to verifiers has no votes and no verdict.
+
+## notes/<subtopic>.md (report)
+
+One file per researcher, English, one section per key question; each finding on one line so it can be grepped:
+
+```
+# <subtopic>
+## Q1 <key question>
+Takeaway: <one or two sentences>
+- F1. <one falsifiable claim>. Quote: "<exact sentence from the page>" <URL> (<label>)
+Inferences: <marked as inference>
+Gaps: <looked for and not found, with the queries tried>
+```
 
 ## Watch files
 

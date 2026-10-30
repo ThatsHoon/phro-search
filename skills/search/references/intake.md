@@ -113,7 +113,7 @@ Required claims:
 - [ ] C2 <claim>
 ```
 
-Empty slots are left out. Required claims for dig: the first is always the venues; at least one carries the request's exact condition in its own words; at least half can only be answered by reading originals (how well it works, where it fails, what is missing), not "X exists"; a request for tips or how-tos gets one claim asking for the research behind the tips.
+Empty slots are left out. Required claims for dig: the first is always the venues; at least one carries the request's exact condition in its own words; at least half can only be answered by reading originals (how well it works, where it fails, what is missing), not "X exists"; a request for tips or how-tos gets one claim asking for the research behind the tips. For report they are 3 to 6 key questions (Q1 to Q6) the report must answer, at least one in the request's own words.
 
 ## 8. During the run
 

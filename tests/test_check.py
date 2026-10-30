@@ -1,4 +1,4 @@
-import subprocess, sys, tempfile, unittest
+import json, subprocess, sys, tempfile, unittest
 from pathlib import Path
 from tests._load import ROOT, load
 
@@ -223,3 +223,94 @@ class CliTest(unittest.TestCase):
 
     def test_style_md_passes_its_own_check(self):
         self.assertEqual(m.check((ROOT / "STYLE.md").read_text(encoding="utf-8")), [])
+
+
+REPORT = """# Polars or pandas for one machine
+
+Polars ran the measured joins faster [c1], and pandas keeps the widest library support [c2].
+
+## Polars is faster on joins
+
+The benchmark ran joins on a 10 GB table [c1].
+
+### Method
+
+It used one machine with 32 GB of memory.
+
+## Pandas keeps the ecosystem
+
+Most plotting tools read pandas frames [c2]. A vendor claim of a 30 times gain did not hold [c3].
+
+## Conclusion
+
+Start new pipelines in Polars and keep pandas at the plotting edge [c1, c2].
+
+## Evidence
+
+| id | claim |
+|---|---|
+| c1 | faster joins |
+"""
+VERDICTS = [{"id": "c1", "verdict": "survived"}, {"id": "C2", "verdict": "survived"},
+            {"id": "c3", "verdict": "refuted"}, {"id": "c4"}]
+
+
+class ReportKindTest(unittest.TestCase):
+    """--kind report: BLUF first, every section up to the conclusion cites, the BLUF and the conclusion cite survivors."""
+
+    def run_report(self, text, claims=VERDICTS):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "report-2026-10-30.md"
+            path.write_text(text, encoding="utf-8")
+            if claims is not None:
+                (Path(d) / "claims.json").write_text(json.dumps(claims), encoding="utf-8")
+            code, out, _ = run("--kind", "report", str(path))
+        return code, out
+
+    def problems(self, text):
+        return [(line, rule) for line, rule, _ in m.report_problems(text, {c["id"].lower(): c.get("verdict", "not checked")
+                                                                           for c in VERDICTS})]
+
+    def test_good_report_passes(self):
+        self.assertEqual(self.run_report(REPORT), (0, ["OK"]))
+        korean = REPORT.replace("## Conclusion", "## 5. 결론: Polars")
+        self.assertEqual(self.problems(korean), [])
+
+    def test_bluf_must_be_a_citing_paragraph(self):
+        self.assertEqual(self.problems(REPORT.replace("\nPolars ran", "\n- Polars ran")), [(1, "bluf")])
+        self.assertEqual(self.problems(REPORT.replace("\nPolars ran", "\n## Answer\nPolars ran")), [(1, "bluf")])
+        got = m.report_problems(REPORT.replace(" [c1], and", ", and").replace(" support [c2].", " support."), {"c1": "survived", "c2": "survived", "c3": "refuted"})
+        self.assertEqual(got, [(3, "bluf", "the BLUF cites no claim; cite the claims it rests on as [c1]")])
+        self.assertEqual(self.problems(REPORT.replace("**", "").replace("\nPolars ran", "\n**Polars** ran")), [])
+        self.assertEqual(self.problems(REPORT.split("\n", 1)[1]), [(0, "bluf")])
+
+    def test_sections_up_to_the_conclusion_cite(self):
+        text = REPORT.replace("table [c1].", "table.")
+        self.assertEqual(m.report_problems(text, {"c1": "survived", "c2": "survived", "c3": "refuted"}),
+                         [(5, "section", '"Polars is faster on joins" cites no claim; cite as [c1] or [c1, c2]')])
+        self.assertEqual(self.problems(REPORT.replace("[c1, c2].", ".")), [(17, "section")])
+        self.assertEqual(self.problems(REPORT.replace("## Conclusion", "## Outlook")),
+                         [(0, "section")])
+
+    def test_bluf_and_conclusion_cite_survived_claims_only(self):
+        text = REPORT.replace("support [c2].", "support [c4].").replace("[c1, c2].", "[c1, c3].")
+        self.assertEqual(m.report_problems(text, {c["id"].lower(): c.get("verdict", "not checked") for c in VERDICTS}),
+                         [(3, "claim", "[c4] is not checked; the BLUF may cite survived claims only"),
+                          (19, "claim", "[c3] is refuted; the conclusion may cite survived claims only")])
+
+    def test_cited_ids_must_exist(self):
+        text = REPORT.replace("did not hold [c3]", "did not hold [c9]") + "\n```\nsee [c8]\n```\n"
+        self.assertEqual(m.report_problems(text, {"c1": "survived", "c2": "survived"}),
+                         [(15, "claim", "[c9] is not in claims.json")])
+
+    def test_claims_json_is_required(self):
+        code, out = self.run_report(REPORT, claims=None)
+        self.assertEqual((code, len(out), out[0][:17]), (1, 1, "FAIL\tcannot read "))
+        code, out = self.run_report(REPORT, claims={"c1": "survived"})
+        self.assertEqual((code, out[0][:17]), (1, "FAIL\tcannot read "))
+        code, out, _ = run("--kind", "report", "-", data=REPORT.encode("utf-8"))
+        self.assertEqual((code, out), (1, ["FAIL\t--kind report reads the claims.json beside the report; pass the file, not -"]))
+
+    def test_style_rules_still_apply(self):
+        code, out = self.run_report(REPORT.replace("faster [c1]", "faster [c1] \U00002014 by far"))
+        self.assertEqual((code, out[0][:7]), (1, "3:dash:"))

@@ -13,9 +13,9 @@ One entry for research. First work out what the user actually needs (intake), th
 |---|---|---|
 | dig | an unfamiliar field, prior art, canonical papers, practitioners' own methods, the originals behind a claim | `references/dig.md` |
 | watch | new posts from venues a topic already knows | `references/watch.md` |
-| report | a decision-ready answer: compare options, map a landscape or a standard | not in this version: hand the confirmed brief to the deep-research skill and say so |
+| report | a decision-ready answer: compare options, map a landscape or a standard | `references/report.md` |
 | pulse | what people said, shipped or argued about in the last N days | not in this version: hand the brief to the last30days skill and say so |
-| docs | a technical fact the open code depends on (API behavior, spec detail, library internals) | not in this version: hand the brief to the research skill of mattpocock-skills and say so |
+| docs | a technical fact the open code depends on (API behavior, spec detail, library internals) | `references/docs.md` |
 | models | a backbone model for a task under constraints | not in this version: hand the brief to the huggingface-best skill and say so |
 
 Out of scope, answer directly instead: a single fact, a search of local files, a summary of a document already in hand.
@@ -51,17 +51,17 @@ Users rarely know exactly what they are looking for or which context matters. Pi
 
 ## Topic folder
 
-`~/research/<topic>/` by default, or the root a caller passes (`<topic>` is lowercase ASCII with hyphens; the title lives in the brief). Inside: `map.md` (brief, terms, people, venues, sources, next leads), `log.md` (append only), `sources/` (originals only, never summaries), `extracts.json`, `report.html`, and for watch `watch.tsv`, `watch-state.json` and `watch/`. Formats are in `references/formats.md`.
+`~/research/<topic>/` by default, or the root a caller passes (`<topic>` is lowercase ASCII with hyphens; the title lives in the brief). Inside: `map.md` (brief, terms, people, venues, sources, next leads), `log.md` (append only), `sources/` (originals only, never summaries), `extracts.json`, `report.html`, for report `notes/`, `claims.json` and `report-<date>.md`, and for watch `watch.tsv`, `watch-state.json` and `watch/`. Formats are in `references/formats.md`.
 
 ## Scripts
 
-Run them as `python -I ${CLAUDE_PLUGIN_ROOT}/scripts/<name>.py`. They print compact tab-separated lines and leave bodies on disk; read sources by grep with a few lines of context, never whole.
+Run them as `python -I ${CLAUDE_PLUGIN_ROOT}/scripts/<name>.py`, one call per command with literal paths (no `cd`, variables, loops or chains), so permission rules can match it. They print compact tab-separated lines and leave bodies on disk; read sources by grep with a few lines of context, never whole.
 
 - `fetch.py <sources_dir> <name> <url-or-path>`: download one original and check that it is real (PDF to text, HTML to Markdown, video captions as `[mm:ss]` lines). A local path ingests a file the user saved from a browser. `OK` lines go to the sources table; `FAIL` reasons go to log.md.
 - `chain.py find|refs|cites|author`: find a paper, walk its references and citing works, or an author's works (OpenAlex, no key).
-- `report.py <topic_dir> [--check]`: check every extract against its source line, then build `report.html`.
+- `report.py <topic_dir> [--check]`: check every extract against its source line and every claims.json verdict against its votes, then build `report.html`.
 - `watch.py add|list|check`: venue feeds and what is new since the last check.
-- `check.py <file>`: style check of the exact reply or brief after its last edit (`-` reads standard input); quotes, report.html and sources are never checked. Read `${CLAUDE_PLUGIN_ROOT}/STYLE.md` before writing a deliverable.
+- `check.py [--kind report] <file>`: style check of the exact reply or brief after its last edit (`-` reads standard input); quotes, report.html and sources are never checked. `--kind report` also checks a report's BLUF, citations and verdicts against the claims.json beside it. Read `${CLAUDE_PLUGIN_ROOT}/STYLE.md` before writing a deliverable.
 
 ## Rules for every mode
 
