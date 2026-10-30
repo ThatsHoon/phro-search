@@ -19,7 +19,7 @@ import argparse, html.parser, http.client, json, os, re, shutil, socket, ssl, su
 import unicodedata, urllib.error, urllib.parse, urllib.request
 from pathlib import Path
 
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 ARXIV = "https://arxiv.org"
 RAW = "https://raw.githubusercontent.com"
 UA = f"Mozilla/5.0 (compatible; phro-search/{VERSION}; +https://github.com/ThatsHoon/phro-search)"

@@ -12,7 +12,7 @@ TELLS = re.compile(r"[\U00002013\U00002014\U00002600-\U000027bf\U00002b50\U0000f
 INVISIBLE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\U0000061c\U0000200b-\U0000200f\U0000202a-\U0000202e"
                        r"\U00002060-\U00002064\U00002066-\U00002069\U0000feff]")
 # Scripts run standalone, so they carry copies of shared code: (names, the original, scripts that must carry it).
-SHARED = ((("egress_terms", "_edge", "egress_hit"), "hooks/egress.py", {"chain.py", "fetch.py", "pulse.py", "watch.py"}),
+SHARED = ((("egress_terms", "_edge", "egress_hit"), "hooks/egress.py", {"chain.py", "fetch.py", "models.py", "pulse.py", "watch.py"}),
           (("_CTRL", "_QUOTES", "clean"), "scripts/chain.py", set()),
           (("NAMES",), "scripts/pulse.py", {"check.py"}))
 

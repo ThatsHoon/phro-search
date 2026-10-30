@@ -1,6 +1,6 @@
 """Lint a Markdown or plain-text deliverable for AI writing tells and print each spot.
 
-usage: check.py [--kind report|pulse] <file>      (a lone - reads standard input)
+usage: check.py [--kind report|pulse|models] <file>      (a lone - reads standard input)
 output, one line per problem:  <line>:<rule>: <detail>   (line 0 for whole-document counts)
 then  FAIL<TAB><n> problems  and exit 1, or  OK  and exit 0.
 rules: phrase, symbol, dash, invisible: one hit fails.
@@ -16,11 +16,14 @@ Fenced code, quote lines (">"), inline code and URLs are not checked, except for
        quote: every quote (> lines) is found verbatim in the result's titles, snippets or comments ("..." may
               join pieces kept in order), with the quoted item's or comment's link on the line after it;
               a result with clusters needs at least one quote.
+--kind models also checks a model choice against the topic folder it sits in:
+       location: every <path>:<line> or <path>:<first>-<last> (path under sources/ or models/) names a file
+                 in the folder and a line that file has, counted as grep -n counts.
 """
 import argparse, itertools, json, re, sys
 from pathlib import Path
 
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 
 # One hit fails. English entries match whole words; Korean entries match anywhere in the text.
 HARD_PHRASES = [
@@ -225,11 +228,33 @@ def pulse_problems(raw, result):
     return found
 
 
+# --kind models. A location cites a file of the topic folder by its line, or by a range of lines.
+LOCATION = re.compile(r"(?<![\w./-])((?:sources|models)/[\w./+-]+):(\d+)(?:-(\d+))?")
+
+
+def models_problems(raw, topic):
+    """Each location the deliverable cites as (line, rule, detail) when its file or its line is missing."""
+    found, count = [], {}
+    for n, line in enumerate(raw.replace("\r\n", "\n").split("\n"), 1):
+        for loc in LOCATION.finditer(line):
+            path = topic / loc[1]
+            if path not in count:
+                data = path.read_bytes() if path.is_file() else None
+                count[path] = None if data is None else data.count(b"\n") + (not data.endswith(b"\n"))
+            first, last = int(loc[2]), int(loc[3] or loc[2])
+            if count[path] is None:
+                found.append((n, "location", f"{loc[0]}: no such file in the topic folder"))
+            elif first < 1 or last > count[path]:
+                found.append((n, "location", f"{loc[0]}: the file has {count[path]} lines"))
+    return found
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("file", help="Markdown or text file; - reads standard input")
-    ap.add_argument("--kind", choices=["report", "pulse"], help="report: also check the structure against claims.json beside "
-                    "the file; pulse: against the pulse.py result (<stem>.json) beside the brief")
+    ap.add_argument("--kind", choices=["report", "pulse", "models"], help="report: also check the structure against "
+                    "claims.json beside the file; pulse: against the pulse.py result (<stem>.json) beside the brief; "
+                    "models: every <path>:<line> cited against the files in the deliverable's folder")
     args = ap.parse_args(argv)
     try:
         data = sys.stdin.buffer.read() if args.file == "-" else Path(args.file).read_bytes()
@@ -260,6 +285,11 @@ def main(argv=None):
         except (OSError, ValueError, TypeError, AttributeError) as e:
             print(f"FAIL\tcannot read {path}: {e}")
             return 1
+    if args.kind == "models":
+        if args.file == "-":
+            print("FAIL\t--kind models reads the files the deliverable cites; pass the file, not -")
+            return 1
+        problems += models_problems(raw, Path(args.file).parent)
     for line, rule, detail in problems:
         print(f"{line}:{rule}: {detail}")
     print(f"FAIL\t{len(problems)} problems" if problems else "OK")

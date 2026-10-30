@@ -141,6 +141,14 @@ Gaps: <looked for and not found, with the queries tried>
 - `pulse/<stem>-evidence.md`: the lanes, then each cluster with its items, links, snippets and comments, then the weak signals.
 - `pulse/<stem>.md`: the brief (`references/pulse.md`).
 
+## Model files
+
+- `sources/board-<board>[-<table>][-<lang>[-clone] or -<hardware>]-<date>.tsv`, written by `models.py snapshot`: line 1 `# board= table= route= url= revision= fetched=` (plus `lang= clone=` or `hardware=`), line 2 the board's headers without decoration plus `link`, then one line per board row, its values verbatim (markup stripped, footnote marks kept). Later snapshots that day end in `-2` and on.
+- `models/shortlist.json`: `{board, table, snapshot, metric, direction, filters, models}`; a model is `{repo, name, off_hub, link, scores, label, source, params, weight_gb, gb_16, gb_4bit, license, license_class, languages, languages_label, created, formats, gated, notes, front, dropped}`, and `quantized` on the front.
+- `models/hub/<org>--<name>.json`: one repo's Hub facts, one key per line (`repo, url, sha, pipeline_tag, library, created, modified, gated, license, license_name, license_link, license_class, languages, base_model, arxiv, params, params_by_dtype, weight_gb, weight_source, largest_file_gb, formats, gguf, config, downloads, likes, card, config_file, files, fetched`); `follow` adds `papers` (`id, title, abstract, published, github`) and `quantized` (`count, formats, first`). A file fetched today is reused.
+- `sources/hf-<org>--<name>-<sha7>.md`: a model card at that repo sha; a gated repo's card comes from its model page as `sources/hf-page-<org>--<name>.md`, saved by `fetch.py`.
+- `models-<date>.md`: the deliverable (`references/models.md`).
+
 ## Watch files
 
 - `watch.tsv`: a header line, then one feed per line: kind, name, feed URL, venue URL, tab-separated.

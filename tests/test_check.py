@@ -383,3 +383,29 @@ class PulseKindTest(unittest.TestCase):
         self.assertEqual((code, out[0][:17]), (1, "FAIL\tcannot read "))
         code, out, _ = run("--kind", "pulse", "-", data=BRIEF.encode("utf-8"))
         self.assertEqual((code, out), (1, ["FAIL\t--kind pulse reads the pulse.py result beside the brief; pass the file, not -"]))
+
+
+class ModelsKindTest(unittest.TestCase):
+    """--kind models: every <path>:<line> the deliverable cites names a file of its folder and a line that file has."""
+
+    def test_locations_name_files_and_lines(self):
+        with tempfile.TemporaryDirectory() as d:
+            topic = Path(d)
+            (topic / "sources").mkdir()
+            (topic / "sources" / "board.tsv").write_bytes(b"# board\nRank\tModel\n1\tacme/a\n")
+            (topic / "sources" / "card.md").write_bytes(b"one\ftwo\nthree")  # a form feed is not a line break
+            path = topic / "models-2026-10-31.md"
+            good = "| acme/a | 4.0 [1] |\n\n[1] sources/board.tsv:3\n[2] sources/card.md:2, sources/board.tsv:1-3\n"
+            path.write_text(good, encoding="utf-8")
+            self.assertEqual(run("--kind", "models", str(path))[:2], (0, ["OK"]))
+            bad = good + "[3] sources/board.tsv:4\n[4] sources/card.md:0 and models/hub/acme--a.json:7\n[5] sources/board.tsv:2-9\n"
+            self.assertEqual(m.models_problems(bad, topic),
+                             [(5, "location", "sources/board.tsv:4: the file has 3 lines"),
+                              (6, "location", "sources/card.md:0: the file has 2 lines"),
+                              (6, "location", "models/hub/acme--a.json:7: no such file in the topic folder"),
+                              (7, "location", "sources/board.tsv:2-9: the file has 3 lines")])
+            path.write_text(bad, encoding="utf-8")
+            code, out, _ = run("--kind", "models", str(path))
+            self.assertEqual((code, out[-1]), (1, "FAIL\t4 problems"))
+        code, out, _ = run("--kind", "models", "-", data=good.encode("utf-8"))
+        self.assertEqual((code, out), (1, ["FAIL\t--kind models reads the files the deliverable cites; pass the file, not -"]))

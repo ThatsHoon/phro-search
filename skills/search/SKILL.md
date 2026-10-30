@@ -16,7 +16,7 @@ One entry for research. First work out what the user actually needs (intake), th
 | report | a decision-ready answer: compare options, map a landscape or a standard | `references/report.md` |
 | pulse | what people said, shipped or argued about in the last N days | `references/pulse.md` |
 | docs | a technical fact the open code depends on (API behavior, spec detail, library internals) | `references/docs.md` |
-| models | a backbone model for a task under constraints | not in this version: hand the brief to the huggingface-best skill and say so |
+| models | a model to use for a task under constraints, picked from public leaderboards | `references/models.md` |
 
 Out of scope, answer directly instead: a single fact, a search of local files, a summary of a document already in hand.
 
@@ -51,7 +51,7 @@ Users rarely know exactly what they are looking for or which context matters. Pi
 
 ## Topic folder
 
-`~/research/<topic>/` by default, or the root a caller passes (`<topic>` is lowercase ASCII with hyphens; the title lives in the brief). Inside: `map.md` (brief, terms, people, venues, sources, next leads), `log.md` (append only), `sources/` (originals only, never summaries), `extracts.json`, `report.html`, for report `notes/`, `claims.json` and `report-<date>.md`, for watch `watch.tsv`, `watch-state.json` and `watch/`, and for pulse `pulse/` (plan, results, evidence files and briefs). Formats are in `references/formats.md`.
+`~/research/<topic>/` by default, or the root a caller passes (`<topic>` is lowercase ASCII with hyphens; the title lives in the brief). Inside: `map.md` (brief, terms, people, venues, sources, next leads), `log.md` (append only), `sources/` (originals only, never summaries), `extracts.json`, `report.html`, for report `notes/`, `claims.json` and `report-<date>.md`, for watch `watch.tsv`, `watch-state.json` and `watch/`, for pulse `pulse/` (plan, results, evidence files and briefs), and for models the board snapshots in `sources/`, `models/` (shortlist and Hub facts) and `models-<date>.md`. Formats are in `references/formats.md`.
 
 ## Scripts
 
@@ -62,7 +62,8 @@ Run them as `python -I ${CLAUDE_PLUGIN_ROOT}/scripts/<name>.py`, one call per co
 - `report.py <topic_dir> [--check]`: check every extract against its source line and every claims.json verdict against its votes, then build `report.html`.
 - `watch.py add|list|check`: venue feeds and what is new since the last check.
 - `pulse.py <topic_dir> --plan <file> [--days N] [--quick | --deep]`: community items of the last N days from keyless lanes, scored, merged and clustered into `pulse/<date>.json` and an evidence file.
-- `check.py [--kind report|pulse] <file>`: style check of the exact reply or brief after its last edit (`-` reads standard input); quotes, report.html and sources are never checked. `--kind report` also checks a report's BLUF, citations and verdicts against the claims.json beside it; `--kind pulse` checks a brief's lane coverage line and verbatim quotes against the pulse result beside it. Read `${CLAUDE_PLUGIN_ROOT}/STYLE.md` before writing a deliverable.
+- `models.py snapshot|shortlist|follow`: save a leaderboard table, shortlist its models with Hub facts and the Pareto front, then save the cards of the chosen few and grep them for features (Hugging Face, no key).
+- `check.py [--kind report|pulse|models] <file>`: style check of the exact reply or brief after its last edit (`-` reads standard input); quotes, report.html and sources are never checked. `--kind report` also checks a report's BLUF, citations and verdicts against the claims.json beside it; `--kind pulse` checks a brief's lane coverage line and verbatim quotes against the pulse result beside it; `--kind models` checks that every `<path>:<line>` a model choice cites exists in its topic folder. Read `${CLAUDE_PLUGIN_ROOT}/STYLE.md` before writing a deliverable.
 
 ## Rules for every mode
 
