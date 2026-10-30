@@ -1,0 +1,10 @@
+{
+  "name": "phro-search",
+  "version": "0.1.0",
+  "description": "One research skill that first pins down what you need, then digs a field down to its original sources, writes verified reports, reads recent community signal, answers from primary docs, picks models from public leaderboards, or watches venues for new posts.",
+  "author": { "name": "thatshoon" },
+  "homepage": "https://github.com/ThatsHoon/phro-search",
+  "repository": "https://github.com/ThatsHoon/phro-search",
+  "license": "MIT",
+  "keywords": ["research", "literature", "citations", "evidence", "leaderboards", "monitoring"]
+}
