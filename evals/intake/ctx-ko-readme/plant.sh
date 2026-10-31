@@ -1,0 +1,1 @@
+printf '# shelf-scan\n\nA Python 3.11 app that reads book spines from photos on a Raspberry Pi 5 (8 GB RAM, no GPU).\nThe code is MIT licensed, so every dependency must be MIT-compatible.\n' > README.md

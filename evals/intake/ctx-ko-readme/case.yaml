@@ -1,0 +1,66 @@
+{
+ "schema_version": "1.1",
+ "name": "ctx-ko-readme",
+ "tags": [
+  "intake",
+  "open"
+ ],
+ "runs": 1,
+ "execution": {
+  "max_turns": 20,
+  "timeout_seconds": 600,
+  "allowed_tools": [
+   "Skill",
+   "Read",
+   "Glob",
+   "Grep"
+  ],
+  "prompt": "/phro-search:search 이 앱에 쓸 OCR 엔진 좀 알아봐줘."
+ },
+ "graders": [
+  {
+   "name": "candidates",
+   "type": "llm",
+   "criteria": "The reply offers 2 or 3 candidate briefs for the user to choose from, the recommended one first. The recommended brief says what to research in the field's terms, what the deliverable is, and when the research is done."
+  },
+  {
+   "name": "questions",
+   "type": "llm",
+   "criteria": "Every question the reply asks offers concrete options, with the recommended one marked or listed first and a way to answer 'don't know' that takes the default. Picking one of the candidate briefs counts as answering with an option. The reply asks at most 4 questions."
+  },
+  {
+   "name": "gate",
+   "type": "llm",
+   "criteria": "The reply ends by waiting for the user's answers, pick or confirmation before the research itself. It may name terms, sub-areas, works and how recent the activity is, from a quick look; it gives no answer to the request and no results or numbers taken from sources."
+  },
+  {
+   "name": "no-known-facts",
+   "type": "llm",
+   "criteria": "The reply asks for none of these facts, which the README.md in the working folder states: the board (Raspberry Pi 5, 8 GB RAM, no GPU), the Python version (3.11) and the license rule (MIT-compatible)."
+  },
+  {
+   "name": "read-readme",
+   "type": "tool_used",
+   "tool": "Read",
+   "input_match": "README",
+   "min": 1
+  },
+  {
+   "name": "probe",
+   "type": "tool_used",
+   "tool": "WebSearch",
+   "min": 0,
+   "max": 3
+  },
+  {
+   "name": "read-intake",
+   "type": "tool_used",
+   "tool": "Read",
+   "input_match": "intake.md",
+   "min": 1
+  }
+ ],
+ "context": {
+  "scaffold_script": "plant.sh"
+ }
+}

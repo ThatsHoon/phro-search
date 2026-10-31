@@ -23,7 +23,7 @@ Neutral questions for a visceral need ask about the situation, the gap and the u
 Cheap sources first; mark each slot stated, inferred (from what) or unknown.
 - The conversation: goals, constraints, links and names (seeds), the words the user uses.
 - The open repo: README, CLAUDE.md, manifests (languages, frameworks, versions), recent doc headings. Send anything deeper to a subagent and keep asking the questions that do not depend on it.
-- Earlier topics: `ls ~/research/` and `grep -h "^brief:\|^feedback:" ~/research/*/log.md`. A similar earlier brief turns its choices (deliverable, depth, source kinds, budget) into the recommended options, marked "as last time". Feedback that a brief missed ("too shallow", "wrong sense of the term") becomes a question or a default this time. Show anything learned this way; never apply it unseen.
+- Earlier topics: one Grep tool search of the topic root (pattern `^(brief|feedback):`, glob `*/log.md`, the root as an absolute path). A similar earlier brief turns its choices (deliverable, depth, source kinds, budget) into the recommended options, marked "as last time". Feedback that a brief missed ("too shallow", "wrong sense of the term") becomes a question or a default this time. Show anything learned this way; never apply it unseen.
 - Nothing harvested goes into a query, a probe or a subagent brief.
 
 ## 3. Probe
@@ -39,17 +39,17 @@ Cheap sources first; mark each slot stated, inferred (from what) or unknown.
 ```
 A (recommended: <one reason>). <object in the field's terms>. Deliverable: <deliverable> (<mode>). Done when: <2 or 3 required claims or the done condition>.
 B. <a different object or deliverable>. Deliverable: ... Done when: ...
-C. Map the field first: its terms, people and venues, then a sharper brief (dig round 0).
+C. Map the field first (dig round 0). Deliverable: a map of the field's terms, people and venues. Done when: the map names them and a sharper brief is drafted from it.
 ```
 
-- 2 or 3 readings that differ in object or deliverable, not in wording.
+- 2 or 3 readings that differ in object or deliverable, not in wording. Every candidate, C included, states its deliverable and done condition.
 - A visceral need always gets "map the field first"; a compromised one gets a restated object (the use behind the means).
-- With AskUserQuestion, one question whose options are the candidates, previews holding each mini brief; otherwise a numbered list. The user picks, combines or corrects one; the pick fills use, object, deliverable and done condition at once.
+- With AskUserQuestion, one question whose options are the candidates, previews holding each mini brief; otherwise a numbered list. Either way the pick is one of the round's at most 4 questions. The user picks, combines or corrects one; the pick fills use, object, deliverable and done condition at once.
 
 Example, conscious: "Is there research on asking users good follow-up questions?"
 - A (recommended: the request asks whether research exists). dig: clarifying questions in conversational search and dialogue systems. Done when: venues; canonical papers; measured gains; where clarifying questions fail.
-- B. report: compare 3 practical ways to add clarifying questions to a chat product, with a decision table.
-- C. Map the field first.
+- B. report: compare 3 practical ways to add clarifying questions to a chat product. Done when: a decision table over cost, measured gain and risk.
+- C. Map the field first, as in the template.
 
 ## 5. Slots
 
@@ -73,15 +73,21 @@ Seeds and Hypothesis are harvested, not asked, unless they would change the plan
 
 ## 6. Writing a question
 
-- Options, not blanks: a user who lacks the field's words recognizes the right option long before they can phrase it.
-- The recommended option first, marked, with its reason in a few words; "yes" accepts it.
-- A "don't know" option that takes the default and records it as an assumption.
+```
+1. <question>
+   a. <option> (recommended: <reason in a few words>)
+   b. <option>
+   c. Don't know: take a.
+```
+
+- Every question in every round has this shape, follow-ups included: the recommended option is a, marked, and is the likeliest answer or, when none is likelier, the safe default (such as "any domain"); the last option is "don't know", which takes the default and records it as an assumption; "yes" accepts every recommended option.
+- Options, not blanks: a user who lacks the field's words recognizes the right option long before they can phrase it. A detail with many possible answers (a cloud, a language) gets the likeliest 2 or 3 and "other: say which".
 - One decision per question; at most 4 questions per round, the ones that change the mode first, then the object, then constraints that remove options, then scope and evidence bar.
 - Field terms with the user's words in parentheses on first use.
-- No leading questions, no tool internals, no facts the environment can give, nothing this session or the topic's `log.md` already answered.
+- No leading questions, no tool internals, no facts the environment can give, nothing this session or the topic's `log.md` already answered. A stated fact or rule is taken in its usual reading and recorded as an assumption, not asked about.
 - AskUserQuestion when the host has it: one call per round, up to 4 questions, "(Recommended)" on the first option, previews for candidate briefs.
 
-Good: "Which do you need first? 1. A field map with the originals (recommended: the field is new to you). 2. A decision report comparing the main options. 3. Don't know: take 1."
+Good: "Which do you need first? a. A field map with the originals (recommended: the field is new to you). b. A decision report comparing the main options. c. Don't know: take a."
 Bad, and why:
 - "What exactly do you want to research?" (a blank with no options)
 - "Should I use OpenAlex?" (a tool internal, not the user's decision)
@@ -120,5 +126,5 @@ Empty slots are left out. Required claims for dig: the first is always the venue
 - dig: after round 0, show the map (terms, people, venues) and the two directions, then confirm the direction and the required claims in one round, unless dig.md's skip condition holds.
 - pulse: when an ambiguity survives the pre-flight, show the resolved entity, subreddits, repositories and anchors in one round before running.
 - A finding that changes the question: ask once before re-scoping, log the reason; reworded, added or dropped claims count as brief drift.
-- A hand-off to another mode copies the brief and asks only what changes.
+- A hand-off to another mode copies the brief, and its slots count as stated: ask only what the new mode adds (report: the key questions; models: constraints and required features; pulse: the window) and what the new request changes.
 - Log the intake line after the gate and add re-scopes and drift at delivery (`references/formats.md`).

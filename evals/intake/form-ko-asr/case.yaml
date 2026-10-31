@@ -1,0 +1,27 @@
+{
+ "schema_version": "1.1",
+ "name": "form-ko-asr",
+ "tags": [
+  "intake",
+  "shut"
+ ],
+ "runs": 1,
+ "execution": {
+  "max_turns": 20,
+  "timeout_seconds": 600,
+  "allowed_tools": [
+   "Skill",
+   "Read",
+   "Glob",
+   "Grep"
+  ],
+  "prompt": "/phro-search:search models. 용도: 독일어 회의 녹음을 받아 적는 앱에 넣을 모델 고르기. 대상: Open ASR 리더보드 multilingual 표, 독일어 WER 기준. 제약: 4-bit 기준 가중치 1GB 이하, Apache 2.0이나 MIT 라이선스, 호스팅 서비스 제외. 필수 기능: 단어 타임스탬프. 결과물: 모델 선택 표. 완료 조건: pick 하나와 대안 둘, 각각 크기, 라이선스, 타임스탬프 지원 여부 확인. 예산: 최대 5개 follow. 토픽 폴더 root는 현재 작업 폴더의 research/ 로 해."
+ },
+ "graders": [
+  {
+   "name": "no-questions",
+   "type": "llm",
+   "criteria": "The reply asks the user no question about the topic, deliverable, scope or preferences and does not ask to confirm a brief. Ignore a note that a tool or permission is missing, options for getting it or going on without it, and a closing question on whether the result matched what the user wanted: none of these is a question about the request."
+  }
+ ]
+}

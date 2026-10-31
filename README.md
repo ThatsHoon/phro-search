@@ -19,6 +19,13 @@ claude plugin install phro-search@phro
 python -I -m unittest discover -s tests -t . -v
 ```
 
+Intake evals in `evals/intake/` run real sessions (about 4 USD per set). The open set may search the web; the shut set has no tools beyond reading:
+
+```bash
+claude plugin eval . --tag open --scaffold --allow-tools WebSearch --no-publish
+claude plugin eval . --tag shut --no-publish
+```
+
 ## License
 
 MIT

@@ -1,0 +1,27 @@
+{
+ "schema_version": "1.1",
+ "name": "form-en-adam",
+ "tags": [
+  "intake",
+  "shut"
+ ],
+ "runs": 1,
+ "execution": {
+  "max_turns": 20,
+  "timeout_seconds": 600,
+  "allowed_tools": [
+   "Skill",
+   "Read",
+   "Glob",
+   "Grep"
+  ],
+  "prompt": "/phro-search:search dig. Use: I want to cite the originals correctly in a write-up. Object: the original papers that introduced the Adam, AdamW and AMSGrad optimizers. Deliverable: the source map with each original archived. Done when: C1 where this field's knowledge gathers (venues); C2 the original Adam paper; C3 the original AdamW paper; C4 the original AMSGrad paper. Evidence: papers only. Scope: no time limit, English. Budget: 1 round, at most 2 searcher calls. Topic root: research/ in the working folder."
+ },
+ "graders": [
+  {
+   "name": "no-questions",
+   "type": "llm",
+   "criteria": "The reply asks the user no question about the topic, deliverable, scope or preferences and does not ask to confirm a brief. Ignore a note that a tool or permission is missing, options for getting it or going on without it, and a closing question on whether the result matched what the user wanted: none of these is a question about the request."
+  }
+ ]
+}

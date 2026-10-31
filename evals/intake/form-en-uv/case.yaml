@@ -1,0 +1,27 @@
+{
+ "schema_version": "1.1",
+ "name": "form-en-uv",
+ "tags": [
+  "intake",
+  "shut"
+ ],
+ "runs": 1,
+ "execution": {
+  "max_turns": 20,
+  "timeout_seconds": 600,
+  "allowed_tools": [
+   "Skill",
+   "Read",
+   "Glob",
+   "Grep"
+  ],
+  "prompt": "/phro-search:search pulse. Use: decide whether our team should switch to uv. Object: what Hacker News, Reddit and GitHub users said about uv, the Python package manager from Astral. Window: the last 14 days. Deliverable: the pulse brief. Done when: every lane has run and the brief names the main praise and complaints with quotes. Evidence: community posts and GitHub issues. Scope: English. Budget: the default quick run. Topic root: research/ in the working folder."
+ },
+ "graders": [
+  {
+   "name": "no-questions",
+   "type": "llm",
+   "criteria": "The reply asks the user no question about the topic, deliverable, scope or preferences and does not ask to confirm a brief. Ignore a note that a tool or permission is missing, options for getting it or going on without it, and a closing question on whether the result matched what the user wanted: none of these is a question about the request."
+  }
+ ]
+}

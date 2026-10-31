@@ -1,0 +1,27 @@
+{
+ "schema_version": "1.1",
+ "name": "ctl-caller",
+ "tags": [
+  "intake",
+  "shut"
+ ],
+ "runs": 1,
+ "execution": {
+  "max_turns": 20,
+  "timeout_seconds": 600,
+  "allowed_tools": [
+   "Skill",
+   "Read",
+   "Glob",
+   "Grep"
+  ],
+  "prompt": "/phro-search:search (Brief passed by a calling skill; there is no user to ask.) object: open-source OCR engines that run on a Raspberry Pi 5; deliverable: report; done: a decision table over accuracy, speed and license for the top 3. Topic root: research/ in the working folder."
+ },
+ "graders": [
+  {
+   "name": "defaults",
+   "type": "llm",
+   "criteria": "The reply asks the user no question about the topic, deliverable, scope or preferences. It says it went ahead without asking, or names the values it assumed for the open slots. Ignore a note that a tool or permission is missing, options for getting it or going on without it, and a closing question on whether the result matched what the user wanted: none of these is a question about the request."
+  }
+ ]
+}

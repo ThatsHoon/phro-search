@@ -1,0 +1,27 @@
+{
+ "schema_version": "1.1",
+ "name": "form-ko-frames",
+ "tags": [
+  "intake",
+  "shut"
+ ],
+ "runs": 1,
+ "execution": {
+  "max_turns": 20,
+  "timeout_seconds": 600,
+  "allowed_tools": [
+   "Skill",
+   "Read",
+   "Glob",
+   "Grep"
+  ],
+  "prompt": "/phro-search:search report. 용도: 팀 데이터 도구를 고르는 결정. 질문: RAM 32GB PC 한 대에서 5~20GB 표를 다룰 때 pandas, Polars, DuckDB 중 무엇을 쓸지. 결과물: 결정용 보고서. 완료 조건: Q1 메모리보다 큰 표를 각 도구가 어떻게 다루는지, Q2 조인과 집계 성능, Q3 기존 pandas 코드를 옮기는 비용. 근거: 공식 문서와 측정 자료. 범위: 2024년 이후 자료, 영어와 한국어. 예산: 연구 담당 3명, 핵심 주장 최대 6개에 3표씩. 토픽 폴더 root는 현재 작업 폴더의 research/ 로 해."
+ },
+ "graders": [
+  {
+   "name": "no-questions",
+   "type": "llm",
+   "criteria": "The reply asks the user no question about the topic, deliverable, scope or preferences and does not ask to confirm a brief. Ignore a note that a tool or permission is missing, options for getting it or going on without it, and a closing question on whether the result matched what the user wanted: none of these is a question about the request."
+  }
+ ]
+}
