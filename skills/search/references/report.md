@@ -17,7 +17,7 @@ A decision-ready answer from many sources. Researchers gather findings with exac
 
 - Checkpoint: show the subtopics and the decision criteria in one round before spawning. Skip it when the user's brief already named them or there is no user to answer; log the skip and why.
 - Log `research`, `archive`, `verify` and `write` sections in the round's shape of log.md (spawned, came back, fetched, decisions); `verify` adds `votes: <n> central claims; <s> survived, <r> refuted, <u> unverified; <m> missing votes`.
-- Plan line: "PLAN: report; 5 researchers, up to 2 support readers, up to 30 verifier calls; ceiling 39 agent calls" (researchers, at most 2 for a gap round, a support reader and one more for reworded claims, 3 per central claim).
+- Plan line: "PLAN: report; 5 researchers, up to 2 support readers, up to 30 verifier calls; ceiling 39 agent calls", with the researcher count from the table and the ceiling 34 above it (it counts the researchers, at most 2 for a gap round, a support reader and one more for reworded claims, and 3 verifiers for each of at most 10 central claims).
 
 ## Research
 

@@ -58,8 +58,11 @@ Plan line: "PLAN: models; <board> <table>, snapshot, shortlist, follow up to 5, 
 6. Follow: `models.py follow <topic_dir> <org/name> <org/name> --need "streaming,word timestamps"`. `--task asr|tts|llm` picks the feature list (default from the shortlist's board). It saves the card at the repo sha (`sources/hf-<org>--<name>-<sha7>.md`, never overwritten) and the facts with the config and the paper abstracts (`models/hub/<org>--<name>.json`). It prints `FACTS`, one `FEATURE` hit per task feature and up to 3 per need (`file:line: text`, or `not stated`), and `HOP` lines for each need still not stated. A gated repo serves its card only after its terms are accepted: `FACTS` says `card gated` and a `HOP <repo> card page <url>` line points at the model page, which shows the card.
 7. Read each hit in context before calling a feature present: `grep -n -B2 -A2 -i "<term>" <topic_dir>/<file>`. A hit can deny the feature ("streaming is not supported") or mean something else; a denial is "no" with its location.
 8. Hops, at most 2 per model and only for needs still not stated: the paper (`fetch.py <topic_dir>/sources arxiv-<id>-<short-title> https://arxiv.org/abs/<id>`), the repository README from the `HOP` line (`fetch.py <topic_dir>/sources <name> <repo url>`), and for a gated card the model page (`fetch.py <topic_dir>/sources hf-page-<org>--<name> <page url>`, the name lowercased with `_` as `-`), then grep them the same way. After that the feature is "not stated in card, config, paper or repo".
+9. Stop when every model on the front that was followed has its metric, size, license and each must-have feature confirmed, denied or not stated after the hops.
 
 ## 4. Labels
+
+These label a model row's values; they are not the source marks of `references/formats.md`.
 
 - `measured`: a board's own score under its test sets and hardware.
 - `verified`: a hub leaderboard value the Hub marks verified.
@@ -111,7 +114,6 @@ Caveats, every one that applies:
 
 Check the file with `check.py --kind models <topic_dir>/models-<date>.md`. Then reply in the user's language, with no lead-in: the one-line answer, the table's top rows, the pick and alternates with when to choose each, the caveats, the check on their data, the file path and the feedback question. Log the run (board, snapshot, filters, models followed, hops, minutes).
 
-Stop when every model on the front that was followed has its metric, size, license and each must-have feature confirmed, denied or not stated after the hops.
 
 ## Hand-offs
 

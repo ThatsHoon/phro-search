@@ -27,8 +27,6 @@ Find the venues; do not pick them from a fixed list. Only with no clue at all, c
 Reply in at most 60 lines.
 ```
 
-The two round-0 searchers get the same question and different methods, so their overlap can be counted. Hypothesis branches get the same template with "follow hypothesis <H>" and are judged by their own claims, not by overlap.
-
 ## Support reader (dig and report)
 
 `phro-search:local-reader`, when the mode reference says, on located quotes not yet rated. This brief may name the topic's sources folder.
@@ -50,4 +48,4 @@ Reply with one tab-separated line per quote and nothing else:
 <claim id or number>  <file>:<line>  <full|partial|none|contradicts>  <qualifier file:line or ->  <qualifier text or ->
 ```
 
-Write each rating as the quote's `support` and each qualifier as its `qualifier` (`references/formats.md`). A claim with no full rating is partial at most: change its status or its wording, never the rating.
+Write each rating as the quote's `support` and each qualifier as its `qualifier` (`references/formats.md`). Never change a rating to fit a claim; change the claim's status or wording.

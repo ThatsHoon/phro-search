@@ -128,7 +128,7 @@ class PluginTest(unittest.TestCase):
         self.assertIn("find criticism, failed or partial replications, negative results, errata and corrections of "
                       "<work or claim>", method)
         dig = read(REFS / "dig.md")
-        self.assertIn("ceiling 10 searcher calls", dig)
+        self.assertIn("ceiling 11 searcher calls", dig)
         self.assertRegex(dig, r"(?i)disconfirm searcher")
 
     def test_standards_section(self):

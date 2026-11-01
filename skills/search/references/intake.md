@@ -51,7 +51,7 @@ Example, conscious: "Is there research on asking users good follow-up questions?
 
 ## 5. Slots
 
-Ask in this order; skip a slot whose every answer leads to the same plan (it takes its default).
+Each slot is asked when its row says; within a round, SKILL.md intake step 5 orders the questions. Skip a slot whose every answer leads to the same plan (it takes its default).
 
 | Slot | Ask when | Question pattern | Default when unknown |
 |---|---|---|---|
@@ -80,7 +80,7 @@ Seeds and Hypothesis are harvested, not asked, unless they would change the plan
 
 - Follow-ups take this shape too. The recommended option is the likeliest answer or, when none is likelier, the safe default (such as "any domain"); "don't know" records the default as an assumption; "yes" accepts every recommended option.
 - Options, not blanks: a user who lacks the field's words recognizes the right option long before they can phrase it. A detail with many possible answers (a cloud, a language) gets the likeliest 2 or 3 and "other: say which".
-- One decision per question. Questions that change the mode come first, then the object, then constraints that remove options, then scope and evidence bar.
+- One decision per question.
 - Field terms with the user's words in parentheses on first use.
 - No leading questions, no tool internals, nothing this session or the topic's `log.md` already answered. A stated fact or rule taken in its usual reading is recorded as an assumption.
 - AskUserQuestion when the host has it: one call per round, "(Recommended)" on the first option.

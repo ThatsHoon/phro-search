@@ -2,19 +2,21 @@
 
 Catch up on a field, from generic words down to its original sources. Two things carry the mode: originals are archived, never summarized, and the stop is set by evidence, not by confidence.
 
-- No summaries: detailed notes taken while still exploring, before a focus forms, may bring premature closure (Kuhlthau 1991). An agent's summary closes on the agent's view and drops the details the user judges by. The user reads the originals; the agent points at them.
-- Branch instead of committing: picking one direction early makes later searches reinforce it. With two plausible directions, branch and compare (Zhou et al. 2026).
-- Chain when words fail: following references and citations avoids having to describe the subject (Bates 1989).
+- No summaries: the user reads the originals; the agent points at them.
+- With two plausible directions, branch and compare instead of committing to one.
+- Chain when words fail: follow references and citations instead of describing the subject.
+
+Why each holds: `references/theory.md`.
 
 ## Before round 0
 
 - The confirmed brief heads `map.md` with 3 to 6 required claims (`references/intake.md`, section 7).
-- Plan line: "PLAN: dig; up to 4 rounds, 2 searchers per round, a support reader per support pass; ceiling 10 searcher calls".
+- Plan line: "PLAN: dig; round 0 and up to 4 rounds, 2 searchers per round plus round 1's disconfirm searcher, a support reader per support pass; ceiling 11 searcher calls".
 
 ## Round 0: map
 
-- Spawn 2 searchers with different methods in one turn (brief: `references/briefs.md`). Default split: term search, and canonical surveys and textbooks. When the brief's scope adds the user's language (a topic specific to its region): English and that language. Round 0 keeps these two web searchers until the round-0 recall test shows that one web searcher plus the `chain.py topic` list finds as much.
-- When both have reported, add their terms, people, venues and sources to `map.md`, each line ending in (unverified); move their "not searched" items to Next leads. Log per searcher what was asked, what came back, and how many pages it opened. Searcher reports usually rest on result snippets: affiliations, "published" and numbers are often wrong until read in the original.
+- Spawn 2 searchers with different methods in one turn (brief: `references/briefs.md`). Default split: term search, and canonical surveys and textbooks. When the brief's scope adds the user's language (a topic specific to its region): English and that language.
+- When both have reported, add their terms, people, venues and sources to `map.md`, each line ending in (unverified); move their "not searched" items to Next leads. Log per searcher what was asked, what came back, and how many pages it opened.
 - Seed from earlier topics in two steps, since a Sources row rarely repeats the field terms: Grep the topic root for the topics whose `map.md` matches (case-insensitive, the field terms joined with `|`, glob `*/map.md`, files only), leave out the current topic, then read the Sources rows of those maps. Show those rows at the checkpoint, each as "from earlier topic <topic>"; only those the user keeps enter `map.md`, marked the same way, and the searchers' known list. A seeded row is never used unseen: with no user to answer, log the rows and leave them out.
 - Venues are found, not taken from a list: the brief asks where the field's experts write and where its canonical material is published. Log how many items each venue produced.
 - Checkpoint: show the map (terms, people, venues) and the two directions; confirm the direction and the required claims in one round. Skip it when there is no user to answer, or when the brief was formalized and round 0 changed neither the directions nor the claims; log the skip and why.
@@ -39,7 +41,7 @@ Pick leads with a strong scent: named again and again, surveys and textbooks, ci
 - Disconfirm: when a required claim asks how well a method works or where it fails, spawn one disconfirm searcher in round 1, in the same turn as the round's other searchers, on the work or claim the answer rests on (the disconfirm method in `references/briefs.md`). Once per dig.
 - A standard, specification or RFC behind a required claim follows the Standards section of `references/report.md`.
 - Download hits with `fetch.py <topic>/sources <name> <url>`, passing a paper's DOI. Before reporting a canonical work as unreached, look for another legal copy: `chain.py oa <DOI>`, the author's or lab's page, a technical report, an institutional repository, a curated site.
-- Locate: grep the downloaded text for each required claim's passage (`grep -n -i "<words>" <topic>/sources/<file>`, then read a few lines around it) and write `file:line` plus a short quote on the claim line in `map.md`. Location and quote only, no summary or conclusion. A PDF's `.txt` copy is in reading order, which joins a word split at a line end and so also drops the hyphen of a compound split there; check the `.layout.txt` copy when a hyphen matters, and quote a table from it, since it keeps the rows. The quote matters: a line number alone is hard to find.
+- Locate: grep the downloaded text for each required claim's passage (`grep -n -i "<words>" <topic>/sources/<file>`, then read a few lines around it) and write `file:line` plus a short quote on the claim line in `map.md`. A PDF's `.txt` copy is in reading order, which joins a word split at a line end and so also drops the hyphen of a compound split there; check the `.layout.txt` copy when a hyphen matters, and quote a table from it, since it keeps the rows. The quote matters: a line number alone is hard to find.
 
 ## End of each round (the main session decides)
 
@@ -60,7 +62,7 @@ In a field with papers, once a stop holds, run `chain.py topic <confirmed terms>
 
 ## Evidence page
 
-1. Whatever the stop, first run the support pass on every located quote not yet rated, so each quote on the page carries its rating. Then write `extracts.json` (`references/formats.md`): one entry per required claim with excerpts copied verbatim from the sources, each with its support rating and qualifier, translations for quotes in other languages, marks, disagreements side by side, and what was not reached. The agent writes only headings, statuses, one-line notes and translations; a note says who did what, never which side is right.
+1. Whatever the stop, first run the support pass on every located quote not yet rated, so each quote on the page carries its rating. Then write `extracts.json` (`references/formats.md`): one entry per required claim with excerpts copied verbatim from the sources, each with its support rating and qualifier, translations for quotes in other languages, marks, disagreements side by side, and what was not reached. The agent writes only headings, statuses, one-line notes and translations.
 2. Run `report.py <topic_dir>`. Fix each MISMATCH by copying the source text exactly, never by editing the source or loosening the quote into a paraphrase. Auto-caption errors stay as they are.
 3. `report.py <topic_dir> --check` passes before delivery.
 

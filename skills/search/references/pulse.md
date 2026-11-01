@@ -30,7 +30,7 @@ Check the topic for keyword traps before the first request. Reframe it, or ask o
 | a practice or workflow | hn, reddit, youtube, github |
 
 A lane runs when a subquery names it; reddit, github and youtube also run when the plan names dedicated subreddits, repositories or YouTube queries. A subquery that names no lanes runs every lane but hf.
-- hf (Hugging Face) matches model names only, so an hf subquery's `search_query` is the family or organization name (`Qwen3`, `gemma`); it lists the models created in the window with likes, downloads and trending score, and the daily papers of the window's newest 31 days with upvotes and comments, which join the arXiv lane's copy of the same paper. The owner keeps this lane only if a replay of the T3.5 topic (small multilingual models) surfaces the model family that brief missed. TikTok, Instagram and X have no keyless access: when a topic lives there (consumer products, creators), say so in the gaps instead of guessing.
+- hf (Hugging Face) matches model names only, so an hf subquery's `search_query` is the family or organization name (`Qwen3`, `gemma`); it lists the models created in the window with likes, downloads and trending score, and the daily papers of the window's newest 31 days with upvotes and comments, which join the arXiv lane's copy of the same paper. TikTok, Instagram and X have no keyless access: when a topic lives there (consumer products, creators), say so in the gaps instead of guessing.
 
 ## 4. Plan and run
 
@@ -59,7 +59,7 @@ Exit 1 means no lane returned anything: say so, with each lane's reason, and sto
 
 ## 5. Web supplements
 
-2 or 3 standard web searches for what the lanes miss: release notes, official blogs, documentation changes, news in the window (not Reddit or X). Generic queries with the anchor. They give context and primary links, cited as links; the brief quotes only what `pulse.py` collected, with one exception. In a Korea-specific topic (national standards, market, regulation), a Korean supplement may be quoted once `fetch.py <topic>/sources <name> <url>` has archived it: the quote is copied from that copy, and the line after it names the URL fetched, which `check.py` looks up in `sources/index.tsv`.
+2 or 3 standard web searches for what the lanes miss: release notes, official blogs, documentation changes, news in the window (not Reddit or X). Generic queries with the anchor. They give context and primary links, cited as links; the brief quotes only what `pulse.py` collected, with one exception. In a topic specific to one language's region (its standards, market, regulation), a supplement in that language may be quoted once `fetch.py <topic>/sources <name> <url>` has archived it: the quote is copied from that copy, and the line after it names the URL fetched, which `check.py` looks up in `sources/index.tsv`.
 
 ## 6. Judge
 
@@ -94,7 +94,7 @@ Write `<topic>/pulse/<stem>.md` (the stem of the result, such as `2026-10-30`) i
 ```
 
 - At least one quote per cluster, copied exactly (whitespace may differ; "..." joins pieces kept in order). Its author, lane and link go on the line after it, with a translation when the quote is not in the user's language.
-- A failed, partial, rate-limited or skipped lane is named on the coverage line with its reason; it is never reported as silence.
+- A failed, partial, rate-limited, timed-out or skipped lane is named on the coverage line with its reason; it is never reported as silence.
 - Prose, no tool narration; numbers as the lanes gave them ("412 points, 230 comments").
 - Check the brief with `check.py --kind pulse <topic>/pulse/<stem>.md`.
 
