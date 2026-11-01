@@ -113,12 +113,14 @@ def clean(s, cap=300):
 
 
 def egress_terms(cwd=None):
-    """(term, source) pairs from ~/.claude/phro-search/forbidden.txt and the nearest .phro/project.json at or above cwd."""
+    """(term, source) pairs from ~/.claude/phro-search/forbidden.txt (under the home folder, HOME and USERPROFILE, the
+    places the hook's shell looks) and the nearest .phro/project.json at or above cwd."""
     found = []
-    path = Path.home() / ".claude" / "phro-search" / "forbidden.txt"
-    if path.is_file():
-        found += [(t.strip(), str(path)) for t in path.read_text(encoding="utf-8-sig").splitlines()
-                  if t.strip() and not t.lstrip().startswith("#")]
+    homes = [Path.home()] + [Path(os.environ[v]) for v in ("HOME", "USERPROFILE") if os.environ.get(v)]
+    for path in dict.fromkeys(h.resolve() / ".claude" / "phro-search" / "forbidden.txt" for h in homes):
+        if path.is_file():
+            found += [(t.strip(), str(path)) for t in path.read_text(encoding="utf-8-sig").splitlines()
+                      if t.strip() and not t.lstrip().startswith("#")]
     here = Path(cwd or os.getcwd()).resolve()
     for d in (here, *here.parents):
         p = d / ".phro" / "project.json"

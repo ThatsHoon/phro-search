@@ -55,6 +55,15 @@ class EgressHookTest(unittest.TestCase):
         for text in named:
             self.assertIn(text, r.err)
 
+    def test_list_under_either_home_variable(self):
+        other = self.home.parent / "other"
+        other.mkdir()
+        self.forbid("orbit-9")
+        for var in ("HOME", "USERPROFILE"):  # the hook's shell finds the list under either, so Python must read it too
+            with self.subTest(empty=var):
+                self.env = {**os.environ, "HOME": str(self.home), "USERPROFILE": str(self.home), var: str(other)}
+                self.assertBlocked(self.search("orbit-9 telemetry"), "orbit-9", self.list_file)
+
     def test_query_term_blocked_with_exact_message(self):
         self.forbid("orbit-9")
         r = self.search("how to tune orbit-9 telemetry")
