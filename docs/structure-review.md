@@ -317,9 +317,10 @@ Consequential, following from the confirmed decisions:
 - The subagent_type value for plugin agents is not documented; test it before R3 relies on it.
 - Substitution of ${CLAUDE_PLUGIN_ROOT} in files read with Read is not documented (F6); backlog item 18 removes the dependence.
 - report.md:80 says Claude Code refuses a subagent's write; this is unconfirmed, and R3 makes it moot.
-- OpenAlex's keyless budget: plan:565 measured 1,000 credits a day per IP address, and one OpenAlex docs page suggests a different figure. Check it live when adding the optional key.
 - The routes and terms of the measured-board candidates (R13) are not checked yet.
 - T5.3's rating of 5 real requests is still open (plan:643).
+
+Settled after the review: the owner reports OpenAlex's daily budget as $1.000 without a key, which matches the 1,000 credits a day that plan:565 measured. Backlog items 1 to 3 were built on the branch claude/optimistic-volta-rio18v on 2026-11-01; the PDF measurement of R9 waits for the owner's topics (dev/pdf_modes.py).
 
 ## Appendix A. Platform facts relied on
 

@@ -48,13 +48,13 @@ One gap round at most: 1 or 2 researchers, only for a key question left without 
 
 ## Archive and locate
 
-1. Collect the URLs of the finding lines; one per host and path. Fetch at most 25 with `fetch.py <topic>/sources <name> <url>`, passing a paper's DOI so its legal open-access copies come first: first the pages behind findings the answer would rest on, then by label (paper, official, first-hand before summary). Reuse what `sources/` already holds; never download again. Every FAIL goes to `log.md`; a walled page behind a likely central finding goes to the user's browser, as in dig.
+1. Collect the URLs of the finding lines; one per host and path. Fetch at most 25 with `fetch.py <topic>/sources <name> <url>`, passing a paper's DOI so its legal open-access copies come first: first the pages behind findings the answer would rest on, then by label (paper, official, first-hand before summary). `fetch.py` reuses a source already fetched from the same URL, DOI or arXiv id (mark reused); never download again. Every FAIL goes to `log.md`; a walled page behind a likely central finding goes to the user's browser, as in dig.
 2. Locate each finding: grep a distinctive phrase of its quote in the fetched copy (`grep -n -F -e "<phrase>" -e "<phrase>" <topic>/sources/<file>` for several at once), read a few lines around a hit, and take the text exactly as the copy has it. Not found (the page changed, the researcher paraphrased, the fetch failed): the finding stays URL-only.
 3. Write `claims.json` (`references/formats.md`): one entry per finding the report may use, ids c1, c2 and on. Importance:
    - central: the answer would change if it were false; at most 10, each located; a URL-only finding is never central, nor is one whose source is retracted;
    - supporting: backs a section;
    - tangential: context.
-4. Write `extracts.json` with one claim per located finding, carrying its id, its claim text in the user's language and its located quotes; conflicting findings go side by side under `disagreements`, unfetched pages under `unreached`. Run `report.py <topic> --check` and fix each MISMATCH by copying the source text exactly.
+4. Write the report's view, `extracts-<stem>.json` (the stem of `report-<stem>.md`: the date, then -2 and on), with one claim per located finding, carrying its id, its claim text in the user's language and its located quotes; conflicting findings go side by side under `disagreements`, unfetched pages under `unreached`. Run `report.py <topic> <stem> --check` and fix each MISMATCH by copying the source text exactly.
 
 ## Verify
 
@@ -73,7 +73,7 @@ Reply with one JSON object and nothing else:
 {"refuted": <true or false>, "confidence": "<high, medium or low>", "evidence": "<one or two sentences on what you checked>", "counter_source": "<URL, only when a source contradicts the claim>"}
 ```
 
-Vote rule: a reply that is missing, not that JSON object, or without a true or false `refuted` is no vote. Record the votes under the claim in `claims.json`, then its verdict: 2 refutations, refuted; fewer than 2 votes, unverified (a failed check, never read as refuted); otherwise survived. Verification runs once and is never repeated to rescue a claim; a claim is never reworded after its votes. `report.py` checks every verdict against its votes.
+Vote rule: a reply that is missing, not that JSON object, or without a true or false `refuted` is no vote. Record the votes under the claim in `claims.json`, each with today's date as `checked`, then its verdict: 2 refutations, refuted; fewer than 2 votes, unverified (a failed check, never read as refuted); otherwise survived. Verification runs once and is never repeated to rescue a claim; a claim is never reworded after its votes. `report.py` checks every verdict against its votes.
 
 ## Write
 
@@ -81,7 +81,7 @@ Write the report in this session: Claude Code refuses a subagent's write of a re
 
 ```
 # <title>
-<one paragraph that answers the question first (BLUF), citing the claims it rests on>
+<one paragraph that answers the question first (BLUF), naming its as-of date (YYYY-MM-DD) and citing the claims it rests on>
 ## <3 to 5 sections whose headings state their finding>
 ## <a heading that starts with the word for conclusion in the report's language>: new implications only, citing the claims they rest on
 ## <evidence>: a table with the columns id, claim, label, location (sources/<file>:<line>, or URL only), URL, vote
@@ -96,12 +96,12 @@ Write the report in this session: Claude Code refuses a subagent's write of a re
 ## Deliver
 
 First stop every researcher or verifier still running and log what was stopped. Then:
-1. `report.py <topic>` builds `report.html` with the votes beside each claim; it must print OK.
-2. In the user's language, with no lead-in: the report's BLUF paragraph as it stands in the file; the report path, then `report.html`; the tally (central claims survived, refuted, unverified); key questions left as gaps; important walled pages with URL and why they matter; process problems (failed fetches, missing votes, agents that overstepped their brief).
+1. `report.py <topic> <stem>` builds `evidence-<stem>.html` with the votes beside each claim; it must print OK.
+2. In the user's language, with no lead-in: the report's BLUF paragraph as it stands in the file; the report path, then `evidence-<stem>.html`; the tally (central claims survived, refuted, unverified); key questions left as gaps; important walled pages with URL and why they matter; process problems (failed fetches, missing votes, agents that overstepped their brief).
 3. The feedback question; log the answer verbatim.
 
 Run `check.py` on the exact reply after its last edit and send that text unchanged.
 
 ## Again on the same topic
 
-A new report gets a new date (`report-<date>-2.md` on the same day); earlier reports are never overwritten. Reuse `sources/` and `claims.json`: new findings take the next ids, and claims already verified keep their votes. Gaps become required claims for a dig, and a dig archive feeds a report without downloading again.
+A new report gets a new stem (`report-<date>-2.md` on the same day) and its own view and page; earlier reports are never overwritten. Reuse `sources/` and `claims.json`: new findings take the next ids, and claims already verified keep their votes. A central claim whose newest vote is older than the brief's recency need is verified again under a new id (its claim, quote and URL copied, fresh votes); the old claim keeps its votes. Gaps become required claims for a dig, and a dig archive feeds a report without downloading again.

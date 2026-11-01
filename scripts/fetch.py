@@ -17,13 +17,19 @@ accepted, then submitted versions; repository copies first) before the publisher
 lookup costs no OpenAlex credits, and OPENALEX_API_KEY is sent when set. Nothing is written on
 FAIL, and an existing <name>.* is never overwritten.
 
+Every OK adds a row to <sources_dir>/index.tsv: name, url, final, fetched, published, modified,
+extraction, version, marks, files. A source already fetched from the same URL, DOI or arXiv id is
+reused: nothing is downloaded, and the OK line names the earlier file with the mark reused. A
+taken name whose row holds another URL fails and names that URL.
+
 Output, one tab-separated line:
   OK <name> <file> <chars> <first line> [<marks>]
   FAIL <name> <reason>                                  exit code 1
 Marks, comma-separated: ocr, auto-captions, arxiv-html; published-copy, accepted-copy or
-submitted-copy for an open-access copy of a DOI; retracted when OpenAlex marks the work retracted.
+submitted-copy for an open-access copy of a DOI; retracted when OpenAlex marks the work retracted;
+reused for a source fetched before.
 """
-import argparse, html.parser, http.client, json, os, re, shutil, socket, ssl, subprocess, sys, tempfile, time
+import argparse, datetime, html.parser, http.client, json, os, re, shutil, socket, ssl, subprocess, sys, tempfile, time
 import unicodedata, urllib.error, urllib.parse, urllib.request
 from pathlib import Path
 
@@ -58,6 +64,12 @@ HTTP_REASONS = {
     429: "http 429: still rate limited after 3 retries",
     451: "http 451: unavailable for legal reasons",
 }
+INDEX = "index.tsv"  # one row per source in sources/: what was fetched, from where, when and how
+INDEX_HEAD = ("name", "url", "final", "fetched", "published", "modified", "extraction", "version", "marks", "files")
+# Meta tag names that state when a page was published or last changed, most specific first.
+META_PUBLISHED = ("citation_publication_date", "citation_date", "article:published_time", "og:published_time",
+                  "datepublished", "dc.date.issued", "dcterms.issued", "dc.date", "dcterms.created", "citation_online_date", "date")
+META_MODIFIED = ("article:modified_time", "og:updated_time", "datemodified", "dcterms.modified", "last-modified")
 LOCAL_TYPES = {".pdf": "application/pdf", ".txt": "text/plain", ".md": "text/markdown"}
 TEXT_TYPES = ("text/plain", "text/markdown", "text/x-markdown")
 DROP = {"script", "style", "noscript", "svg", "template", "iframe", "form", "nav", "footer"}
@@ -381,30 +393,75 @@ def ocr(work):
     return "\f".join(run([tess, str(p), "stdout", "-l", langs]) for p in pages)
 
 
+def got(files, text, extraction, marks=(), **info):
+    """What reading one source gives: files by suffix, readable text, how the text was made, marks and provenance."""
+    return {"files": files, "text": text, "extraction": extraction, "marks": [m for m in marks if m],
+            **{k: info.get(k) or "-" for k in ("final", "published", "modified", "version")}}
+
+
+def day(s):
+    """YYYY-MM-DD, YYYY-MM or YYYY from the start of a stated date, or ''."""
+    m = re.match(r"(\d{4})(?:[-/.](\d{1,2})(?:[-/.](\d{1,2}))?)?", str(s).strip())
+    if not m or not 1900 <= int(m[1]) <= 2100:
+        return ""
+    return "-".join([m[1]] + [f"{int(x):02d}" for x in m.groups()[1:] if x])
+
+
+def html_dates(data, ctype):
+    """(published, modified) as a page states them: meta tags, then JSON-LD, then a <time> element; '' when absent."""
+    page = decode(data[:400000], ctype, meta=True)
+    meta = {}
+    for tag in re.findall(r"<meta\b[^>]*>", page, re.I):
+        attrs = {k.lower(): a or b or c for k, a, b, c in re.findall(r"""([\w:.-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))""", tag)}
+        key = (attrs.get("name") or attrs.get("property") or attrs.get("itemprop") or "").lower()
+        if key and attrs.get("content"):
+            meta.setdefault(key, attrs["content"])
+    found = []
+    for keys, ld in ((META_PUBLISHED, "datePublished"), (META_MODIFIED, "dateModified")):
+        stated = [meta.get(k) for k in keys] + re.findall(rf'"{ld}"\s*:\s*"([^"]+)"', page)
+        if ld == "datePublished":
+            stated += re.findall(r"<time\b[^>]*\bdatetime\s*=\s*[\"']?([^\"'\s>]+)", page, re.I)[:1]
+        found.append(next((d for d in map(day, filter(None, stated)) if d), ""))
+    return tuple(found)
+
+
+def pdf_dates(data):
+    """(created, modified) from a PDF's info dictionary or XMP metadata, as YYYY-MM-DD; '' when absent."""
+    found = []
+    for info, xmp in ((rb"/CreationDate\s*\(\s*D:(\d{4})(\d{2})?(\d{2})?", rb"xmp:CreateDate[>=\"'\s]+(\d{4})-?(\d{2})?-?(\d{2})?"),
+                      (rb"/ModDate\s*\(\s*D:(\d{4})(\d{2})?(\d{2})?", rb"xmp:ModifyDate[>=\"'\s]+(\d{4})-?(\d{2})?-?(\d{2})?")):
+        m = re.search(info, data) or re.search(xmp, data)
+        found.append(day("-".join(x.decode() for x in m.groups() if x)) if m else "")
+    return tuple(found)
+
+
 def convert(work, data, ctype, base, paths, arxiv=None):
-    """(files by suffix, readable text, mark) of downloaded bytes, after the checks."""
+    """What a downloaded body gives (see got), after the checks."""
     mime = ctype.split(";")[0].strip().lower()
     if b"%PDF-" in data[:1024]:
+        created, modified = pdf_dates(data)
         text, layout = pdf_text(work, data)
         if len("".join(text.split())) < TEXT_LAYER:
             if not (shutil.which("pdftoppm") and shutil.which("tesseract")):
                 raise Fail("no text layer, and OCR needs pdftoppm and tesseract")
             text = ocr(work)
             check("", text)
-            return {".pdf": data, ".txt": text}, text, "ocr"
+            return got({".pdf": data, ".txt": text}, text, "ocr", ["ocr"], final=base, published=created, modified=modified)
         check("", text)
-        return {".pdf": data, ".txt": text, ".layout.txt": layout}, text, ""
+        return got({".pdf": data, ".txt": text, ".layout.txt": layout}, text, "pdftotext",
+                   final=base, published=created, modified=modified)
     if re.search(rb"<!doctype html|<(?:html|head|body)\b", data[:4096], re.I):
         title, text = html_md(data, ctype, base)
         if arxiv or "pdf" in mime or any(p.endswith(".pdf") for p in paths):
             raise Fail(f"expected PDF, got an HTML page: {title or 'no title'}")
         check(title, text)
-        return {".md": text}, text, ""
+        published, modified = html_dates(data, ctype)
+        return got({".md": text}, text, "html", final=base, published=published, modified=modified)
     if mime in TEXT_TYPES:
         text = decode(data, ctype)
         check("", text)
         md = "markdown" in mime or any(p.endswith((".md", ".markdown")) for p in paths)
-        return {".md" if md else ".txt": text}, text, ""
+        return got({".md" if md else ".txt": text}, text, "text", final=base)
     raise Fail(f"unknown content: {mime or 'no content type'}")
 
 
@@ -436,7 +493,7 @@ def vtt_lines(vtt):
 
 
 def captions(work, url):
-    """(files, text, mark) of a YouTube video's captions through yt-dlp, without downloading the video."""
+    """What a YouTube video's captions give, through yt-dlp, without downloading the video."""
     exe = shutil.which("yt-dlp")
     if not exe:
         raise Fail("missing tool: yt-dlp")
@@ -453,7 +510,9 @@ def captions(work, url):
     title = " ".join(str(info.get("title") or "").split())
     text = (f"# {title}\n\n" if title else "") + "\n".join(lines) + "\n"
     check(title, text, length=False)
-    return {".md": text}, text, "auto-captions" if auto else ""
+    uploaded = re.fullmatch(r"(\d{4})(\d{2})(\d{2})", str(info.get("upload_date") or ""))
+    return got({".md": text}, text, "captions", ["auto-captions" if auto else ""], final=url,
+               published="-".join(uploaded.groups()) if uploaded else "")
 
 
 def egress(text):
@@ -499,7 +558,7 @@ def openalex_work(doi):
     key = os.environ.get("OPENALEX_API_KEY", "").strip()
     if key:
         params["api_key"] = key
-    path = urllib.parse.quote("doi:" + doi, safe="/:")
+    path = urllib.parse.quote("doi:" + doi.lower(), safe="/:")  # DOIs are case-insensitive
     try:
         w = json.loads(get(f"{OPENALEX}/works/{path}?{urllib.parse.urlencode(params)}")[0])
     except (Fail, ValueError):
@@ -511,25 +570,29 @@ def load_doi(work, doi):
     """A DOI: its open-access copies first (published, accepted, then submitted versions), then the publisher's page."""
     w = openalex_work(doi)
     late = ["retracted"] * bool(w.get("is_retracted"))
-    names = {"publishedVersion": "published-copy", "acceptedVersion": "accepted-copy", "submittedVersion": "submitted-copy"}
+    names = {"publishedVersion": "published", "acceptedVersion": "accepted", "submittedVersion": "submitted"}
     failed = 0
     for loc in oa_order(w):
         try:
-            files, text, mark = load_url(work, loc.get("pdf_url") or loc.get("landing_page_url"))
+            r = load_url(work, loc.get("pdf_url") or loc.get("landing_page_url"))
         except Fail:
             failed += 1
             continue
-        return files, text, ",".join([m for m in (mark,) if m] + [names.get(loc.get("version"), "copy")] + late)
+        version = names.get(loc.get("version"), "")
+        r["marks"] += [f"{version}-copy" if version else "copy"] + late
+        r["version"] = version or r["version"]
+        return r
     try:
-        files, text, mark = load_url(work, f"{DOI}/{urllib.parse.quote(doi, safe='/:;()')}")
+        r = load_url(work, f"{DOI}/{urllib.parse.quote(doi, safe='/:;()')}")
     except Fail as e:
         tried = f" ({failed} open-access cop{'y' if failed == 1 else 'ies'} failed too)" if failed else ""
         raise Fail(f"{e}{tried}") from None
-    return files, text, ",".join([m for m in (mark,) if m] + late)
+    r["marks"] += late
+    return r
 
 
 def load(work, src):
-    """(files by suffix, readable text, marks) for a URL, a DOI or a local file."""
+    """What a URL, a DOI or a local file gives (see got)."""
     doi = doi_of(src)
     if doi and (re.match(r"https?://", src, re.I) or not Path(src).expanduser().exists()):
         egress(src)
@@ -546,7 +609,7 @@ def load(work, src):
 
 
 def load_url(work, src):
-    """(files, text, marks) for one URL, after the egress and host checks."""
+    """What one URL gives, after the egress and host checks."""
     egress(src)
     if reason := refused(src):
         raise Fail(reason)
@@ -566,8 +629,14 @@ def load_url(work, src):
     return convert(work, data, ctype, final, paths)
 
 
+def arxiv_version(url):
+    """arXiv vN from an arXiv URL that names a version, else arXiv."""
+    m = re.search(r"/(?:abs|pdf|html)/[^/?#]*?(v\d+)(?:\.pdf)?/?(?:[?#]|$)", url)
+    return f"arXiv {m[1]}" if m else "arXiv"
+
+
 def arxiv_html(work, arxiv):
-    """(files, text, mark) of a paper's arXiv HTML version, which keeps reading order and real tables."""
+    """What a paper's arXiv HTML version gives; it keeps reading order and real tables."""
     data, ctype, final = get(f"{ARXIV}/html/{arxiv}")
     if not re.search(rb"<!doctype html|<(?:html|head|body)\b", data[:4096], re.I):
         raise Fail("not an HTML page")
@@ -577,7 +646,9 @@ def arxiv_html(work, arxiv):
     if notice:
         raise Fail(f"conversion notice: {notice}")
     check(title, text)
-    return {".md": text}, text, "arxiv-html"
+    published, modified = html_dates(data, ctype)
+    return got({".md": text}, text, "arxiv-html", ["arxiv-html"], final=final, published=published, modified=modified,
+               version=arxiv_version(final))
 
 
 def load_arxiv(work, arxiv):
@@ -588,33 +659,81 @@ def load_arxiv(work, arxiv):
         html_why = e
     try:
         data, ctype, final = get(f"{ARXIV}/pdf/{arxiv}")
-        return convert(work, data, ctype, final, [urllib.parse.urlsplit(final).path.lower()], arxiv)
+        r = convert(work, data, ctype, final, [urllib.parse.urlsplit(final).path.lower()], arxiv)
     except Fail as e:
         raise Fail(f"arXiv HTML: {html_why}; PDF: {e}") from None
+    r["version"] = arxiv_version(final)
+    return r
+
+
+def source_key(url):
+    """What makes two requests the same source: the DOI, the arXiv id, or the URL without its fragment; None for files."""
+    doi = doi_of(url)
+    if doi:
+        return "doi:" + doi.lower()
+    if not re.match(r"https?://", url, re.I):
+        return None
+    u = urllib.parse.urlsplit(url.strip())
+    host = (u.hostname or "").rstrip(".").lower()
+    arxiv = re.fullmatch(r"/(?:abs|pdf|html)/(.+?)(?:\.pdf)?/?", u.path)
+    if arxiv and (host == "arxiv.org" or host.endswith(".arxiv.org")):
+        return "arxiv:" + arxiv[1].lower()
+    return urllib.parse.urlunsplit((u.scheme.lower(), u.netloc.lower(), u.path or "/", u.query, ""))
+
+
+def read_index(sources):
+    """The rows of sources/index.tsv as dicts, oldest first; rows of the wrong width are skipped."""
+    path = sources / INDEX
+    if not path.is_file():
+        return []
+    lines = path.read_text(encoding="utf-8-sig", errors="replace").splitlines()[1:]
+    return [dict(zip(INDEX_HEAD, cells)) for cells in (line.split("\t") for line in lines) if len(cells) == len(INDEX_HEAD)]
+
+
+def ok_line(name, readable, text, marks):
+    first = next((line for line in text.splitlines() if line.strip()), "")
+    return "\t".join(["OK", name, readable, str(len(text)), clean(first, 120)] + [",".join(marks)] * bool(marks))
 
 
 def fetch(sources, name, src):
     """The OK line for one source; raises Fail before anything is written to sources."""
     if not re.fullmatch(r"[a-z0-9][a-z0-9.-]*", name):
         raise Fail("bad name")
+    local = not re.match(r"https?://", src, re.I) and not (doi_of(src) and not Path(src).expanduser().exists())
+    rows, key = read_index(sources), None if local else source_key(src)
+    for row in reversed(rows):
+        files = [f for f in row["files"].split(",") if f and f != "-"]
+        if key and source_key(row["url"]) == key and files and all((sources / f).is_file() for f in files):
+            readable = next((f for f in files if f.endswith((".md", ".txt")) and not f.endswith(".layout.txt")), files[0])
+            text = (sources / readable).read_text(encoding="utf-8", errors="replace")
+            return ok_line(row["name"], readable, text, [m for m in row["marks"].split(",") if m not in ("", "-")] + ["reused"])
     old = [p.name for p in sorted(sources.glob(f"{name}.*")) if p.stem.lower() in (name, f"{name}.layout")]
     if old:
-        raise Fail(f"exists: {old[0]}")
+        holder = next((row for row in reversed(rows) if row["name"] == name), None)
+        raise Fail(f"exists: {old[0]}" + (f", fetched from {holder['url']}" if holder else ""))
     sources.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
-        files, text, mark = load(Path(tmp), src)
+        r = load(Path(tmp), src)
         staged = Path(tmp) / "save"
         staged.mkdir()
-        for suffix, body in files.items():
+        for suffix, body in r["files"].items():
             if isinstance(body, str):
                 (staged / f"{name}{suffix}").write_text(body, encoding="utf-8", newline="")
             else:
                 (staged / f"{name}{suffix}").write_bytes(body)
         for f in sorted(staged.iterdir()):
             shutil.move(str(f), str(sources / f.name))
-    readable = next(f"{name}{s}" for s, body in files.items() if isinstance(body, str))
-    first = next((line for line in text.splitlines() if line.strip()), "")
-    return "\t".join(["OK", name, readable, str(len(text)), clean(first, 120)] + [mark] * bool(mark))
+    doi = doi_of(src)
+    url = f"local:{Path(src).name}" if local else f"https://doi.org/{doi}" if doi else src
+    fetched = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    cells = [name, url, r["final"], fetched, r["published"], r["modified"], r["extraction"], r["version"],
+             ",".join(r["marks"]), ",".join(f"{name}{s}" for s in sorted(r["files"]))]
+    index = sources / INDEX
+    head = "" if index.is_file() else "\t".join(INDEX_HEAD) + "\n"
+    with index.open("a", encoding="utf-8", newline="") as f:
+        f.write(head + "\t".join(clean(c, 500) or "-" for c in cells) + "\n")
+    readable = next(f"{name}{s}" for s, body in r["files"].items() if isinstance(body, str))
+    return ok_line(name, readable, r["text"], r["marks"])
 
 
 def main(argv=None):

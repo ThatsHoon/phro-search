@@ -169,6 +169,36 @@ class ReportTest(unittest.TestCase):
         self.assertIn("<h2>Disagreements</h2>", html)
         self.assertIn("<h2>Not reached</h2>", html)
 
+    def test_report_view_is_checked_and_written_apart(self):
+        topic = self.topic({"a.md": "Intro\nThe model reaches 95 percent accuracy.\n"}, [claim(quote("a.md", 2, "reaches 95"))])
+        view = {"title": "Report", "question": "q", "stopped": "answered", "claims": [claim(quote("a.md", 2, "95 percent accuracy"))]}
+        (topic / "extracts-2026-11-01.json").write_text(json.dumps(view), encoding="utf-8")
+        page = topic / "evidence-2026-11-01.html"
+        self.assertEqual(self.report(topic, "2026-11-01"), (0, f"OK\t1 quotes in 1 claims match\t{page}\n"))
+        self.assertTrue(page.exists())
+        self.assertFalse((topic / "report.html").exists())
+        self.assertEqual(self.report(topic, "2026-11-01", "--check"), (0, "OK\t1 quotes in 1 claims match\tcheck only\n"))
+        view["claims"][0]["quotes"][0]["text"] = "99 percent accuracy"
+        (topic / "extracts-2026-11-01.json").write_text(json.dumps(view), encoding="utf-8")
+        self.assertEqual(self.report(topic, "2026-11-01")[1].splitlines()[-1],
+                         "FAIL\t1 of 1 quotes do not match; evidence-2026-11-01.html not written")
+        self.assertEqual(self.report(topic, "2026-11-02"), (1, f"FAIL\tcannot read {topic / 'extracts-2026-11-02.json'}\n"))
+        self.assertEqual(self.report(topic, "../x"), (1, "FAIL\tbad stem: ../x\n"))
+
+    def test_page_shows_source_dates_from_the_index(self):
+        topic = self.topic({"a.md": "alpha\n"}, [claim(quote("a.md", 1, "alpha"))])
+        head = "name\turl\tfinal\tfetched\tpublished\tmodified\textraction\tversion\tmarks\tfiles"
+        row = "a\thttps://example.org/a\t-\t2026-11-01T09:00:00Z\t2025-05-01\t-\thtml\taccepted\t-\ta.md"
+        (topic / "sources" / "index.tsv").write_text(f"{head}\n{row}\nbroken row\n", encoding="utf-8")
+        self.assertIn('<span class="when">published 2025-05-01; fetched 2026-11-01; version accepted</span>', self.page(topic))
+
+    def test_retracted_quotes_cannot_make_a_claim_sourced(self):
+        r = quote("a.md", 1, "alpha", mark="paper, retracted")
+        topic = self.topic({"a.md": "alpha\n"}, [claim(r), claim(r, status="partial"), claim(r, quote("a.md", 1, "alpha"))])
+        self.assertEqual(self.report(topic, "--check")[1].splitlines(),
+                         ["CLAIM\tclaim 1\tsourced, but every quote is marked retracted",
+                          "FAIL\t1 claim problems; report.html not written"])
+
     def test_bad_extracts_fail(self):
         empty = pathlib.Path(tempfile.mkdtemp(dir=self.root))
         self.assertEqual(self.report(empty), (1, f"FAIL\tcannot read {empty / 'extracts.json'}\n"))
@@ -226,7 +256,7 @@ class ClaimsTest(unittest.TestCase):
             code, out = self.report(topic)
             self.assertEqual((code, out.splitlines()),
                              (1, [f"CLAIM\tclaims.json c1\tverdict {stored or 'missing'}, but the votes give {expected}",
-                                  "FAIL\t1 claims.json problems; report.html not written"]), (votes, stored))
+                                  "FAIL\t1 claim problems; report.html not written"]), (votes, stored))
             self.assertFalse((topic / "report.html").exists())
         self.assertEqual(self.report(self.topic([claimed("c1", votes=[vote(True)] * 2, verdict="refuted")]))[0], 0)
         self.assertEqual(self.report(self.topic([claimed("c1", "supporting")]))[0], 0)  # not checked: no votes, no verdict
@@ -235,15 +265,41 @@ class ClaimsTest(unittest.TestCase):
 
     def test_central_claims_are_located_capped_and_ids_known(self):
         topic = self.topic([claimed("c1", verdict="unverified"), claimed("c2", verdict="unverified"),
-                            claimed("c3", "tangential", votes=[vote(False)] * 4, verdict="survived")], ids=("c1", "c9"))
+                            claimed("c3", "tangential", votes=[vote(False)] * 4, verdict="survived"),
+                            claimed("c4", verdict="unverified")], ids=("c1", "c9"))
+        data = json.loads((topic / "extracts.json").read_text(encoding="utf-8"))
+        data["claims"].append({"claim": "Claim c2", "status": "none", "quotes": [], "id": "c2"})  # cited, but no quote
+        (topic / "extracts.json").write_text(json.dumps(data), encoding="utf-8")
         self.assertEqual(self.report(topic, "--check")[1].splitlines(),
                          ['CLAIM\tclaim 2\tid "c9" is not in claims.json',
-                          "CLAIM\tclaims.json c2\tcentral, but no claim in extracts.json carries this id with a quote",
+                          "CLAIM\tclaims.json c2\tcentral, but this view gives it no quote",
                           "CLAIM\tclaims.json c3\t4 votes (limit 3)",
-                          "FAIL\t3 claims.json problems; report.html not written"])
+                          "FAIL\t3 claim problems; report.html not written"])  # c4 is not in this view
         ids = [f"c{i}" for i in range(1, 12)]
         out = self.report(self.topic([claimed(i, verdict="unverified") for i in ids], ids=ids))[1]
-        self.assertIn("CLAIM\tclaims.json\t11 central claims (limit 10)", out)
+        self.assertIn("CLAIM\tclaims.json\t11 central claims in this view (limit 10)", out)
+        self.assertEqual(self.report(self.topic([claimed(i, verdict="unverified") for i in ids], ids=ids[:2]))[0], 0)
+
+    def test_dig_view_beside_a_report_claims_file(self):
+        # A dig's extracts.json cites no claim ids, so a report's claims.json beside it no longer blocks its page.
+        topic = self.topic([claimed("c1", votes=[vote(False)] * 2, verdict="survived")], ids=())
+        self.assertEqual(self.report(topic), (0, f"OK\t0 quotes in 0 claims match; votes: 1 survived, 0 refuted, 0 unverified\t{topic / 'report.html'}\n"))
+
+    def test_vote_check_dates(self):
+        dated = vote(False, checked="2026-11-01")
+        html = self.page(self.topic([claimed("c1", votes=[dated, dated], verdict="survived")]))
+        self.assertIn("<li>held (high, checked 2026-11-01): checked the release notes</li>", html)
+        bad = self.topic([claimed("c1", votes=[vote(False, checked="11/01/2026")] * 2, verdict="survived")])
+        self.assertEqual(self.report(bad), (1, "FAIL\tclaims.json c1 vote 1: checked must be a date written YYYY-MM-DD\n"))
+
+    def test_central_claim_on_retracted_quotes_only(self):
+        topic = self.topic([claimed("c1", verdict="unverified")])
+        data = json.loads((topic / "extracts.json").read_text(encoding="utf-8"))
+        data["claims"][0].update(status="partial")
+        data["claims"][0]["quotes"][0]["mark"] = "retracted"
+        (topic / "extracts.json").write_text(json.dumps(data), encoding="utf-8")
+        self.assertEqual(self.report(topic, "--check")[1].splitlines()[0],
+                         "CLAIM\tclaims.json c1\tcentral, but every quote in this view is marked retracted")
 
     def test_bad_claims_json_fails(self):
         cases = (({"c1": {}}, "claims.json must be a list"),

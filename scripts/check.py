@@ -6,11 +6,15 @@ then  FAIL<TAB><n> problems  and exit 1, or  OK  and exit 0.
 rules: phrase, symbol, dash, invisible: one hit fails.
        density, per-doc, opener, bold: fail over a limit; a line 0 summary, then each hit with a snippet.
 Fenced code, quote lines (">"), inline code and URLs are not checked, except for invisible characters.
---kind report also checks a report's structure against the claims.json beside it:
-       bluf: the title is followed by one paragraph, and it cites a claim as [c1] or [c1, c2];
+--kind report also checks a report's structure against the claims.json and the evidence view beside it
+       (extracts-<stem>.json for report-<stem>.md, else extracts.json):
+       bluf: the title is followed by one paragraph, it cites a claim as [c1] or [c1, c2], and it names its
+             as-of date as YYYY-MM-DD;
        section: a conclusion section exists (a ## heading that starts with the word for conclusion),
                 and it and every ## section before it cite a claim;
-       claim: every cited id is in claims.json, and the BLUF and the conclusion cite survived claims only.
+       claim: every cited id is in claims.json, every central claim cited has a quote in the view, and the
+              BLUF and the conclusion cite survived claims only;
+       view: the evidence view exists.
 --kind pulse also checks a pulse brief against the pulse.py result (<stem>.json) beside it:
        lanes: one line names every lane the run listed (Hacker News, Reddit, GitHub, arXiv, YouTube);
        quote: every quote (> lines) is found verbatim in the result's titles, snippets or comments ("..." may
@@ -130,8 +134,9 @@ def check(raw):
     return list(dict.fromkeys(found))
 
 
-def report_problems(raw, verdicts):
-    """A report's structure as (line, rule, detail) tuples; verdicts maps each claims.json id, lowercase, to its verdict."""
+def report_problems(raw, verdicts, unlocated=frozenset(), view="its evidence view"):
+    """A report's structure as (line, rule, detail) tuples; verdicts maps each claims.json id, lowercase, to its verdict,
+    and unlocated holds the central ids that the evidence view (named view) gives no quote."""
     lines = FENCE.sub(lambda m: "\n" * m.group().count("\n"), raw.replace("\r\n", "\n")).split("\n")
     parts = [[0, 0, "", []]]  # heading line, level (0 before any heading), heading, body as (line, text) pairs
     for n, line in enumerate(lines, 1):
@@ -145,6 +150,8 @@ def report_problems(raw, verdicts):
         return [(n, c.strip().lower()) for n, t in block for m in CITE.finditer(t) for c in m.group(1).split(",")]
 
     found = [(n, "claim", f"[{c}] is not in claims.json") for p in parts for n, c in cites(p[3]) if c not in verdicts]
+    found += [(n, "claim", f"[{c}] is central, but {view} gives it no quote") for p in parts for n, c in cites(p[3])
+              if c in unlocated]
     title = next((p for p in parts if p[1] == 1), None)
     if title is None:
         return found + [(0, "bluf", "no title line (# title)")]
@@ -154,8 +161,11 @@ def report_problems(raw, verdicts):
     if not bluf or NOT_PROSE.match(bluf[0][1]):
         found.append((title[0], "bluf", "the title must be followed by one paragraph that answers the question"))
         bluf = []
-    elif not cites(bluf):
-        found.append((bluf[0][0], "bluf", "the BLUF cites no claim; cite the claims it rests on as [c1]"))
+    else:
+        if not cites(bluf):
+            found.append((bluf[0][0], "bluf", "the BLUF cites no claim; cite the claims it rests on as [c1]"))
+        if not re.search(r"\b\d{4}-\d\d-\d\d\b", " ".join(t for _, t in bluf)):
+            found.append((bluf[0][0], "bluf", "the BLUF names no as-of date; write it as YYYY-MM-DD"))
     sections = [p for p in parts if p[1] == 2]
     end = next((k for k, p in enumerate(sections)
                 if re.sub(r"^[\d.)\s]+", "", p[2]).lower().startswith(CONCLUSION)), None)
@@ -267,14 +277,29 @@ def main(argv=None):
         if args.file == "-":
             print("FAIL\t--kind report reads the claims.json beside the report; pass the file, not -")
             return 1
-        path = Path(args.file).parent / "claims.json"
+        folder = Path(args.file).parent
+        path = folder / "claims.json"
         try:
-            verdicts = {c["id"].lower(): c.get("verdict", "not checked")
-                        for c in json.loads(path.read_text(encoding="utf-8-sig"))}
+            claims = json.loads(path.read_text(encoding="utf-8-sig"))
+            verdicts = {c["id"].lower(): c.get("verdict", "not checked") for c in claims}
+            central = {c["id"].lower() for c in claims if c.get("importance") == "central"}
         except (OSError, ValueError, TypeError, KeyError, AttributeError) as e:
             print(f"FAIL\tcannot read {path}: {e}")
             return 1
-        problems += report_problems(raw, verdicts)
+        stem = re.fullmatch(r"report-(.+)\.md", Path(args.file).name, re.I)
+        views = [folder / f"extracts-{stem.group(1)}.json"] * bool(stem) + [folder / "extracts.json"]
+        view = next((v for v in views if v.is_file()), None)
+        located = set()
+        if view is None:
+            problems.append((0, "view", f"no {views[0].name} beside the report; write the report's evidence view"))
+        else:
+            try:
+                located = {str(c.get("id", "")).lower() for c in json.loads(view.read_text(encoding="utf-8-sig"))["claims"]
+                           if c.get("quotes")}
+            except (OSError, ValueError, TypeError, KeyError, AttributeError) as e:
+                print(f"FAIL\tcannot read {view}: {e}")
+                return 1
+        problems += report_problems(raw, verdicts, central - located if view else frozenset(), view.name if view else "")
     if args.kind == "pulse":
         if args.file == "-":
             print("FAIL\t--kind pulse reads the pulse.py result beside the brief; pass the file, not -")

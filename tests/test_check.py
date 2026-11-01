@@ -227,7 +227,7 @@ class CliTest(unittest.TestCase):
 
 REPORT = """# Polars or pandas for one machine
 
-Polars ran the measured joins faster [c1], and pandas keeps the widest library support [c2].
+Polars ran the measured joins faster [c1], and pandas keeps the widest library support [c2]. Both held on 2026-10-30.
 
 ## Polars is faster on joins
 
@@ -258,14 +258,32 @@ VERDICTS = [{"id": "c1", "verdict": "survived"}, {"id": "C2", "verdict": "surviv
 class ReportKindTest(unittest.TestCase):
     """--kind report: BLUF first, every section up to the conclusion cites, the BLUF and the conclusion cite survivors."""
 
-    def run_report(self, text, claims=VERDICTS):
+    def run_report(self, text, claims=VERDICTS, located=("c1", "c2"), view="extracts-2026-10-30.json"):
         with tempfile.TemporaryDirectory() as d:
             path = Path(d) / "report-2026-10-30.md"
             path.write_text(text, encoding="utf-8")
             if claims is not None:
                 (Path(d) / "claims.json").write_text(json.dumps(claims), encoding="utf-8")
+            if view:
+                rows = [{"claim": i, "status": "sourced", "id": i, "quotes": [{"file": "a.md", "line": 1, "text": "x"}]}
+                        for i in located]
+                (Path(d) / view).write_text(json.dumps({"claims": rows}), encoding="utf-8")
             code, out, _ = run("--kind", "report", str(path))
         return code, out
+
+    def test_bluf_names_its_date(self):
+        self.assertEqual(m.report_problems(REPORT.replace(" Both held on 2026-10-30.", ""), {"c1": "survived", "c2": "survived", "c3": "refuted"}),
+                         [(3, "bluf", "the BLUF names no as-of date; write it as YYYY-MM-DD")])
+
+    def test_central_claims_it_cites_have_quotes_in_its_view(self):
+        claims = [dict(VERDICTS[0], importance="central")] + VERDICTS[1:]
+        self.assertEqual(self.run_report(REPORT, claims), (0, ["OK"]))
+        code, out = self.run_report(REPORT, claims, located=("c2",))
+        self.assertEqual((code, [line.split(":")[:2] for line in out[:-1]]), (1, [["3", "claim"], ["7", "claim"], ["19", "claim"]]))
+        self.assertIn("[c1] is central, but extracts-2026-10-30.json gives it no quote", out[0])
+        self.assertEqual(self.run_report(REPORT, claims, view="extracts.json"), (0, ["OK"]))  # an older topic's single view
+        code, out = self.run_report(REPORT, claims, view=None)
+        self.assertEqual((code, out[0]), (1, "0:view: no extracts-2026-10-30.json beside the report; write the report's evidence view"))
 
     def problems(self, text):
         return [(line, rule) for line, rule, _ in m.report_problems(text, {c["id"].lower(): c.get("verdict", "not checked")

@@ -261,6 +261,7 @@ class FetchTest(unittest.TestCase):
         article = (200, HTML, page("<article>" + LONG + "</article>"))
         for name, work in (("none", {"id": "W2", "locations": []}), ("gone", None)):  # no copies; OpenAlex 404
             with self.subTest(name=name):
+                self.src = self.tmp / f"sources-{name}"  # the same DOI in one folder would be reused
                 s = self.doi_server(work, **{"/10.1234/abc": article})
                 code, f = self.fetch(name, "doi:10.1234/abc")
                 self.assertEqual((code, f[2], len(f)), (0, f"{name}.md", 5))
@@ -293,6 +294,84 @@ class FetchTest(unittest.TestCase):
         self.assertEqual(self.fetch("e", "doi:10.1234/projectx")[1][2],
                          "egress: 'projectx' is listed in forbidden.txt; use a generic problem statement")
         self.assertEqual(len(s.seen), 2)
+
+    # sources/index.tsv: provenance and reuse
+
+    def index(self):
+        lines = (self.src / "index.tsv").read_text(encoding="utf-8").splitlines()
+        self.assertEqual(lines[0].split("\t"), list(m.INDEX_HEAD))
+        return [dict(zip(m.INDEX_HEAD, line.split("\t"))) for line in lines[1:]]
+
+    def test_index_row_with_the_dates_a_page_states(self):
+        head = ('<meta content="2025-05-01T10:00:00Z" property="article:published_time">'
+                '<script type="application/ld+json">{"dateModified": "2025-06-02"}</script>')
+        body = f"<!doctype html><html><head><title>T</title>{head}</head><body><article>{LONG}</article></body></html>"
+        s = self.serve({"/post": (200, HTML, body.encode())})
+        self.assertEqual(self.fetch("post", s.url + "/post")[0], 0)
+        row = self.index()[0]
+        self.assertRegex(row.pop("fetched"), r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$")
+        self.assertEqual(row, {"name": "post", "url": s.url + "/post", "final": s.url + "/post", "published": "2025-05-01",
+                               "modified": "2025-06-02", "extraction": "html", "version": "-", "marks": "-",
+                               "files": "post.md"})
+
+    def test_dates_from_other_places(self):
+        page = lambda tag: f"<html><head>{tag}</head></html>".encode()
+        self.assertEqual(m.html_dates(page('<meta name="citation_publication_date" content="2020/5/7">'), ""), ("2020-05-07", ""))
+        self.assertEqual(m.html_dates(page('<time datetime="2019-12-31T08:00">x</time>'), ""), ("2019-12-31", ""))
+        self.assertEqual(m.html_dates(page('<meta name="date" content="soon">'), ""), ("", ""))
+        self.assertEqual(m.pdf_dates(b"%PDF-1.4 /CreationDate (D:20240115093000Z) /ModDate (D:202403)"), ("2024-01-15", "2024-03"))
+        self.assertEqual(m.pdf_dates(b"<xmp:CreateDate>2023-02-03T00:00:00</xmp:CreateDate>"), ("2023-02-03", ""))
+        self.assertEqual(m.pdf_dates(PDF), ("", ""))
+
+    def test_same_source_is_reused_without_a_request(self):
+        s = self.serve({"/p": (200, HTML, page("<article><h1>Kept</h1>" + LONG + "</article>")),
+                        "/html/2508.00001v2": (200, HTML, page("<article><h1>Paper</h1>" + LONG + "</article>"))})
+        self.patch(m, "ARXIV", s.url)
+        first = self.fetch("kept", s.url + "/p#intro")
+        self.assertEqual(self.fetch("again", s.url + "/p"), (0, first[1][:5] + ["reused"]))
+        self.assertEqual((self.fetch("a", "https://arxiv.org/abs/2508.00001v2")[0], self.index()[1]["version"]), (0, "arXiv v2"))
+        self.assertEqual(self.fetch("b", "https://arxiv.org/pdf/2508.00001v2.pdf")[1][1:2] + [self.fetch("b", "https://arxiv.org/pdf/2508.00001v2.pdf")[1][5]],
+                         ["a", "arxiv-html,reused"])
+        self.assertEqual(s.seen, ["/p", "/html/2508.00001v2"])
+        self.assertFalse(any(p.name.startswith(("again", "b.")) for p in self.src.iterdir()))
+
+    def test_taken_name_says_where_its_source_came_from(self):
+        s = self.serve({"/one": (200, HTML, page("<article>" + LONG + "</article>")),
+                        "/two": (200, HTML, page("<article>" + LONG + "</article>"))})
+        self.fetch("x", s.url + "/one")
+        self.assertEqual(self.fetch("x", s.url + "/two"), (1, ["FAIL", "x", f"exists: x.md, fetched from {s.url}/one"]))
+        self.assertEqual(s.seen, ["/one"])
+
+    def test_local_files_are_indexed_but_never_reused(self):
+        self.tools(pdftotext=lambda cmd: Path(cmd[-1]).write_text("Saved paper\n" + "word " * 400, encoding="utf-8"))
+        pdf = self.tmp / "saved.pdf"
+        pdf.write_bytes(PDF.replace(b"%synthetic", b"/CreationDate (D:20210304) %synthetic"))
+        self.assertEqual(self.fetch("one", pdf)[0], 0)
+        self.assertEqual(self.fetch("two", pdf)[0], 0)
+        rows = self.index()
+        self.assertEqual([(r["url"], r["extraction"], r["published"], r["files"]) for r in rows],
+                         [("local:saved.pdf", "pdftotext", "2021-03-04", f"{n}.layout.txt,{n}.pdf,{n}.txt") for n in ("one", "two")])
+
+    def test_caption_upload_date(self):
+        info = {"title": "Talk", "language": "en", "upload_date": "20240115", "subtitles": {"en": [{}]}}
+
+        def yt_dlp(cmd):
+            if "-J" in cmd:
+                return json.dumps(info)
+            Path(cmd[cmd.index("-P") + 1], "cap.en.vtt").write_text(VTT, encoding="utf-8")
+        self.tools(yt_dlp=yt_dlp)
+        self.assertEqual(self.fetch("talk", "https://youtu.be/abc123")[0], 0)
+        self.assertEqual((self.index()[0]["published"], self.index()[0]["extraction"]), ("2024-01-15", "captions"))
+
+    def test_doi_row_names_the_copy_version(self):
+        work = {"id": "W6", "locations": [{"is_oa": True, "version": "acceptedVersion", "pdf_url": "{u}/repo.pdf",
+                                           "source": {"type": "repository"}}]}
+        self.doi_server(work, **{"/repo.pdf": (200, {"Content-Type": "application/pdf"}, PDF)})
+        self.tools(pdftotext=lambda cmd: Path(cmd[-1]).write_text("Manuscript\n" + "word " * 400, encoding="utf-8"))
+        self.assertEqual(self.fetch("d", "10.1234/ABC")[0], 0)
+        row = self.index()[0]
+        self.assertEqual((row["url"], row["version"], row["marks"]), ("https://doi.org/10.1234/ABC", "accepted", "accepted-copy"))
+        self.assertEqual(self.fetch("d2", "https://doi.org/10.1234/abc")[1][1], "d")  # DOIs match without regard to case
 
     def test_refused_hosts_make_no_request(self):
         opener = mock.Mock(side_effect=AssertionError("a request was made"))
