@@ -157,6 +157,23 @@ class PluginTest(unittest.TestCase):
         homes = [name for name, text in docs() if re.search(r"(?i)what would change this answer", text)]
         self.assertEqual(homes, ["report.md"])  # one home for the rule
 
+    def test_single_mode_formats_live_in_their_mode(self):
+        formats = read(REFS / "formats.md")
+        heads = re.findall(r"^## (.+)$", re.sub(r"```.*?```", "", formats, flags=re.S), re.M)
+        self.assertEqual(heads, ["map.md", "Labels and marks", "File names and locations", "log.md", "sources/index.tsv",
+                                 "extracts.json"])
+        homes = {"pulse.md": ('"subqueries"', "pulse/<stem>-evidence.md", "- run: pulse/<stem>.json"),
+                 "models.md": ("models/shortlist.json", "models/hub/<org>--<name>.json", "line 1 `# board="),
+                 "watch.md": ("one feed per line: kind, name", "the item URLs already seen"),
+                 "report.md": ('"votes": [', "votes: <n> central claims", "never reused in a topic")}
+        for ref, marks in homes.items():
+            for mark in marks:
+                with self.subTest(ref=ref, mark=mark):
+                    self.assertEqual([name for name, text in docs() if mark in text], [ref])
+        pointers = [(name, line) for name, text in docs() if name != "SKILL.md" for line in text.splitlines()
+                    if re.search(r"(claims\.json|plan\.json|notes/)[^\n]*`references/formats\.md`", line)]
+        self.assertEqual(pointers, [])
+
     def test_doc_command_parser(self):
         sample = ("Run `python -I ${CLAUDE_PLUGIN_ROOT}/scripts/models.py snapshot <topic> --board asr`.\n"
                   "| `chain.py find\\|refs` | `fetch.py` alone |\n"

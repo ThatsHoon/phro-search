@@ -818,7 +818,7 @@ def evidence(result, by):
 def main(argv=None):
     p = argparse.ArgumentParser(prog="pulse.py", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("topic_dir", help="topic folder, such as ~/research/<topic>")
-    p.add_argument("--plan", required=True, help="plan JSON written by the host (format in references/formats.md)")
+    p.add_argument("--plan", required=True, help="plan JSON written by the host (format in references/pulse.md)")
     p.add_argument("--days", type=int, metavar="N", help="window length in days, 1 to 365 (default: the plan's, else 30)")
     p.add_argument("--as-of", metavar="YYYY-MM-DD", help="the window's last day in UTC, for replays (default: today)")
     g = p.add_mutually_exclusive_group()

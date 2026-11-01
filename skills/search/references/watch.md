@@ -34,3 +34,9 @@ In the user's language, per item: title, date, venue, and the original's first l
 ## 5. Back to dig
 
 People, venues or terms that are not in the map but recur among the new items go to Next leads; ask whether to add them as feeds. That is the way back from watching to digging.
+
+## Files
+
+- `watch.tsv`: a header line, then one feed per line: kind, name, feed URL, venue URL, tab-separated.
+- `watch-state.json`: the item URLs already seen, per feed.
+- `watch/<YYYY-MM-DD-HHMM>.md`: one file per check: the new items numbered newest first (`- <n>. <date> <feed>: [<title>](<url>)`, then the first line as a `>` quote), the quiet feeds' latest items and the failed feeds.

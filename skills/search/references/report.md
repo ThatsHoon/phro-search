@@ -16,11 +16,12 @@ A decision-ready answer from many sources. Researchers gather findings with exac
 | a large set to enumerate | at most 6 slices along a natural split (kind, year, region) |
 
 - Checkpoint: show the subtopics and the decision criteria in one round before spawning. Skip it when the user's brief already named them or there is no user to answer; log the skip and why.
+- Log `research`, `archive`, `verify` and `write` sections in the round's shape of log.md (spawned, came back, fetched, decisions); `verify` adds `votes: <n> central claims; <s> survived, <r> refuted, <u> unverified; <m> missing votes`.
 - Plan line: "report: 5 researchers, 1 support reader, up to 30 verifier calls: at most 38 agent calls" (researchers, at most 2 for a gap round, the support reader, 3 per central claim).
 
 ## Research
 
-Spawn every researcher in one turn. Write each reply, as it comes, to `<topic>/notes/<subtopic>.md`; then read only the `Takeaway`, `Gaps` and finding lines of the notes (`grep -n "^Takeaway\|^Gaps\|^- F" <topic>/notes/*.md`); read them in full only to write.
+Spawn every researcher in one turn. Write each reply, as it comes, to `<topic>/notes/<subtopic>.md` under a `# <subtopic>` heading, in the shape the brief below asks, one finding per line; then read only the `Takeaway`, `Gaps` and finding lines of the notes (`grep -n "^Takeaway\|^Gaps\|^- F" <topic>/notes/*.md`); read them in full only to write.
 
 ```
 You are a researcher for a decision report.
@@ -50,10 +51,20 @@ One gap round at most: 1 or 2 researchers, only for a key question left without 
 
 1. Collect the URLs of the finding lines; one per host and path. Fetch at most 25 with `fetch.py <topic>/sources <name> <url>`, passing a paper's DOI so its legal open-access copies come first: first the pages behind findings the answer would rest on, then by label (paper, official, first-hand before summary). Reuse what `sources/` already holds; never download again. Every FAIL goes to `log.md`; a walled page behind a likely central finding goes to the user's browser, as in dig.
 2. Locate each finding: grep a distinctive phrase of its quote in the fetched copy (`grep -n -F -e "<phrase>" -e "<phrase>" <topic>/sources/<file>` for several at once), read a few lines around a hit, and take the text exactly as the copy has it. Not found (the page changed, the researcher paraphrased, the fetch failed): the finding stays URL-only.
-3. Write `claims.json` (`references/formats.md`): one entry per finding the report may use, ids c1, c2 and on. Importance:
-   - central: the answer would change if it were false; at most 10, each located; a URL-only finding is never central, nor is one whose source is retracted;
+3. Write `claims.json`: one entry per finding the report may use. Importance:
+   - central: the answer would change if it were false; at most 10 in one report's view, each located in that view (`extracts-<stem>.json`); a URL-only finding is never central, nor is one whose source is retracted;
    - supporting: backs a section;
    - tangential: context.
+
+   ```
+   [{"id": "c1", "claim": "<one falsifiable claim, in English>", "quote": "<exact text: as located, or as the researcher copied it>",
+     "url": "<original URL>", "label": "paper", "importance": "central",
+     "votes": [{"refuted": false, "confidence": "high", "evidence": "<what the verifier checked>", "counter_source": "<URL>", "checked": "<YYYY-MM-DD>"}],
+     "verdict": "survived"}]
+   ```
+
+   - Ids run c1, c2 and on in the order the findings are taken, and are never reused in a topic. `claim` is English; `quote` is the located text, or the researcher's copy when unlocated.
+   - `votes` holds only replies that parsed, at most 3, each with `checked`, the day the verifier ran; `verdict` follows the vote rule in Verify. A claim never sent to verifiers has no votes and no verdict.
 4. Write the report's view, `extracts-<stem>.json` (the stem of `report-<stem>.md`: the date, then -2 and on), with one claim per located finding, carrying its id, its claim text in the user's language, its located quotes and status `partial` (`sourced` once the support pass in Verify rates a quote full); conflicting findings go side by side under `disagreements`, unfetched pages under `unreached`. Run `report.py <topic> <stem> --check` and fix each MISMATCH by copying the source text exactly.
 
 ## Standards

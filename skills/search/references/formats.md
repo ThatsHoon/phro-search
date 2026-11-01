@@ -76,7 +76,7 @@ intake-end: rescopes=<n>; drift=<claims added, dropped, reworded>
 feedback: "<the user's answer, verbatim>"
 ```
 
-The `brief:` and `feedback:` lines start at column 0 so that later intakes can grep them. Report mode writes `research`, `archive`, `verify` and `write` sections in the round's shape (spawned, came back, fetched, decisions); `verify` adds `votes: <n> central claims; <s> survived, <r> refuted, <u> unverified; <m> missing votes`. Pulse mode writes one `pulse` section: `- run: pulse/<stem>.json; lanes: <lane> <status>, ...; clusters: <n> over the floor, <m> weak; supplements: <queries>; brief: pulse/<stem>.md`.
+The `brief:` and `feedback:` lines start at column 0 so that later intakes can grep them. Modes with other steps log them in this shape; their references name the sections.
 
 ## sources/index.tsv
 
@@ -101,62 +101,3 @@ Written by `fetch.py`, one row per fetched source, never edited by hand: a heade
 - `translation` goes with quotes that are not in the user's language; the page marks it as a translation.
 - `disagreements` set conflicting sources side by side without judging; `unreached` lists what could not be read and why.
 - `report.py` also reads the files of older topics (an older tool's status values and its translation key).
-
-## claims.json (report)
-
-```
-[{"id": "c1", "claim": "<one falsifiable claim, in English>", "quote": "<exact text: as located, or as the researcher copied it>",
-  "url": "<original URL>", "label": "paper", "importance": "central",
-  "votes": [{"refuted": false, "confidence": "high", "evidence": "<what the verifier checked>", "counter_source": "<URL>", "checked": "<YYYY-MM-DD>"}],
-  "verdict": "survived"}]
-```
-
-- Ids run c1, c2 and on in the order the findings are taken, and are never reused in a topic.
-- `importance` is `central` (the answer rests on it: at most 10 in one report's view, each located in that view, `extracts-<stem>.json`), `supporting` or `tangential`.
-- `votes` holds only replies that parsed, at most 3, each with `checked`, the day the verifier ran. `verdict`: 2 refutations, `refuted`; fewer than 2 votes, `unverified`; otherwise `survived`. A claim never sent to verifiers has no votes and no verdict.
-
-## notes/<subtopic>.md (report)
-
-One file per researcher, English, one section per key question; each finding on one line so it can be grepped:
-
-```
-# <subtopic>
-## Q1 <key question>
-Takeaway: <one or two sentences>
-- F1. <one falsifiable claim>. Quote: "<exact sentence from the page>" <URL> (<label>)
-Inferences: <marked as inference>
-Gaps: <looked for and not found, with the queries tried>
-```
-
-## Pulse files
-
-`pulse/plan.json`, written by this session:
-
-```
-{"intent": "<what the user wants to learn>", "entity": "<head word first; optional>", "freshness": "balanced", "days": 30,
- "subqueries": [{"label": "main", "search_query": "<keywords with the anchor>", "ranking_query": "<what an on-topic item is about>",
-                 "lanes": ["hn", "reddit", "github", "arxiv", "youtube"], "weight": 1.0}],
- "subreddits": ["<broad>"], "dedicated_subreddits": ["<the entity's own>"], "reddit_queries": ["<one or two words>"], "github_repos": ["<owner/name>"],
- "youtube_queries": ["<spoken phrasing>"]}
-```
-
-- `label` is unique and not `dedicated`, `reddit`, `repo` or `youtube`. `lanes` defaults to all five, `weight` to 1.0, `ranking_query` to the search query, `reddit_queries` (at most 3) to the entity, else the first subquery; subreddits are names, a leading `r/` is dropped.
-- `pulse/<stem>.json`, written by `pulse.py`: `{topic, as_of, window: {from, to}, days, freshness, plan, lanes: {<lane>: {status, count, note}}, items, clusters, weak}`. The stem is the as-of date, with `-2` and on for later runs that day. `lanes` lists the lanes the plan used.
-- An item: `{id, lane, lanes, url, links: {<lane>: <its page there>}, title, author, date, engagement: {<lane>: {<count>: n}}, snippet, comments: [{author, score, text, url}], exempt, score, relevance, subquery, grounded, pool}`. `date` is a UTC `YYYY-MM-DD`, or null when undated. A comment's `score` is its reactions on GitHub, its score on Reddit (as arctic-shift archived it, often below the live one) and its reply count on Hacker News. `exempt` marks dedicated subreddits and named repositories; `grounded` false keeps an item out of clusters; `pool` marks the items clustered.
-- A cluster: `{id, title, score, lanes, items: [<item ids>, best first], labels}`, labels `single-lane` and `thin`. `clusters` are over the floor, `weak` under it.
-- `pulse/<stem>-evidence.md`: the lanes, then each cluster with its items, links, snippets and comments, then the weak signals.
-- `pulse/<stem>.md`: the brief (`references/pulse.md`).
-
-## Model files
-
-- `sources/board-<board>[-<table>][-<lang>[-clone] or -<hardware>]-<date>.tsv`, written by `models.py snapshot`: line 1 `# board= table= route= url= revision= fetched=` (plus `lang= clone=` or `hardware=`), line 2 the board's headers without decoration plus `link`, then one line per board row, its values verbatim (markup stripped, footnote marks kept). Later snapshots that day end in `-2` and on.
-- `models/shortlist.json`: `{board, table, snapshot, metric, direction, filters, models}`; a model is `{repo, name, off_hub, link, scores, label, source, params, weight_gb, gb_16, gb_4bit, license, license_class, languages, languages_label, created, formats, gated, notes, front, dropped}`, and `quantized` on the front.
-- `models/hub/<org>--<name>.json`: one repo's Hub facts, one key per line (`repo, url, sha, pipeline_tag, library, created, modified, gated, license, license_name, license_link, license_class, languages, base_model, arxiv, params, params_by_dtype, weight_gb, weight_source, largest_file_gb, formats, gguf, config, downloads, likes, card, config_file, files, fetched`); `follow` adds `papers` (`id, title, abstract, published, github`) and `quantized` (`count, formats, first`). A file fetched today is reused.
-- `sources/hf-<org>--<name>-<sha7>.md`: a model card at that repo sha; a gated repo's card comes from its model page as `sources/hf-page-<org>--<name>.md`, saved by `fetch.py`.
-- `models-<date>.md`: the deliverable (`references/models.md`).
-
-## Watch files
-
-- `watch.tsv`: a header line, then one feed per line: kind, name, feed URL, venue URL, tab-separated.
-- `watch-state.json`: the item URLs already seen, per feed.
-- `watch/<YYYY-MM-DD-HHMM>.md`: one file per check.
