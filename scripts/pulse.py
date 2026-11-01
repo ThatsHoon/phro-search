@@ -33,6 +33,10 @@ LANES = ("hn", "reddit", "github", "arxiv", "youtube")
 NAMES = {"hn": "Hacker News", "reddit": "Reddit", "github": "GitHub", "arxiv": "arXiv", "youtube": "YouTube"}
 DEPTH = {"quick": (20, 15), "default": (50, 40), "deep": (100, 60)}  # results per request, items clustered
 DEADLINE = 90  # seconds for every lane together
+BACKOFF = (2, 4, 8)  # seconds before each retry of a 429, a 5xx, a timeout or arctic-shift's 422 "slow down"
+RETRY_AFTER_CAP = 60  # longest Retry-After (or X-RateLimit-Reset) honored, in seconds; a longer one gets the backoff
+BOT_CHECK = (b"just a moment", b"checking your browser", b"captcha", b"verify you are human", b"are you a robot",
+             b"attention required", b"challenge-platform", b"/cdn-cgi/challenge", b"ddos-guard")
 W_REL, W_FRESH, W_ENG = 0.65, 0.25, 0.10
 PHRASE_BONUS, GENERIC_CAP, FLOOR = 0.15, 0.25, 0.15
 FRESH = {"strict": (1.0, 0), "balanced": (0.8, 10), "evergreen": (0.6, 40)}  # freshness = a * recency + b
@@ -120,27 +124,44 @@ RUN = subprocess.run
 _last = {}  # host -> monotonic time of its last request; each host is asked by one lane only
 
 
+def error_body(e, n=8192):
+    """The first n bytes of an HTTP error's body, lowercased; empty when it is gone."""
+    try:
+        return (e.read(n) or b"").lower()
+    except Exception:
+        return b""
+
+
 def fetch(url, headers=None, end=None):
     """Body of an https URL, at most CAP bytes, 1 s apart per host (arXiv 3 s); raises Fail with a short reason.
-    A 429, or arctic-shift's 422 that asks to slow down, is retried after 2, 4 and 8 s (a 429 after its Retry-After or
-    X-RateLimit-Reset seconds, up to 60) unless the wait would pass end."""
+    A 429, a 5xx, a timeout or arctic-shift's 422 that asks to slow down is retried after 2, 4 and 8 s (a 429 or 5xx
+    after its Retry-After, a 429 also after X-RateLimit-Reset, when it asks 60 s or less) unless the wait would pass
+    end, the lanes' run deadline. Never retried: GitHub's rate-limit 403 (Fail.rate is set), a 403 or 503 from a bot
+    check, and any other status."""
     host = urllib.parse.urlsplit(url).hostname or ""
     req = urllib.request.Request(url, headers={"User-Agent": UA, **(headers or {})})
-    for backoff in (2, 4, 8, None):
+    for backoff in (*BACKOFF, None):
         wait = _last.get(host, float("-inf")) + (3 if host == "export.arxiv.org" else 1) - time.monotonic()
         if wait > 0:  # arXiv's API terms ask for 3 s
             time.sleep(wait)
+        left = 30 if end is None else end - time.monotonic()
+        if left <= 0:
+            raise Fail("run deadline reached")
         _last[host] = time.monotonic()
         try:
-            with OPENER.open(req, timeout=30) as r:
+            with OPENER.open(req, timeout=min(30, max(1, left))) as r:
                 body = r.read(CAP + 1)
         except urllib.error.HTTPError as e:
-            h = e.headers or {}
-            busy = e.code == 422 and e.fp is not None and b"slow down" in e.read(500)  # the docs say: try again
+            h, text = e.headers or {}, error_body(e)
+            if e.code in (403, 503) and (str(h.get("cf-mitigated", "")).strip().casefold() == "challenge"
+                                         or any(p in text for p in BOT_CHECK)):
+                raise Fail(f"http {e.code}: bot check") from None
+            busy = e.code == 422 and b"slow down" in text  # the docs say: try again
             limited = e.code == 429 or (e.code == 403 and str(h.get("X-RateLimit-Remaining", "")) == "0")
-            ra = str(h.get("Retry-After") or h.get("X-RateLimit-Reset") or "").strip() if e.code == 429 else ""
-            wait = int(ra) if ra.isascii() and ra.isdigit() and int(ra) <= 60 else backoff
-            if e.code != 429 and not busy or backoff is None or (end is not None and time.monotonic() + wait > end):
+            ra = str(h.get("Retry-After") or (h.get("X-RateLimit-Reset") if e.code == 429 else "") or "").strip()
+            wait = int(ra) if ra.isascii() and ra.isdigit() and int(ra) <= RETRY_AFTER_CAP else backoff
+            again = e.code == 429 or 500 <= e.code < 600 or busy
+            if not again or backoff is None or (end is not None and time.monotonic() + wait > end):
                 raise Fail("busy (http 422)" if busy else f"http {e.code}", rate=limited) from None
             time.sleep(wait)
             continue
@@ -148,7 +169,10 @@ def fetch(url, headers=None, end=None):
             e = e.reason if isinstance(e, urllib.error.URLError) else e
             kinds = ((socket.gaierror, "dns"), (ssl.SSLError, "tls"), (TimeoutError, "timeout"))
             why = next((w for t, w in kinds if isinstance(e, t)), None)
-            raise Fail(why or clean(e if isinstance(e, str) else type(e).__name__, 80)) from None
+            if why != "timeout" or backoff is None or (end is not None and time.monotonic() + backoff > end):
+                raise Fail(why or clean(e if isinstance(e, str) else type(e).__name__, 80)) from None
+            time.sleep(backoff)
+            continue
         if len(body) > CAP:
             raise Fail("too large")
         return body

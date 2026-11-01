@@ -13,6 +13,10 @@ output, one tab-separated line per result:
   LATEST  date  name  title  url                (check, the latest item of a feed with nothing new)
   FAIL    url or name  reason
   # note
+
+requests: 1 s apart per host (export.arxiv.org 3 s). A 429, a 5xx or a timeout is retried after 2, 4 and 8 s (after
+Retry-After when it asks 60 s or less); any other status is not, nor a 403 or 503 from a bot check. All requests of one
+run share a deadline of 100 s: no request starts and no retry waits past it, and the feeds left then fail.
 """
 import argparse, email.utils, html, html.parser, json, os, re, socket, ssl, string, sys, time, unicodedata
 import urllib.error, urllib.parse, urllib.request
@@ -29,6 +33,11 @@ CAP, KEEP = 10 * 1024 * 1024, 500  # bytes per response; seen item URLs kept per
 FALLBACKS = ("/feed", "/rss", "/atom.xml", "/feed.xml", "/index.xml", "/rss.xml")
 NO_FEED = re.compile(r"(^|\.)(x\.com|twitter\.com|pixiv\.net|reddit\.com|redd\.it)$")  # hosts never requested
 EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
+BACKOFF = (2, 4, 8)  # seconds before each retry of a 429, a 5xx or a timeout
+RETRY_AFTER_CAP = 60  # longest Retry-After honored, in seconds; a longer one gets the backoff
+DEADLINE = 100  # seconds for all requests of one run together, under the Bash tool's default 2-minute timeout
+BOT_CHECK = (b"just a moment", b"checking your browser", b"captcha", b"verify you are human", b"are you a robot",
+             b"attention required", b"challenge-platform", b"/cdn-cgi/challenge", b"ddos-guard")
 
 _CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\U0000061c\U0000200b-\U0000200f\U0000202a-\U0000202e\U00002060-\U00002064\U00002066-\U00002069\U0000feff]")
 _QUOTES = str.maketrans("\U00002018\U00002019\U0000201a\U0000201b\U00002032\U0000201c\U0000201d\U0000201e\U0000201f\U00002033\U0000ff02\U0000ff07", "'''''\"\"\"\"\"\"'")
@@ -95,38 +104,72 @@ class _Redirect(urllib.request.HTTPRedirectHandler):
 
 OPENER = urllib.request.build_opener(_Redirect)
 _last = {}  # host -> monotonic time of its last request
+_end = None  # monotonic time when this run's requests stop; set by main
+
+
+def left():
+    """Seconds until the run deadline; infinite outside a run."""
+    return float("inf") if _end is None else _end - time.monotonic()
+
+
+def bot_check(e):
+    """True for a 403 or 503 from a bot check (a wall that no retry passes)."""
+    if e.code not in (403, 503):
+        return False
+    if str((e.headers or {}).get("cf-mitigated", "")).strip().casefold() == "challenge":
+        return True
+    try:
+        body = (e.read(8192) or b"").lower()
+    except Exception:  # the error body may be gone or cut; then it is no proof of a wall
+        body = b""
+    return any(p in body for p in BOT_CHECK)
+
+
+def retry_wait(e, backoff):
+    """Seconds before retrying HTTPError e: its Retry-After when it asks RETRY_AFTER_CAP or less, else backoff."""
+    ra = str((e.headers or {}).get("Retry-After") or "").strip()
+    return int(ra) if ra.isascii() and ra.isdigit() and int(ra) <= RETRY_AFTER_CAP else backoff
 
 
 def fetch(url):
-    """Body of an http(s) URL, at most CAP bytes; raises Fail with a short reason."""
+    """Body of an http(s) URL, at most CAP bytes, under the retry policy in the module docstring; raises Fail with a
+    short reason."""
     host = urllib.parse.urlsplit(url).hostname or ""
     if not re.match(r"https?://", url, re.I):
         raise Fail("not an http(s) URL")
     if NO_FEED.search(host):
         raise Fail("no public feed")
     req = urllib.request.Request(urllib.parse.quote(url, safe=string.punctuation), headers={"User-Agent": UA})
-    for backoff in (2, 4, 8, None):
+    for backoff in (*BACKOFF, None):
         wait = _last.get(host, float("-inf")) + (3 if host == "export.arxiv.org" else 1) - time.monotonic()
         if wait > 0:  # 1 s between requests to one host; arXiv's API terms ask for 3 s
             time.sleep(wait)
+        if left() <= 0:
+            raise Fail("run deadline reached")
         _last[host] = time.monotonic()
         try:
-            with OPENER.open(req, timeout=30) as r:
+            with OPENER.open(req, timeout=min(30, max(1, left()))) as r:
                 body = r.read(CAP + 1)
         except urllib.error.HTTPError as e:
-            if e.code != 429 or backoff is None:
+            if bot_check(e):
+                raise Fail(f"http {e.code}: bot check") from None
+            if not (e.code == 429 or 500 <= e.code < 600) or backoff is None:
                 raise Fail(f"http {e.code}") from None
-            ra = str(e.headers.get("Retry-After") or "").strip()
-            time.sleep(int(ra) if ra.isascii() and ra.isdigit() and int(ra) <= 60 else backoff)
-            continue
+            why, wait = f"http {e.code}", retry_wait(e, backoff)
         except Exception as e:  # any other network error becomes a short reason, never a traceback
             e = e.reason if isinstance(e, urllib.error.URLError) else e
             kinds = ((socket.gaierror, "dns"), (ssl.SSLError, "tls"), (TimeoutError, "timeout"))
             why = next((w for t, w in kinds if isinstance(e, t)), None)
-            raise Fail(why or clean(e if isinstance(e, str) else type(e).__name__, 80)) from None
-        if len(body) > CAP:
-            raise Fail("too large")
-        return body
+            if why != "timeout" or backoff is None:
+                raise Fail(why or clean(e if isinstance(e, str) else type(e).__name__, 80)) from None
+            wait = backoff
+        else:
+            if len(body) > CAP:
+                raise Fail("too large")
+            return body
+        if wait > left():
+            raise Fail(f"{why}; run deadline reached")
+        time.sleep(wait)
 
 
 def to_utc(s):
@@ -417,7 +460,12 @@ def main(argv=None):
     s.add_argument("--fresh", action="store_true", help="ignore seen items and select by the date window only")
     s.set_defaults(func=cmd_check)
     a = p.parse_args(argv)
-    return a.func(a)
+    global _end
+    _end = time.monotonic() + DEADLINE
+    try:
+        return a.func(a)
+    finally:
+        _end = None
 
 
 if __name__ == "__main__":

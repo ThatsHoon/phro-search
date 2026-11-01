@@ -27,7 +27,8 @@ class FixedClock(m.datetime):
 
 
 class Opener:
-    """Fake opener: URL to body bytes, HTTP status, or a list of those served in turn; records every URL."""
+    """Fake opener: URL to body bytes, HTTP status, (status, headers, body), an exception, or a list of those served
+    in turn; records every URL."""
 
     def __init__(self, routes):
         self.routes, self.urls = routes, []
@@ -37,6 +38,10 @@ class Opener:
         r = self.routes.get(req.full_url, 404)
         if isinstance(r, list):
             r = r.pop(0)
+        if isinstance(r, Exception):
+            raise r
+        if isinstance(r, tuple):
+            raise urllib.error.HTTPError(req.full_url, r[0], "error", r[1], io.BytesIO(r[2]))
         if isinstance(r, int):
             raise urllib.error.HTTPError(req.full_url, r, "error", {}, None)
         return io.BytesIO(r)
@@ -203,6 +208,31 @@ class WatchTest(unittest.TestCase):
         self.assertTrue(out[0].startswith("NEW\t2026-10-27"))
         _, out, urls = self.run_watch({RSS: [429] * 4}, "check")
         self.assertEqual((len(urls), out[0]), (4, "FAIL\tblog\thttp 429"))
+
+    def test_5xx_and_timeouts_are_retried_walls_are_not(self):
+        self.feeds(("rss", "blog", RSS))
+        flaky = [503, urllib.error.URLError(TimeoutError("timed out")), (500, {"Retry-After": "9"}, b""), fixture("rss.xml")]
+        _, out, urls = self.run_watch({RSS: flaky}, "check")
+        self.assertEqual(urls, [RSS] * 4)
+        self.assertEqual([c.args[0] for c in self.sleep.call_args_list if c.args[0] >= 2], [2, 4, 9])
+        self.assertTrue(out[0].startswith("NEW\t2026-10-27"))
+        for reply, why in (((503, {}, b"<title>Just a moment...</title>"), "http 503: bot check"),
+                           ((403, {"X-RateLimit-Remaining": "0"}, b""), "http 403")):
+            with self.subTest(why=why):
+                _, out, urls = self.run_watch({RSS: [reply, fixture("rss.xml")]}, "check")
+                self.assertEqual((len(urls), out[0]), (1, f"FAIL\tblog\t{why}"))
+
+    def test_one_run_deadline_across_feeds(self):
+        self.feeds(("rss", "blog", RSS), ("atom", "news", ATOM))
+        with mock.patch.object(m, "DEADLINE", 5):
+            code, out, urls = self.run_watch({RSS: [(429, {"Retry-After": "30"}, b""), fixture("rss.xml")], ATOM: fixture("atom.xml")}, "check")
+        self.assertEqual(urls[0], RSS)
+        self.assertIn("FAIL\tblog\thttp 429; run deadline reached", out)
+        with mock.patch.object(m, "DEADLINE", 0):
+            code, out, urls = self.run_watch({RSS: fixture("rss.xml")}, "check")
+        self.assertEqual((code, urls), (1, []))
+        self.assertIn("FAIL\tnews\trun deadline reached", out)
+        self.assertIsNone(m._end)
 
     def test_egress_blocks_listed_terms_before_any_request(self):
         url = "https://example.com/search?q=Acme%2DSecret"

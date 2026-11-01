@@ -8,7 +8,10 @@ boards: asr (Open ASR; tables english, multilingual, longform, private), tts (Op
         --clone for voice cloning, and streaming for one --hardware), llm (Open LLM, frozen since 2025-03-20),
         slm (Open SLM), hub:<org/dataset> (the leaderboard of a Hub benchmark dataset, mostly self-reported)
 Only the read-only routes in ROUTES are requested. HF_TOKEN is read from the environment, sent to huggingface.co only
-and never printed.
+and never printed. Requests are 1 s apart per host. A 429, a 5xx or a timeout is retried after 2, 4 and 8 s (after
+Retry-After when it asks 60 s or less); any other status is not, nor a 403 or 503 from a bot check. All requests of one
+run share a deadline of 270 s, under the 5-minute timeout the models reference gives shortlist: no request starts and
+no retry waits past it.
 output, tab-separated:
   SNAPSHOT <file>  <n> rows  <k> linked off the Hub  revision <sha>    then NEW <model> and GONE <model>, up to 20 each
   KEPT     <file>  (a snapshot of that board was already taken today)
@@ -41,6 +44,11 @@ RESOLVE, TOP, FOLLOW, OVER = 40, 15, 5, 1.1  # rows looked up on the Hub, rows p
 REPO = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*")
 TAG, HREF = re.compile(r"<[^>]*>"), re.compile(r"""href=["']([^"']+)["']""")
 DECOR = ("So", "Sk", "Mn", "Me", "Cf")  # arrows, flags, emoji and their joiners in headers
+BACKOFF = (2, 4, 8)  # seconds before each retry of a 429, a 5xx or a timeout
+RETRY_AFTER_CAP = 60  # longest Retry-After honored, in seconds; a longer one gets the backoff
+DEADLINE = 270  # seconds for all requests of one run together
+BOT_CHECK = (b"just a moment", b"checking your browser", b"captcha", b"verify you are human", b"are you a robot",
+             b"attention required", b"challenge-platform", b"/cdn-cgi/challenge", b"ddos-guard")
 
 _CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\U0000061c\U0000200b-\U0000200f\U0000202a-\U0000202e\U00002060-\U00002064\U00002066-\U00002069\U0000feff]")
 _QUOTES = str.maketrans("\U00002018\U00002019\U0000201a\U0000201b\U00002032\U0000201c\U0000201d\U0000201e\U0000201f\U00002033\U0000ff02\U0000ff07", "'''''\"\"\"\"\"\"'")
@@ -197,12 +205,36 @@ class _Redirect(urllib.request.HTTPRedirectHandler):
 
 OPENER = urllib.request.build_opener(_Redirect)
 _last = {}  # host -> monotonic time of its last request
+_end = None  # monotonic time when this run's requests stop; set by main
+
+
+def left():
+    """Seconds until the run deadline; infinite outside a run."""
+    return float("inf") if _end is None else _end - time.monotonic()
+
+
+def bot_check(e):
+    """True for a 403 or 503 from a bot check (a wall that no retry passes)."""
+    if e.code not in (403, 503):
+        return False
+    if str((e.headers or {}).get("cf-mitigated", "")).strip().casefold() == "challenge":
+        return True
+    try:
+        body = (e.read(8192) or b"").lower()
+    except Exception:  # the error body may be gone or cut; then it is no proof of a wall
+        body = b""
+    return any(p in body for p in BOT_CHECK)
+
+
+def retry_wait(e, backoff):
+    """Seconds before retrying HTTPError e: its Retry-After when it asks RETRY_AFTER_CAP or less, else backoff."""
+    ra = str((e.headers or {}).get("Retry-After") or "").strip()
+    return int(ra) if ra.isascii() and ra.isdigit() and int(ra) <= RETRY_AFTER_CAP else backoff
 
 
 def fetch(url, data=None):
-    """Body of a registry route (a POST with JSON data for a Gradio call), at most CAP bytes, 1 s apart per host. A 429, a
-    5xx or a timeout is retried after 2, 4 and 8 s (a 429 after its Retry-After seconds up to 60); anything else raises
-    Fail."""
+    """Body of a registry route (a POST with JSON data for a Gradio call), at most CAP bytes, under the retry policy in
+    the module docstring; anything else raises Fail."""
     if not any(r.fullmatch(url) for r in ROUTES) or (data is not None and not GRADIO_CALL.fullmatch(url)):
         raise Fail("not a registry route")
     host = urllib.parse.urlsplit(url).hostname
@@ -214,31 +246,36 @@ def fetch(url, data=None):
     if data is not None:
         body, headers["Content-Type"] = json.dumps(data).encode(), "application/json"
     req = urllib.request.Request(url, data=body, headers=headers)
-    for backoff in (2, 4, 8, None):
+    for backoff in (*BACKOFF, None):
         wait = _last.get(host, float("-inf")) + 1 - time.monotonic()
         if wait > 0:
             time.sleep(wait)
+        if left() <= 0:
+            raise Fail("run deadline reached")
         _last[host] = time.monotonic()
         try:
-            with OPENER.open(req, timeout=60) as r:
+            with OPENER.open(req, timeout=min(60, max(1, left()))) as r:
                 out = r.read(CAP + 1)
         except urllib.error.HTTPError as e:
-            ra = str((e.headers or {}).get("Retry-After") or "").strip()
-            if e.code not in (429, 500, 502, 503, 504) or backoff is None:
+            if bot_check(e):
+                raise Fail(f"http {e.code}: bot check", e.code) from None
+            if not (e.code == 429 or 500 <= e.code < 600) or backoff is None:
                 raise Fail(f"http {e.code}", e.code) from None
-            time.sleep(int(ra) if ra.isascii() and ra.isdigit() and int(ra) <= 60 else backoff)
-            continue
+            why, wait = f"http {e.code}", retry_wait(e, backoff)
         except Exception as e:  # any other network error becomes a short reason, never a traceback
             e = e.reason if isinstance(e, urllib.error.URLError) else e
             kinds = ((socket.gaierror, "dns"), (ssl.SSLError, "tls"), (TimeoutError, "timeout"))
             why = next((w for t, w in kinds if isinstance(e, t)), None)
-            if why == "timeout" and backoff is not None:
-                time.sleep(backoff)
-                continue
-            raise Fail(why or clean(e if isinstance(e, str) else type(e).__name__, 80)) from None
-        if len(out) > CAP:
-            raise Fail("too large")
-        return out
+            if why != "timeout" or backoff is None:
+                raise Fail(why or clean(e if isinstance(e, str) else type(e).__name__, 80)) from None
+            wait = backoff
+        else:
+            if len(out) > CAP:
+                raise Fail("too large")
+            return out
+        if wait > left():
+            raise Fail(f"{why}; run deadline reached")
+        time.sleep(wait)
 
 
 def get(url, data=None):
@@ -972,6 +1009,8 @@ def main(argv=None):
     s.add_argument("--task", choices=tuple(FEATURES), help="feature list (default: from the shortlist's board)")
     args = ap.parse_args(argv)
     topic = Path(args.topic)
+    global _end
+    _end = time.monotonic() + DEADLINE
     try:
         terms = egress_terms()
         sent = [args.board if hasattr(args, "board") else "", getattr(args, "lang", None) or ""] + getattr(args, "repos", [])
@@ -995,6 +1034,8 @@ def main(argv=None):
     except ValueError as e:
         print(f"FAIL\t{getattr(args, 'board', 'hub')}\t{clean(e, 120)}")
         return 1
+    finally:
+        _end = None
 
 
 if __name__ == "__main__":

@@ -532,6 +532,47 @@ class FetchTest(unittest.TestCase):
         self.assertEqual(self.fetch("busy", s.url + "/busy")[0], 0)
         self.assertEqual(s.seen.count("/busy"), 2)
 
+    def test_one_retry_policy(self):
+        wall = page("<p>Checking</p>", title="Just a moment...")
+        s = self.serve({"/flaky": [(503, {}, b""), (200, HTML, page("<article>" + LONG + "</article>"))],
+                        "/wall": (503, HTML, wall), "/flagged": (503, {"cf-mitigated": "challenge"}, b""),
+                        "/github": (403, {"X-RateLimit-Remaining": "0"}, b""),
+                        "/later": [(503, {"Retry-After": "30"}, b""), (200, HTML, page("<article>" + LONG + "</article>"))]})
+        self.assertEqual(self.fetch("flaky", s.url + "/flaky")[0], 0)  # a 5xx is retried
+        self.assertEqual(s.seen.count("/flaky"), 2)
+        bot = "http 503: bot check; open it in a browser and pass the saved file path"
+        self.assertEqual(self.fetch("w", s.url + "/wall"), (1, ["FAIL", "w", bot]))  # a bot check is a wall
+        self.assertEqual(self.fetch("w", s.url + "/flagged"), (1, ["FAIL", "w", bot]))
+        self.assertEqual(self.fetch("g", s.url + "/github")[1][2], "http 403: open it in a browser and pass the saved file path")
+        self.assertEqual([s.seen.count(x) for x in ("/wall", "/flagged", "/github")], [1, 1, 1])
+        self.patch(m, "DEADLINE", 5)  # a Retry-After that would pass the run deadline is not waited for
+        self.assertEqual(self.fetch("l", s.url + "/later"), (1, ["FAIL", "l", "http 503; run deadline reached"]))
+        self.assertEqual(s.seen.count("/later"), 1)
+        self.patch(m, "DEADLINE", 0)
+        self.assertEqual(self.fetch("l", s.url + "/later"), (1, ["FAIL", "l", "run deadline reached"]))
+        self.assertEqual(s.seen.count("/later"), 1)
+        self.assertIsNone(m._end)  # the deadline belongs to one run
+
+    def test_timeout_is_retried(self):
+        class Reply(io.BytesIO):
+            headers = {"Content-Type": "text/html"}
+
+            def geturl(self):
+                return "https://example.org/a"
+        replies = [TimeoutError("timed out"), Reply(page("<article>" + LONG + "</article>"))]
+        timeouts = []
+
+        def opener(req, timeout=None):
+            timeouts.append(timeout)
+            r = replies.pop(0)
+            if isinstance(r, Exception):
+                raise r
+            return r
+        self.patch(m.OPENER, "open", opener)
+        self.assertEqual(self.fetch("t", "https://example.org/a")[0], 0)
+        self.assertEqual(len(timeouts), 2)
+        self.assertTrue(all(0 < t <= 30 for t in timeouts))
+
     def test_existing_name_is_refused(self):
         self.src.mkdir()
         old = self.src / "taken.md"

@@ -443,6 +443,28 @@ class ChainTest(unittest.TestCase):
         self.assertEqual(len(urls), 4)
         self.assertEqual(self.sleeps(), [2, 4, 8])
 
+    def test_5xx_and_timeouts_are_retried_walls_are_not(self):
+        replies = [http_error(503), urllib.error.URLError(TimeoutError("timed out")), http_error(502, "7"), fx("work_bates.json")]
+        code, lines, urls = self.call("find", BATES, handler=lambda p, q: replies.pop(0))
+        self.assertEqual((code, lines, len(urls)), (0, [BATES_ROW], 4))
+        self.assertEqual(self.sleeps(), [2, 4, 7])
+        wall = http_error(503)
+        wall.headers["cf-mitigated"] = "challenge"
+        github = http_error(403)
+        github.headers["X-RateLimit-Remaining"] = "0"
+        for err, want in ((wall, "FAIL\thttp 503: bot check"), (github, "FAIL\thttp 403")):
+            with self.subTest(want=want):
+                code, lines, urls = self.call("find", BATES, handler=lambda p, q: err)
+                self.assertEqual((code, lines, len(urls)), (1, [want], 1))
+
+    def test_one_run_deadline(self):
+        with mock.patch.object(m, "DEADLINE", 5):
+            code, lines, urls = self.call("find", BATES, handler=lambda p, q: http_error(429, "30"))
+        self.assertEqual((code, lines, len(urls)), (1, ["FAIL\thttp 429; run deadline reached"], 1))
+        with mock.patch.object(m, "DEADLINE", 0):
+            self.assertEqual(self.call("find", BATES), (1, ["FAIL\trun deadline reached"], []))
+        self.assertIsNone(m._end)
+
     def test_one_second_between_requests(self):
         m._last = m.time.monotonic()
         self.call("find", BATES)

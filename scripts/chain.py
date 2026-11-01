@@ -16,6 +16,9 @@ Usage:
 
 An id is W123, https://openalex.org/W123, a bare DOI or a doi.org URL; an author id is A123.
 No key is needed; OPENALEX_API_KEY from the environment is sent when set and never printed.
+Requests are 1 s apart. A 429, a 5xx or a timeout is retried after 2, 4 and 8 s (after Retry-After when it asks 60 s
+or less); any other status is not, nor a 403 or 503 from a bot check. All requests of one run share a deadline of
+100 s: no request starts and no retry waits past it.
 
 Rows, tab-separated: <year> <cited_by_count> <W id> <title> <doi or -> <free pdf url or -> <type or -> <venue or ->
   <flags or ->, flags from: retracted, preprint, erratum (also retraction notices), comment (letters, editorials,
@@ -57,6 +60,11 @@ FIELDS = ("id,display_name,publication_year,cited_by_count,doi,best_oa_location,
 AUTHOR = "id,display_name,works_count,last_known_institutions"
 RATE_LIMITED = ("rate limited: the OpenAlex daily budget ($1.000, about 1,000 credits) may be used up; try tomorrow, "
                 "or set OPENALEX_API_KEY")
+BACKOFF = (2, 4, 8)  # seconds before each retry of a 429, a 5xx or a timeout
+RETRY_AFTER_CAP = 60  # longest Retry-After honored, in seconds; a longer one gets the backoff
+DEADLINE = 100  # seconds for all requests of one run together, under the Bash tool's default 2-minute timeout
+BOT_CHECK = (b"just a moment", b"checking your browser", b"captcha", b"verify you are human", b"are you a robot",
+             b"attention required", b"challenge-platform", b"/cdn-cgi/challenge", b"ddos-guard")
 NOTE_NO_MATCH = "# note: no match; try the DOI, or a shorter title without the subtitle."
 NOTE_NO_OA = ("# note: no open-access copy is listed; look for the author's or lab's page, a technical report or an "
               "institutional repository, or ask the user to open the publisher page in a browser.")
@@ -126,6 +134,31 @@ class _Redirect(urllib.request.HTTPRedirectHandler):
 
 _opener = urllib.request.build_opener(_Redirect)
 _last = 0.0  # when the previous request ended; one host only, so one timestamp is enough
+_end = None  # monotonic time when this run's requests stop; set by main
+
+
+def left():
+    """Seconds until the run deadline; infinite outside a run."""
+    return float("inf") if _end is None else _end - time.monotonic()
+
+
+def bot_check(e):
+    """True for a 403 or 503 from a bot check (a wall that no retry passes)."""
+    if e.code not in (403, 503):
+        return False
+    if str((e.headers or {}).get("cf-mitigated", "")).strip().casefold() == "challenge":
+        return True
+    try:
+        body = (e.read(8192) or b"").lower()
+    except Exception:  # the error body may be gone or cut; then it is no proof of a wall
+        body = b""
+    return any(p in body for p in BOT_CHECK)
+
+
+def retry_wait(e, backoff):
+    """Seconds before retrying HTTPError e: its Retry-After when it asks RETRY_AFTER_CAP or less, else backoff."""
+    ra = str((e.headers or {}).get("Retry-After") or "").strip()
+    return int(ra) if ra.isascii() and ra.isdigit() and int(ra) <= RETRY_AFTER_CAP else backoff
 
 
 def egress(text):
@@ -139,36 +172,42 @@ def egress(text):
 
 
 def get(path, params, missing=None):
-    """JSON from the API: 1 s between requests, 2/4/8 s backoff on 429, every failure raised as Fail."""
+    """JSON from the API under the retry policy in the module docstring; every failure raised as Fail."""
     global _last
     key = os.environ.get("OPENALEX_API_KEY", "").strip()
     if key:
         params = {**params, "api_key": key}
     req = urllib.request.Request(f"{API}{path}?{urllib.parse.urlencode(params)}", headers={"User-Agent": UA})
     delay = 0
-    for backoff in (2, 4, 8, None):
+    for backoff in (*BACKOFF, None):
         wait = max(delay, _last + 1 - time.monotonic())
         if wait > 0:
             time.sleep(wait)
+        if left() <= 0:
+            raise Fail("run deadline reached")
         try:
-            with _opener.open(req, timeout=30) as r:
+            with _opener.open(req, timeout=min(30, max(1, left()))) as r:
                 body = r.read(CAP + 1)
             break
         except urllib.error.HTTPError as e:
             if e.code == 404 and missing:
                 raise Fail(f"not in OpenAlex: {missing}") from None
-            if e.code != 429:
-                raise Fail(f"http {e.code}") from None
-            if backoff is None:
-                raise Fail(RATE_LIMITED) from None
-            after = e.headers.get("Retry-After") or ""
-            delay = int(after) if after.isdecimal() and int(after) <= 60 else backoff
+            if bot_check(e):
+                raise Fail(f"http {e.code}: bot check") from None
+            if not (e.code == 429 or 500 <= e.code < 600) or backoff is None:
+                raise Fail(RATE_LIMITED if e.code == 429 else f"http {e.code}") from None
+            short, delay = f"http {e.code}", retry_wait(e, backoff)
         except (OSError, http.client.HTTPException) as e:
             why = e.reason if isinstance(e, urllib.error.URLError) else e  # ssl.SSLError has a str .reason too
-            raise Fail("dns" if isinstance(why, socket.gaierror) else "timeout" if isinstance(why, TimeoutError)
-                       else "tls" if isinstance(why, ssl.SSLError) else clean(why, 80)) from None
+            short = ("dns" if isinstance(why, socket.gaierror) else "timeout" if isinstance(why, TimeoutError)
+                     else "tls" if isinstance(why, ssl.SSLError) else clean(why, 80))
+            if short != "timeout" or backoff is None:
+                raise Fail(short) from None
+            delay = backoff
         finally:
             _last = time.monotonic()
+        if delay > left():
+            raise Fail(f"{short}; run deadline reached")
     if len(body) > CAP:
         raise Fail("too large")
     try:
@@ -388,6 +427,8 @@ def main(argv=None):
     p = sub.add_parser("author", parents=[limit], help="an author's works, most cited first")
     p.add_argument("name", nargs="+", help="author name, or an A id or openalex.org author URL")
     args = ap.parse_args(argv)
+    global _end
+    _end = time.monotonic() + DEADLINE
     try:
         if args.cmd == "find":
             find(" ".join(args.query))
@@ -405,6 +446,8 @@ def main(argv=None):
     except (KeyError, TypeError, AttributeError):  # a reply of an unexpected shape
         print("FAIL\tunexpected reply from the API")
         return 1
+    finally:
+        _end = None
     return 0
 
 

@@ -17,6 +17,10 @@ landing pages; then published, accepted, submitted; repository copies first) bef
 lookup costs no OpenAlex credits, and OPENALEX_API_KEY is sent when set. Nothing is written on
 FAIL, and an existing <name>.* is never overwritten.
 
+Requests: a 429, a 5xx or a timeout is retried after 2, 4 and 8 s (after Retry-After when it asks 60 s or less);
+any other status is not, nor a 403 or 503 from a bot check, which is a wall. All requests of one run share a
+deadline of 100 s: no request starts and no retry waits past it.
+
 Every OK that downloads adds a row to <sources_dir>/index.tsv: name, url, final, fetched, published, modified,
 extraction, version, marks, files. A source already fetched from the same URL, DOI or arXiv id is
 reused: nothing is downloaded, and the OK line names the earlier file with the mark reused. A
@@ -43,7 +47,11 @@ RAW = "https://raw.githubusercontent.com"
 UA = f"Mozilla/5.0 (compatible; phro-search/{VERSION}; +https://github.com/ThatsHoon/phro-search)"
 ACCEPT = "text/html,application/xhtml+xml,application/pdf,text/plain;q=0.8,*/*;q=0.5"
 CAP = 40 * 1024 * 1024  # bytes per source document
-BACKOFF = (2, 4, 8)  # seconds between retries on HTTP 429
+BACKOFF = (2, 4, 8)  # seconds before each retry of a 429, a 5xx or a timeout
+RETRY_AFTER_CAP = 60  # longest Retry-After honored, in seconds; a longer one gets the backoff
+DEADLINE = 100  # seconds for all requests of one run together, under the Bash tool's default 2-minute timeout
+BOT_CHECK = (b"just a moment", b"checking your browser", b"captcha", b"verify you are human", b"are you a robot",
+             b"attention required", b"challenge-platform", b"/cdn-cgi/challenge", b"ddos-guard")
 SPACING = 1.0  # seconds between requests to one host
 MIN_WEIGHTED = 1500  # shortest body kept, in weighted characters
 WALL_SCAN = 8000  # bodies under this many weighted characters are searched for wall phrases
@@ -64,6 +72,7 @@ HTTP_REASONS = {
     403: "http 403: open it in a browser and pass the saved file path",
     404: "http 404",
     429: "http 429: still rate limited after 3 retries",
+    503: "http 503: still unavailable after 3 retries",
     451: "http 451: unavailable for legal reasons",
 }
 INDEX = "index.tsv"  # one row per source in sources/: what was fetched, from where, when and how
@@ -164,6 +173,31 @@ class Handler(urllib.request.HTTPRedirectHandler):
 
 
 OPENER = urllib.request.build_opener(Handler)
+_end = None  # monotonic time when this run's requests stop; set by main
+
+
+def left():
+    """Seconds until the run deadline; infinite outside a run."""
+    return float("inf") if _end is None else _end - time.monotonic()
+
+
+def bot_check(e):
+    """True for a 403 or 503 from a bot check (a wall that no retry passes)."""
+    if e.code not in (403, 503):
+        return False
+    if str((e.headers or {}).get("cf-mitigated", "")).strip().casefold() == "challenge":
+        return True
+    try:
+        body = (e.read(8192) or b"").lower()
+    except Exception:  # the error body may be gone or cut; then it is no proof of a wall
+        body = b""
+    return any(p in body for p in BOT_CHECK)
+
+
+def retry_wait(e, backoff):
+    """Seconds before retrying HTTPError e: its Retry-After when it asks RETRY_AFTER_CAP or less, else backoff."""
+    ra = str((e.headers or {}).get("Retry-After") or "").strip()
+    return int(ra) if ra.isascii() and ra.isdigit() and int(ra) <= RETRY_AFTER_CAP else backoff
 
 
 def uri(url):
@@ -183,21 +217,30 @@ def get(url):
     """(body, content type, final URL) of one GET; every failure raised as Fail with a short reason."""
     req = urllib.request.Request(uri(url), headers={"User-Agent": UA, "Accept": ACCEPT})
     for backoff in (*BACKOFF, None):
+        if left() <= 0:
+            raise Fail("run deadline reached")
         try:
-            with OPENER.open(req, timeout=30) as r:
+            with OPENER.open(req, timeout=min(30, max(1, left()))) as r:
                 body = r.read(CAP + 1)
                 if len(body) > CAP:
                     raise Fail("too large: over 40 MB")
                 return body, r.headers.get("Content-Type", ""), r.geturl()
         except urllib.error.HTTPError as e:
-            if e.code != 429 or backoff is None:
+            if bot_check(e):
+                raise Fail(f"http {e.code}: bot check; open it in a browser and pass the saved file path") from None
+            if not (e.code == 429 or 500 <= e.code < 600) or backoff is None:
                 raise Fail(HTTP_REASONS.get(e.code, f"http {e.code}")) from None
-            after = (e.headers.get("Retry-After") or "").strip()
-            time.sleep(int(after) if after.isdecimal() and int(after) <= 60 else backoff)
+            short, wait = f"http {e.code}", retry_wait(e, backoff)
         except (OSError, http.client.HTTPException) as e:
             why = e.reason if isinstance(e, urllib.error.URLError) else e
-            raise Fail("dns" if isinstance(why, socket.gaierror) else "tls" if isinstance(why, ssl.SSLError)
-                       else "timeout" if isinstance(why, TimeoutError) else f"network: {why}") from None
+            short = ("dns" if isinstance(why, socket.gaierror) else "tls" if isinstance(why, ssl.SSLError)
+                     else "timeout" if isinstance(why, TimeoutError) else f"network: {why}")
+            if short != "timeout" or backoff is None:
+                raise Fail(short) from None
+            wait = backoff
+        if wait > left():
+            raise Fail(f"{short}; run deadline reached")
+        time.sleep(wait)
 
 
 def run(cmd):
@@ -773,12 +816,16 @@ def main(argv=None):
     ap.add_argument("name", help="file stem: lowercase letters, digits, dots and hyphens")
     ap.add_argument("source", metavar="url-or-path", help="an http(s) URL, or the path of a local page or PDF")
     a = ap.parse_args(argv)
+    global _end
+    _end = time.monotonic() + DEADLINE
     try:
         print(fetch(a.sources_dir, a.name, a.source))
         return 0
     except (Fail, OSError, ValueError) as e:
         print(f"FAIL\t{clean(a.name, 120)}\t{clean(e)}")
         return 1
+    finally:
+        _end = None
 
 
 if __name__ == "__main__":

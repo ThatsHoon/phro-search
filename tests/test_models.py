@@ -309,6 +309,28 @@ class FetchTest(Base):
             m.fetch(self.URL)
         self.assertEqual(str(e.exception), "too large")
 
+    def test_walls_are_not_retried_and_one_run_deadline(self):
+        for served, why in (([(503, {"cf-mitigated": "challenge"}), b"{}"], "http 503: bot check"),
+                            ([(403, {"X-RateLimit-Remaining": "0"}), b"{}"], "http 403"),
+                            ([(502, {"Retry-After": "61"}), b"{}"], None)):
+            opener = Opener([(("api/models",), served)])
+            with self.subTest(why=why), mock.patch.object(m, "OPENER", opener):
+                if why is None:  # a Retry-After over 60 s is not honored: the backoff applies
+                    self.sleep.reset_mock()
+                    self.assertEqual(m.fetch(self.URL), b"{}")
+                    self.assertIn(2, [c.args[0] for c in self.sleep.call_args_list])
+                    continue
+                with self.assertRaises(m.Fail) as e:
+                    m.fetch(self.URL)
+                self.assertEqual((str(e.exception), len(opener.calls)), (why, 1))
+        with mock.patch.object(m, "DEADLINE", 5):
+            code, out = self.run_main([(("api/models/acme/x",), [(429, {"Retry-After": "30"}), b"{}"])], "follow", "acme/x")
+        self.assertEqual((code, out.splitlines()[0], len(self.opener.calls)), (1, "FAIL\tacme/x\thttp 429; run deadline reached", 1))
+        with mock.patch.object(m, "DEADLINE", 0):
+            code, out = self.run_main([], "follow", "acme/x")
+        self.assertEqual((code, out.splitlines()[0], self.opener.calls), (1, "FAIL\tacme/x\trun deadline reached", []))
+        self.assertIsNone(m._end)
+
     def test_redirects_stay_on_the_host(self):
         req = urllib.request.Request(self.URL)
         with self.assertRaises(urllib.error.URLError):

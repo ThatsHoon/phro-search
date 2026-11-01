@@ -69,6 +69,8 @@ class Opener:
             r = r.pop(0)
         if r is HANG:
             threading.Event().wait()
+        if isinstance(r, Exception):
+            raise r
         if isinstance(r, tuple):  # (status, headers) or (status, headers, body)
             raise urllib.error.HTTPError(req.full_url, r[0], "error", r[1], io.BytesIO(r[2]) if len(r) > 2 else None)
         if isinstance(r, int):
@@ -405,6 +407,20 @@ class PulseTest(unittest.TestCase):
         with mock.patch.object(m, "OPENER", Opener([(("hn.algolia.com",), [(429, {"X-RateLimit-Reset": "13"}), b"{}"])])):
             self.assertEqual(m.fetch(url), b"{}")
         self.sleep.assert_any_call(13)
+
+
+    def test_5xx_and_timeouts_are_retried_walls_and_github_limits_are_not(self):
+        url = f"{m.ARCTIC}/posts/search?subreddit=rust&query=x"  # arctic-shift answers 500 for an uncached query
+        flaky = [500, urllib.error.URLError(TimeoutError("timed out")), (503, {"Retry-After": "6"}), b"{}"]
+        with mock.patch.object(m, "OPENER", Opener([(("arctic-shift",), flaky)])):
+            self.assertEqual(m.fetch(url), b"{}")
+        self.assertEqual([c.args[0] for c in self.sleep.call_args_list if c.args[0] >= 2], [2, 4, 6])
+        for reply, why, rate in (((503, {}, b"<title>Just a moment...</title>"), "http 503: bot check", False),
+                                 ((403, {"X-RateLimit-Remaining": "0"}), "http 403", True)):
+            opener = Opener([(("arctic-shift",), [reply, b"{}"])])
+            with self.subTest(why=why), mock.patch.object(m, "OPENER", opener), self.assertRaises(m.Fail) as e:
+                m.fetch(url)
+            self.assertEqual((str(e.exception), e.exception.rate, len(opener.urls)), (why, rate, 1))
 
 
 if __name__ == "__main__":
