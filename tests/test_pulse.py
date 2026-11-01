@@ -532,6 +532,21 @@ class PulseTest(unittest.TestCase):
         self.assertFalse(any("example.com" in u for u in opener.urls))
         self.assertIn("the newest 1 models all postdate the window", "\n".join(lines))
 
+    def test_hf_models_page_on_through_the_window_to_its_start(self):
+        base = f"{m.HF}/api/models?search=widget&sort=createdAt&direction=-1&limit=50&full=true&cursor="
+        plan = {"subqueries": [sub(query="widget", ranking="widget model", lanes=("hf",))]}
+        pages = lambda: [(("cursor=b",), Resp(js([model("acme/widget-b", "2026-10-29"), model("acme/widget-old", "2026-09-01")]),
+                                      {"Link": f'<{base}c>; rel="next"'})),
+                 (("cursor=a",), Resp(js([model("acme/widget-a", "2026-10-30")]), {"Link": f'<{base}b>; rel="next"'})),
+                 (("huggingface.co/api/models?",), Resp(js([model("acme/widget-new", "2026-10-31")]), {"Link": f'<{base}a>; rel="next"'})),
+                 (("huggingface.co/api/daily_papers?",), js([]))]
+        code, lines, result, opener = self.run_pulse(plan, pages(), "--days", "3")
+        self.assertEqual(len([u for u in opener.urls if "/api/models" in u]), 3)  # stops at the model before the window
+        self.assertEqual(sorted(i["id"] for i in result["items"]), ["hf:acme/widget-a", "hf:acme/widget-b"])
+        with mock.patch.object(m, "HF_PAGES", 2):
+            code, lines, result, opener = self.run_pulse(plan, pages(), "--days", "3", top=self.tmp / "cap" / "topic")
+        self.assertIn("models read for 2 pages; older ones in the window were not read", "\n".join(lines))
+
     def test_hf_daily_papers_read_at_most_the_newest_days(self):
         code, lines, result, opener = self.run_pulse({"subqueries": [sub(query="widget", lanes=("hf",))]},
                                                      [(("huggingface.co/api/",), js([]))], "--days", "60", "--deadline", "300")

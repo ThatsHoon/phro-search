@@ -4,7 +4,7 @@ usage: pulse.py <topic_dir> --plan <file> [--days N] [--as-of YYYY-MM-DD] [--qui
 lanes: hn (Hacker News stories through Algolia), reddit (arctic-shift, each reddit query in each subreddit),
        github (repository and issue search, and the repositories the plan names), arxiv (export API),
        youtube (yt-dlp, when installed), hf (Hugging Face, keyless: models created in the window whose name matches
-       the subquery, with likes, downloads and trending score; daily papers of the window's newest 31 days, with
+       the subquery, up to 3 pages of the newest, with likes, downloads and trending score; daily papers of the window's newest 31 days, with
        upvotes and comments); hf runs only when a subquery names it
 The window is UTC: the N days that end with the as-of day (default today). Items outside it drop; undated ones stay.
 output, tab-separated:
@@ -448,13 +448,13 @@ def listed(st, d, what):
 
 
 def hf_search(st, ctx):
-    """Models whose name matches each hf subquery, newest first, paged back (on the Hub's own next links) until the
-    window is reached; then the daily papers of the window's newest HF_DAYS dates, scored against the hf subqueries.
+    """Models whose name matches each hf subquery, newest first, paged back (on the Hub's own next links, at most
+    HF_PAGES pages) until a model predates the window's start; then the daily papers of the window's newest HF_DAYS dates, scored against the hf subqueries.
     A changed response shape is the lane's error, never an empty answer."""
     hf = ctx.queries("hf")
     for sq in hf:
         url, pages = f"{HF}/api/models?search={q(sq['search_query'])}&sort=createdAt&direction=-1&limit={min(ctx.n, 100)}&full=true", 0
-        newer = 0
+        newer, reached = 0, False
         while url and pages < HF_PAGES:
             meta = {}
             d = listed(st, get(st, url, "Hugging Face", meta=meta), "models")
@@ -472,12 +472,15 @@ def hf_search(st, ctx):
                 yield sq["label"], entry("hf", x["id"], f"{HF}/{x['id']}", x["id"], x.get("author") or x["id"].split("/")[0], t,
                                          {"likes": whole(x.get("likes")), "downloads": whole(x.get("downloads")),
                                           "trending": whole(x.get("trendingScore"))}, "; ".join(filter(None, (about, ", ".join(tags)))))
-            older = [t for _, t in usable if t < ctx.hi]
-            newer += len(usable) - len(older)
+            newer += sum(t >= ctx.hi for _, t in usable)
+            reached = reached or any(t < ctx.hi for _, t in usable)
             nxt = re.search(r'<([^>]+)>\s*;\s*rel="?next"?', meta.get("link", ""))
-            url = nxt[1] if nxt and not older and usable and nxt[1].startswith(f"{HF}/api/models?") else None
-            if not older and usable and url is None:
-                st["errors"].append(f"the newest {newer} models all postdate the window; search a narrower name")
+            done = not usable or any(t < ctx.lo for _, t in usable)
+            url = nxt[1] if nxt and not done and nxt[1].startswith(f"{HF}/api/models?") else None
+        if url and reached:
+            st["notes"].append(f"{sq['label']}: models read for {HF_PAGES} pages; older ones in the window were not read")
+        elif not reached and newer:
+            st["errors"].append(f"the newest {newer} models all postdate the window; search a narrower name")
     days = min(ctx.days, HF_DAYS)
     if ctx.days > HF_DAYS:
         st["notes"].append(f"daily papers read for the newest {HF_DAYS} of {ctx.days} days")
