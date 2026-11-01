@@ -70,6 +70,8 @@ claude plugin eval . --tag open --scaffold --allow-tools WebSearch --no-publish
 claude plugin eval . --tag shut --no-publish
 ```
 
+The routing set and the scorers for round-0 recall and the verifier set are described in `evals/README.md`; they run headless with `claude -p` in your own environment.
+
 The answers to the feedback question that closes each result are logged per topic as `feedback: fit=...; missing=...` lines. `python3 -I dev/feedback_gold.py ~/research` lists each missing item as a gold-item candidate for the eval set of its mode; add the ones that hold up by hand.
 
 ## License

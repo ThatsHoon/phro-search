@@ -36,6 +36,6 @@ People, venues or terms that are not in the map but recur among the new items go
 
 ## Files
 
-- `watch.tsv`: a header line, then one feed per line: kind, name, feed URL, venue URL, tab-separated.
+- `watch.tsv`: a header line, then one feed per line: kind, name, feed URL, venue URL, tab-separated; for an OpenAlex source the kind is openalex, the feed its OpenAlex works URL and the venue `https://openalex.org/<S id>`.
 - `watch-state.json`: the item URLs already seen, per feed.
 - `watch/<YYYY-MM-DD-HHMM>.md`: one file per check: the new items numbered newest first (`- <n>. <date> <feed>: [<title>](<url>)`, then the first line as a `>` quote), the quiet feeds' latest items and the failed feeds.
