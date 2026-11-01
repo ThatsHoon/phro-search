@@ -18,6 +18,9 @@ exit codes: add and list exit 1 on a FAIL line, else 0. check: exit 0 when every
 exit 0 when some feeds failed and others answered or were quiet (their FAIL lines name them); exit 1 when every feed
 failed, or for a bad state file.
 
+egress: add refuses a venue URL that holds a forbidden term, and check checks each stored feed URL against the terms,
+read again before its request; a term list that cannot be read blocks the request (a FAIL line).
+
 requests: 1 s apart per host (export.arxiv.org 3 s). A 429, a 5xx or a timeout is retried after 2, 4 and 8 s (after
 Retry-After when it asks 60 s or less); any other status is not, nor a 403 or 503 from a bot check. All requests of one
 run share a deadline of 100 s: no request starts and no retry waits past it, and the feeds left then fail.
@@ -395,6 +398,14 @@ def cmd_check(a):
     now = datetime.now(timezone.utc)
     new, quiet, failed, busy = [], [], [], 0
     for f in feeds:
+        try:  # the terms are read again for every feed, so a list changed since add still guards it
+            hit = egress_hit(f["feed"], egress_terms())
+        except Exception as e:  # fail closed: a term list that cannot be read blocks the request
+            failed.append((f["name"], f"egress: cannot read the term list: {e}"))
+            continue
+        if hit:
+            failed.append((f["name"], f"egress: '{hit[0]}' is listed in {hit[1]}; use a generic problem statement"))
+            continue
         try:
             items = parse(fetch(f["feed"]), f["kind"])[2]
         except Fail as e:

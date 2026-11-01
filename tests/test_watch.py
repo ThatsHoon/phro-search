@@ -260,6 +260,28 @@ class WatchTest(unittest.TestCase):
         self.assertEqual((code, urls), (1, []))
         self.assertTrue(out[0].startswith("FAIL\thttps://example.com/\tegress: "))
 
+    def test_check_rechecks_the_terms_before_each_feed(self):
+        secret = "https://acme-secret.example.com/feed"
+        self.feeds(("rss", "blog", RSS), ("rss", "private", secret), ("atom", "news", ATOM))
+        calls = []
+
+        def terms(cwd=None):
+            calls.append(1)
+            return [("acme-secret", "forbidden.txt")]
+        with mock.patch.object(m, "egress_terms", terms):
+            code, out, urls = self.run_watch({RSS: fixture("rss.xml"), ATOM: fixture("atom.xml"), secret: fixture("rss.xml")},
+                                             "check")
+        self.assertEqual((code, urls, len(calls)), (0, [RSS, ATOM], 3))
+        self.assertIn("FAIL\tprivate\tegress: 'acme-secret' is listed in forbidden.txt; use a generic problem statement", out)
+        self.assertNotIn(secret, self.state())
+
+        def unreadable(cwd=None):
+            raise ValueError("bad list")
+        with mock.patch.object(m, "egress_terms", unreadable):
+            code, out, urls = self.run_watch({RSS: fixture("rss.xml")}, "check")
+        self.assertEqual((code, urls), (1, []))
+        self.assertIn("FAIL\tblog\tegress: cannot read the term list: bad list", out)
+
 
 if __name__ == "__main__":
     unittest.main()
