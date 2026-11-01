@@ -1,6 +1,6 @@
 # pulse
 
-What communities said, shipped or argued about in the last N days (default 30). `pulse.py` collects keyless lanes (Hacker News, Reddit through arctic-shift, GitHub, arXiv, YouTube through yt-dlp), then scores, merges and clusters the items; this session plans the run, judges the clusters and writes the brief. Engagement shows attention, not truth: a pulse measures opinion, so whatever the brief leans on gets its primary link (repository, paper, release, official post).
+What communities said, shipped or argued about in the last N days (default 30). `pulse.py` collects keyless lanes (Hacker News, Reddit through arctic-shift, GitHub, arXiv, YouTube through yt-dlp, Hugging Face), then scores, merges and clusters the items; this session plans the run, judges the clusters and writes the brief. Engagement shows attention, not truth: a pulse measures opinion, so whatever the brief leans on gets its primary link (repository, paper, release, official post).
 
 ## 1. Pre-flight
 
@@ -24,12 +24,13 @@ Check the topic for keyword traps before the first request. Reframe it, or ask o
 
 | Topic | Lanes |
 |---|---|
-| a tool, library or model release | hn, reddit, github, youtube |
-| a research direction | arxiv, hn, reddit, github |
+| a tool, library or model release | hn, reddit, github, youtube; hf for a model release |
+| a research direction | arxiv, hn, reddit, github, hf |
 | a product or company | hn, reddit, youtube |
 | a practice or workflow | hn, reddit, youtube, github |
 
-A lane runs when a subquery names it; reddit, github and youtube also run when the plan names dedicated subreddits, repositories or YouTube queries. TikTok, Instagram and X have no keyless access: when a topic lives there (consumer products, creators), say so in the gaps instead of guessing.
+A lane runs when a subquery names it; reddit, github and youtube also run when the plan names dedicated subreddits, repositories or YouTube queries. A subquery that names no lanes runs every lane but hf.
+- hf (Hugging Face) matches model names only, so an hf subquery's `search_query` is the family or organization name (`Qwen3`, `gemma`); it lists the models created in the window with likes, downloads and trending score, and the daily papers of the window's newest 31 days with upvotes and comments, which join the arXiv lane's copy of the same paper. The owner keeps this lane only if a replay of the T3.5 topic (small multilingual models) surfaces the model family that brief missed. TikTok, Instagram and X have no keyless access: when a topic lives there (consumer products, creators), say so in the gaps instead of guessing.
 
 ## 4. Plan and run
 
@@ -66,7 +67,7 @@ Write `<topic>/pulse/<stem>.md` (the stem of the result, such as `2026-10-30`) i
 # <topic>: <N> days to <as-of date>
 <one-line takeaway>
 
-<coverage line: every lane the run listed, by name (Hacker News, Reddit, GitHub, arXiv, YouTube), with what it returned: a count, or its status and reason>
+<coverage line: every lane the run listed, by name (Hacker News, Reddit, GitHub, arXiv, YouTube, Hugging Face), with what it returned: a count, or its status and reason>
 
 ## <a heading that states what changed>
 <what changed and how strong: lanes, engagement, dates; the primary link>

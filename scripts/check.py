@@ -20,7 +20,8 @@ space (U+00A0, U+202F) or a soft hyphen in a quote line is allowed, since a quot
               claim or says unknown (or the word for unknown in the report's language);
        view: the evidence view exists.
 --kind pulse also checks a pulse brief against the pulse.py result (<stem>.json) beside it:
-       lanes: one line names every lane the run listed (Hacker News, Reddit, GitHub, arXiv, YouTube);
+       lanes: one line names every lane the run listed (Hacker News, Reddit, GitHub, arXiv, YouTube,
+              Hugging Face);
        quote: every quote (> lines) is found verbatim in the result's titles, snippets or comments ("..." may
               join pieces kept in order), with the quoted item's or comment's link on the line after it;
               a result with clusters needs at least one quote.
@@ -224,7 +225,7 @@ def report_problems(raw, verdicts, unlocated=frozenset(), view="its evidence vie
 
 
 # --kind pulse. pulse.py's lane names:
-NAMES = {"hn": "Hacker News", "reddit": "Reddit", "github": "GitHub", "arxiv": "arXiv", "youtube": "YouTube"}
+NAMES = {"hn": "Hacker News", "reddit": "Reddit", "github": "GitHub", "arxiv": "arXiv", "youtube": "YouTube", "hf": "Hugging Face"}
 LINK = re.compile(r"https?://[^\s)>\]]+")
 ELLIPSIS = re.compile(r"\.\.\.|\U00002026")
 WRAP = "\"'\U0000201c\U0000201d\U00002018\U00002019"  # quote marks around a whole quote

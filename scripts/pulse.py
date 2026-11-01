@@ -3,7 +3,9 @@
 usage: pulse.py <topic_dir> --plan <file> [--days N] [--as-of YYYY-MM-DD] [--quick | --deep] [--deadline S]
 lanes: hn (Hacker News stories through Algolia), reddit (arctic-shift, each reddit query in each subreddit),
        github (repository and issue search, and the repositories the plan names), arxiv (export API),
-       youtube (yt-dlp, when installed)
+       youtube (yt-dlp, when installed), hf (Hugging Face, keyless: models created in the window whose name matches
+       the subquery, with likes, downloads and trending score; daily papers of the window's newest 31 days, with
+       upvotes and comments); hf runs only when a subquery names it
 The window is UTC: the N days that end with the as-of day (default today). Items outside it drop; undated ones stay.
 output, tab-separated:
   # window <from> to <to> (UTC)
@@ -27,10 +29,13 @@ VERSION = "0.4.0"
 
 HN, ARCTIC = "https://hn.algolia.com/api/v1", "https://arctic-shift.photon-reddit.com/api"
 GH, ARXIV = "https://api.github.com", "https://export.arxiv.org/api/query"
+HF = "https://huggingface.co"
 UA = f"Mozilla/5.0 (compatible; phro-search/{VERSION}; +https://github.com/ThatsHoon/phro-search)"
 CAP = 10 * 1024 * 1024  # bytes per response
-LANES = ("hn", "reddit", "github", "arxiv", "youtube")
-NAMES = {"hn": "Hacker News", "reddit": "Reddit", "github": "GitHub", "arxiv": "arXiv", "youtube": "YouTube"}
+DEFAULT_LANES = ("hn", "reddit", "github", "arxiv", "youtube")  # a subquery that names no lanes runs these
+LANES = DEFAULT_LANES + ("hf",)
+NAMES = {"hn": "Hacker News", "reddit": "Reddit", "github": "GitHub", "arxiv": "arXiv", "youtube": "YouTube", "hf": "Hugging Face"}
+HF_DAYS, HF_PAGES = 31, 3  # daily-paper dates asked per run (the window's newest); model list pages read per subquery
 DEPTH = {"quick": (20, 15), "default": (50, 40), "deep": (100, 60)}  # results per request, items clustered
 DEADLINE = 90  # seconds for every lane together
 BACKOFF = (2, 4, 8)  # seconds before each retry of a 429, a 5xx, a timeout or arctic-shift's 422 "slow down"
@@ -132,12 +137,12 @@ def error_body(e, n=8192):
         return b""
 
 
-def fetch(url, headers=None, end=None):
+def fetch(url, headers=None, end=None, meta=None):
     """Body of an https URL, at most CAP bytes, 1 s apart per host (arXiv 3 s); raises Fail with a short reason.
     A 429, a 5xx, a timeout or arctic-shift's 422 that asks to slow down is retried after 2, 4 and 8 s (a 429 or 5xx
     after its Retry-After, a 429 also after X-RateLimit-Reset, when it asks 60 s or less) unless the wait would pass
     end, the lanes' run deadline. Never retried: GitHub's rate-limit 403 (Fail.rate is set), a 403 or 503 from a bot
-    check, and any other status."""
+    check, and any other status. A dict passed as meta gets the response's Link header."""
     host = urllib.parse.urlsplit(url).hostname or ""
     req = urllib.request.Request(url, headers={"User-Agent": UA, **(headers or {})})
     for backoff in (*BACKOFF, None):
@@ -151,6 +156,8 @@ def fetch(url, headers=None, end=None):
         try:
             with OPENER.open(req, timeout=min(30, max(1, left))) as r:
                 body = r.read(CAP + 1)
+                if meta is not None:
+                    meta["link"] = str((getattr(r, "headers", None) or {}).get("Link") or "")
         except urllib.error.HTTPError as e:
             h, text = e.headers or {}, error_body(e)
             if e.code in (403, 503) and (str(h.get("cf-mitigated", "")).strip().casefold() == "challenge"
@@ -178,13 +185,13 @@ def fetch(url, headers=None, end=None):
         return body
 
 
-def get(st, url, what, headers=None, parse=json.loads):
+def get(st, url, what, headers=None, parse=json.loads, meta=None):
     """Parsed body of one lane request, or None after noting why it failed; a lane asks nothing more once rate-limited."""
     if st["limited"]:
         return None
     st["requests"] += 1
     try:
-        return parse(fetch(url, headers, st["end"]))
+        return parse(fetch(url, headers, st["end"], meta))
     except Fail as e:
         st["errors"].append(str(e))
         st["limited"] = e.rate
@@ -408,6 +415,75 @@ def youtube_search(st, ctx):
     yield from found.values()
 
 
+def whole(v):
+    """A count that may come as a float, as a whole number; 0 when it is not a count."""
+    return int(v) if isinstance(v, (int, float)) and not isinstance(v, bool) and 0 <= v < 1e15 else 0
+
+
+def listed(st, d, what):
+    """d when it is a list; otherwise None, after noting the changed shape as the lane's error."""
+    if d is None or isinstance(d, list):
+        return d
+    st["errors"].append(f"unexpected response from Hugging Face {what}: "
+                        f"{'an object' if isinstance(d, dict) else type(d).__name__}, not a list")
+    return None
+
+
+def hf_search(st, ctx):
+    """Models whose name matches each hf subquery, newest first, paged back (on the Hub's own next links) until the
+    window is reached; then the daily papers of the window's newest HF_DAYS dates, scored against the hf subqueries.
+    A changed response shape is the lane's error, never an empty answer."""
+    hf = ctx.queries("hf")
+    for sq in hf:
+        url, pages = f"{HF}/api/models?search={q(sq['search_query'])}&sort=createdAt&direction=-1&limit={min(ctx.n, 100)}&full=true", 0
+        newer = 0
+        while url and pages < HF_PAGES:
+            meta = {}
+            d = listed(st, get(st, url, "Hugging Face", meta=meta), "models")
+            pages += 1
+            if d is None:
+                break
+            usable = [(x, when(x.get("createdAt"))) for x in d if isinstance(x, dict) and REPO.fullmatch(str(x.get("id")))]
+            usable = [(x, t) for x, t in usable if t]
+            if d and not usable:
+                st["errors"].append(f"Hugging Face models: none of {len(d)} entries has an id and a creation date")
+                break
+            for x, t in usable:
+                tags = [str(g) for g in x.get("tags") or [] if isinstance(g, str) and not g.startswith("region:")]
+                about = "; ".join(str(v) for v in (x.get("pipeline_tag"), x.get("library_name")) if isinstance(v, str))
+                yield sq["label"], entry("hf", x["id"], f"{HF}/{x['id']}", x["id"], x.get("author") or x["id"].split("/")[0], t,
+                                         {"likes": whole(x.get("likes")), "downloads": whole(x.get("downloads")),
+                                          "trending": whole(x.get("trendingScore"))}, "; ".join(filter(None, (about, ", ".join(tags)))))
+            older = [t for _, t in usable if t < ctx.hi]
+            newer += len(usable) - len(older)
+            nxt = re.search(r'<([^>]+)>\s*;\s*rel="?next"?', meta.get("link", ""))
+            url = nxt[1] if nxt and not older and usable and nxt[1].startswith(f"{HF}/api/models?") else None
+            if not older and usable and url is None:
+                st["errors"].append(f"the newest {newer} models all postdate the window; search a narrower name")
+    days = min(ctx.days, HF_DAYS)
+    if ctx.days > HF_DAYS:
+        st["notes"].append(f"daily papers read for the newest {HF_DAYS} of {ctx.days} days")
+    for k in range(days):
+        day = ctx.last - timedelta(days=k)
+        d = listed(st, get(st, f"{HF}/api/daily_papers?date={day:%Y-%m-%d}", "Hugging Face"), "daily papers")
+        if not d:
+            continue
+        rows = [(x, x.get("paper")) for x in d if isinstance(x, dict)]
+        rows = [(x, p) for x, p in rows if isinstance(p, dict) and re.fullmatch(r"\d{4}\.\d{4,5}", str(p.get("id")))
+                and (p.get("title") or x.get("title"))]
+        if not rows:
+            st["errors"].append(f"Hugging Face daily papers: none of {len(d)} entries has a paper id and a title")
+            continue
+        for x, p in rows:
+            authors = [a.get("name") for a in p.get("authors") or [] if isinstance(a, dict) and isinstance(a.get("name"), str)]
+            it = entry("hf", f"paper/{p['id']}", f"https://arxiv.org/abs/{p['id']}", p.get("title") or x.get("title"),
+                       authors[0] if authors else "", datetime(day.year, day.month, day.day, 12, tzinfo=timezone.utc),
+                       {"upvotes": whole(p.get("upvotes")), "comments": whole(x.get("numComments"))},
+                       str(p.get("summary") or x.get("summary") or ""), f"{HF}/papers/{p['id']}")
+            for sq in hf:  # scored on the hf subqueries, as a model found by them is
+                yield sq["label"], it
+
+
 def reason_of(e):
     """An exception as a short reason: its type and, when it has one, its message."""
     msg = clean(e, 120)
@@ -431,7 +507,8 @@ def ytdlp(st, ctx, cmd):
 
 
 SEARCH = {"hn": (hn_search, hn_comments), "reddit": (reddit_search, reddit_comments),
-          "github": (github_search, github_comments), "arxiv": (arxiv_search, None), "youtube": (youtube_search, None)}
+          "github": (github_search, github_comments), "arxiv": (arxiv_search, None), "youtube": (youtube_search, None),
+          "hf": (hf_search, None)}
 
 
 def run_lane(name, st, ctx):
@@ -451,7 +528,7 @@ def run_lane(name, st, ctx):
 
 def run_lanes(names, ctx):
     """Each lane in a daemon thread against one monotonic deadline; a lane still running then is left behind, not awaited."""
-    states = {n: {"raw": [], "comments": {}, "requests": 0, "errors": [], "limited": False, "done": False, "end": ctx.end}
+    states = {n: {"raw": [], "comments": {}, "requests": 0, "errors": [], "notes": [], "limited": False, "done": False, "end": ctx.end}
               for n in names}
     threads = [threading.Thread(target=run_lane, args=(n, states[n], ctx), daemon=True) for n in names]
     for t in threads:
@@ -630,7 +707,7 @@ def cluster(pool):
 def status(st, fetched, on_topic, name):
     """(status, note) of a lane that ran."""
     errs = list(dict.fromkeys(st["errors"]))
-    why = "; ".join(errs[:3])
+    why = "; ".join(errs[:3] + st.get("notes", []))
     hint = "; set GH_TOKEN for more searches" if name == "github" else ""
     if not st["done"]:
         return "timeout", f"cut at the deadline after {st['requests']} requests; {fetched} fetched, {on_topic} on topic"
@@ -641,7 +718,8 @@ def status(st, fetched, on_topic, name):
         return "rate-limited", note + hint
     if errs:
         return "partial", note
-    return ("ok", note) if on_topic else ("no-results", f"{fetched} fetched, none on topic")
+    notes = "".join(f"; {n}" for n in st.get("notes", []))
+    return ("ok", note) if on_topic else ("no-results", f"{fetched} fetched, none on topic{notes}")
 
 
 def engagement_text(e):
@@ -668,7 +746,7 @@ def load_plan(path, days):
             raise ValueError(f"subquery {n}: search_query must be a non-empty string")
         sq["label"] = clean(sq.get("label") or f"q{n}", 40)
         sq.setdefault("ranking_query", sq["search_query"])
-        sq.setdefault("lanes", list(LANES))
+        sq.setdefault("lanes", list(DEFAULT_LANES))
         sq.setdefault("weight", 1.0)
         w = sq["weight"]
         if not isinstance(sq["ranking_query"], str) or not sq["ranking_query"].strip():

@@ -437,6 +437,11 @@ class PulseKindTest(unittest.TestCase):
                          [(0, "lanes", "no line names every lane the run listed; name Reddit on the coverage line")])
         self.assertEqual(self.problems(BRIEF.replace("출처: Hacker News 1건, ", "출처: ")), [(0, "lanes")])
 
+    def test_the_hf_lane_is_named_hugging_face(self):
+        hf = {**RESULT, "lanes": {**RESULT["lanes"], "hf": {"status": "ok"}}}
+        self.assertEqual(self.problems(BRIEF, hf), [(0, "lanes")])
+        self.assertEqual(self.problems(BRIEF.replace("YouTube 건너뜀", "Hugging Face 2건, YouTube 건너뜀"), hf), [])
+
     def test_quotes_are_verbatim(self):
         self.assertEqual(self.problems(BRIEF.replace("halves latency", "cuts latency in half")), [(9, "quote")])
         self.assertEqual(self.problems(BRIEF.replace("for me, and the new", "for me ... the new")), [])

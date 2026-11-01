@@ -50,6 +50,27 @@ def feed(*entries):
     return f'<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom">{body}</feed>'.encode()
 
 
+def model(name, day, likes=5, downloads=100, trending=2, tags=("transformers", "region:us")):
+    """One model of the Hub's /api/models list with full metadata."""
+    return {"_id": "x", "id": name, "modelId": name, "author": name.split("/")[0], "likes": likes, "downloads": downloads,
+            "trendingScore": trending, "tags": list(tags), "pipeline_tag": "text-generation", "library_name": "transformers",
+            "createdAt": f"{day}T10:00:00.000Z", "lastModified": f"{day}T11:00:00.000Z", "private": False}
+
+
+def daily(pid, title, upvotes=10, comments=0, summary=""):
+    """One entry of the Hub's /api/daily_papers list."""
+    return {"paper": {"id": pid, "authors": [{"name": "A. Author"}], "publishedAt": "2026-10-01T00:00:00.000Z", "title": title,
+                      "summary": summary, "upvotes": upvotes}, "title": title, "numComments": comments}
+
+
+class Resp(io.BytesIO):
+    """A response body with headers, for a route that must answer with a Link header."""
+
+    def __init__(self, body, headers):
+        super().__init__(body)
+        self.headers = headers
+
+
 def sub(label="main", query="widget engine", ranking="widget engine for rust", lanes=("hn",), weight=1.0):
     return {"label": label, "search_query": query, "ranking_query": ranking, "lanes": list(lanes), "weight": weight}
 
@@ -75,7 +96,7 @@ class Opener:
             raise urllib.error.HTTPError(req.full_url, r[0], "error", r[1], io.BytesIO(r[2]) if len(r) > 2 else None)
         if isinstance(r, int):
             raise urllib.error.HTTPError(req.full_url, r, "error", {}, None)
-        return io.BytesIO(r)
+        return r if isinstance(r, Resp) else io.BytesIO(r)
 
 
 def no_run(cmd, **kw):
@@ -431,6 +452,93 @@ class PulseTest(unittest.TestCase):
             code, lines, _, _ = self.run_pulse({"subqueries": [sub(lanes=("hn",))]}, [])
         lane = next(f for f in (line.split("\t") for line in lines) if f[0] == "LANE")
         self.assertIn("error: KeyError: 'points'", "\t".join(lane))
+    # hf lane (Hugging Face): models created in the window, and daily papers
+
+    def test_hf_lane_reads_models_and_daily_papers(self):
+        models = [model("acme/widget-9b", "2026-10-29", likes=40, downloads=900, trending=12, tags=("multilingual", "region:us")),
+                  model("acme/widget-1b", "2026-09-20")]  # created before the window
+        papers = [daily("2610.00001", "Widget engines for multilingual speech", upvotes=42, comments=3, summary="We study widget engines.")]
+        code, lines, result, opener = self.run_pulse(
+            {"subqueries": [sub(query="widget", ranking="widget engine model", lanes=("hf",))]},
+            [(("huggingface.co/api/models?",), js(models)), (("huggingface.co/api/daily_papers?date=2026-10-30",), js(papers)),
+             (("huggingface.co/api/daily_papers?",), js([]))], "--days", "3")
+        self.assertEqual(code, 0)
+        self.assertEqual(opener.urls, [f"{m.HF}/api/models?search=widget&sort=createdAt&direction=-1&limit=50&full=true",
+                                       f"{m.HF}/api/daily_papers?date=2026-10-30", f"{m.HF}/api/daily_papers?date=2026-10-29",
+                                       f"{m.HF}/api/daily_papers?date=2026-10-28"])
+        self.assertTrue(all("Authorization" not in h for h in opener.headers))  # keyless
+        by = {i["id"]: i for i in result["items"]}
+        self.assertEqual(sorted(by), ["hf:acme/widget-9b", "hf:paper/2610.00001"])
+        mod, paper = by["hf:acme/widget-9b"], by["hf:paper/2610.00001"]
+        self.assertEqual((mod["url"], mod["date"], mod["engagement"]),
+                         ("https://huggingface.co/acme/widget-9b", "2026-10-29", {"hf": {"likes": 40, "downloads": 900, "trending": 12}}))
+        self.assertIn("multilingual", mod["snippet"])
+        self.assertNotIn("region:us", mod["snippet"])
+        self.assertEqual((paper["url"], paper["links"]["hf"], paper["date"], paper["engagement"], paper["title"]),
+                         ("https://arxiv.org/abs/2610.00001", "https://huggingface.co/papers/2610.00001", "2026-10-30",
+                          {"hf": {"upvotes": 42, "comments": 3}}, "Widget engines for multilingual speech"))
+        self.assertEqual(self.lanes(lines), {"hf": "ok"})
+        self.assertIn("40 likes, 900 downloads, 12 trending", "\n".join(lines))
+
+    def test_hf_runs_only_when_a_subquery_names_it(self):
+        code, lines, result, opener = self.run_pulse({"subqueries": [{"search_query": "widget engine"}]}, [])
+        self.assertFalse(any("huggingface.co" in u for u in opener.urls))
+        self.assertNotIn("hf", self.lanes(lines))
+
+    def test_hf_daily_paper_and_arxiv_item_are_one_story(self):
+        papers = feed(("2610.00001", "Widget engine scheduling", "2026-10-29", "Widget engine study."))
+        code, lines, result, _ = self.run_pulse(
+            {"subqueries": [sub(lanes=("arxiv", "hf"))]},
+            [(("export.arxiv.org",), papers), (("huggingface.co/api/models?",), js([])),
+             (("huggingface.co/api/daily_papers?date=2026-10-30",), js([daily("2610.00001", "Widget engine scheduling", upvotes=30)])),
+             (("huggingface.co/api/daily_papers?",), js([]))], "--days", "2")
+        (item,) = result["items"]
+        self.assertEqual((item["lanes"], item["engagement"]["hf"]), (["arxiv", "hf"], {"upvotes": 30, "comments": 0}))
+        self.assertEqual(result["clusters"][0]["lanes"], ["arxiv", "hf"])
+
+    def test_hf_changed_shape_is_a_lane_failure_with_a_reason(self):
+        plan = {"subqueries": [sub(query="widget", lanes=("hf",))]}
+        for models, papers, why in (({"error": "moved"}, {"error": "moved"}, "unexpected response from Hugging Face models: an object, not a list"),
+                                    ([{"name": "acme/widget"}], [{"title": "no paper field"}],
+                                     "Hugging Face models: none of 1 entries has an id and a creation date")):
+            with self.subTest(why=why):
+                code, lines, result, _ = self.run_pulse(plan, [(("huggingface.co/api/models?",), js(models)),
+                                                               (("huggingface.co/api/daily_papers?",), js(papers))],
+                                                        "--days", "1", top=self.tmp / why[:12] / "topic")
+                lane = next(f for f in (line.split("\t") for line in lines) if f[0] == "LANE")
+                self.assertEqual(code, 1)
+                self.assertTrue(lane[2].startswith("failed: "), lane)
+                self.assertIn(why, "\t".join(lane))
+        code, lines, _, _ = self.run_pulse(plan, [(("huggingface.co/api/models?",), js([model("acme/widget-9b", "2026-10-30")])),
+                                                  (("huggingface.co/api/daily_papers?",), js({"error": "moved"}))], "--days", "1")
+        lane = next(f for f in (line.split("\t") for line in lines) if f[0] == "LANE")
+        self.assertEqual(lane[2], "partial")
+        self.assertIn("unexpected response from Hugging Face daily papers: an object, not a list", lane[3])
+
+    def test_hf_models_page_back_to_the_window(self):
+        page2 = f"{m.HF}/api/models?search=widget&sort=createdAt&direction=-1&limit=50&full=true&cursor=abc"
+        first = Resp(js([model("acme/widget-new", "2026-10-31")]), {"Link": f'<{page2}>; rel="next"'})
+        plan = {"subqueries": [sub(query="widget", ranking="widget model", lanes=("hf",))]}
+        code, lines, result, opener = self.run_pulse(plan, [(("cursor=abc",), js([model("acme/widget-old", "2026-10-30")])),
+                                                            (("huggingface.co/api/models?",), first),
+                                                            (("huggingface.co/api/daily_papers?",), js([]))], "--days", "1")
+        self.assertEqual([u for u in opener.urls if "/api/models" in u][1], page2)
+        self.assertEqual([i["id"] for i in result["items"]], ["hf:acme/widget-old"])
+        # a next link off the Hub is never followed, and a window never reached is said, not left silent
+        away = Resp(js([model("acme/widget-new", "2026-10-31")]), {"Link": '<https://example.com/api/models?x>; rel="next"'})
+        code, lines, result, opener = self.run_pulse(plan, [(("huggingface.co/api/models?",), away),
+                                                            (("huggingface.co/api/daily_papers?",), js([]))], "--days", "1",
+                                                     top=self.tmp / "away" / "topic")
+        self.assertFalse(any("example.com" in u for u in opener.urls))
+        self.assertIn("the newest 1 models all postdate the window", "\n".join(lines))
+
+    def test_hf_daily_papers_read_at_most_the_newest_days(self):
+        code, lines, result, opener = self.run_pulse({"subqueries": [sub(query="widget", lanes=("hf",))]},
+                                                     [(("huggingface.co/api/",), js([]))], "--days", "60", "--deadline", "300")
+        days = [u.rsplit("=", 1)[1] for u in opener.urls if "daily_papers" in u]
+        self.assertEqual((len(days), days[0], days[-1]), (m.HF_DAYS, "2026-10-30", "2026-09-30"))
+        self.assertIn(f"daily papers read for the newest {m.HF_DAYS} of 60 days", "\n".join(lines))
+
 
 if __name__ == "__main__":
     unittest.main()
