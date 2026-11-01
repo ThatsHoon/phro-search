@@ -145,7 +145,7 @@ class FetchTest(unittest.TestCase):
     def test_pdf_without_pdftotext_fails(self):
         s = self.serve({"/paper.pdf": (200, {"Content-Type": "application/pdf"}, PDF)})
         self.assertEqual(self.fetch("paper", s.url + "/paper.pdf"),
-                         (1, ["FAIL", "paper", "missing tool: pdftotext (poppler or Xpdf)"]))
+                         (1, ["FAIL", "paper", "missing tool: pdftotext (poppler or Xpdf); " + m.install_hint("poppler")]))
 
     def test_html_becomes_markdown(self):
         body = ("<header>Site menu</header><nav><a href='/'>Home</a></nav>"
@@ -215,7 +215,7 @@ class FetchTest(unittest.TestCase):
         s = self.serve({"/pdf/2508.00002": (200, {"Content-Type": "application/pdf"}, PDF)})  # no HTML version
         self.patch(m, "ARXIV", s.url)
         self.assertEqual(self.fetch("p", "https://arxiv.org/pdf/2508.00002.pdf"),
-                         (1, ["FAIL", "p", "arXiv HTML: http 404; PDF: missing tool: pdftotext (poppler or Xpdf)"]))
+                         (1, ["FAIL", "p", "arXiv HTML: http 404; PDF: missing tool: pdftotext (poppler or Xpdf); " + m.install_hint("poppler")]))
         self.assertEqual(s.seen, ["/html/2508.00002", "/pdf/2508.00002"])
         self.assertFalse(self.src.exists() and self.saved())
 
@@ -642,8 +642,20 @@ class FetchTest(unittest.TestCase):
                 ({"title": "silent"}, (None, True))):
             self.assertEqual(m.pick(info), want)
 
+    def test_install_hints_per_os(self):
+        for platform, want in (("win32", "install: scoop install poppler"), ("darwin", "install: brew install poppler"),
+                               ("linux", "install: sudo apt install poppler-utils")):
+            with self.subTest(platform=platform), mock.patch.object(m.sys, "platform", platform):
+                self.assertEqual(m.install_hint("poppler"), want)
+        with mock.patch.object(m.sys, "platform", "darwin"):
+            self.assertEqual(m.install_hint("poppler", "tesseract"), "install: brew install poppler tesseract")
+            self.assertEqual(m.install_hint("yt-dlp"), "install: brew install yt-dlp")
+        with mock.patch.object(m.sys, "platform", "win32"):
+            self.assertEqual(m.install_hint("tesseract", "yt-dlp"),
+                             "install: winget install UB-Mannheim.TesseractOCR; winget install yt-dlp.yt-dlp")
+
     def test_no_captions_and_missing_yt_dlp(self):
-        self.assertEqual(self.fetch("v", "https://youtu.be/abc123"), (1, ["FAIL", "v", "missing tool: yt-dlp"]))
+        self.assertEqual(self.fetch("v", "https://youtu.be/abc123"), (1, ["FAIL", "v", "missing tool: yt-dlp; " + m.install_hint("yt-dlp")]))
         self.tools(yt_dlp=lambda cmd: json.dumps({"title": "silent", "subtitles": {"live_chat": [{}]}}))
         self.assertEqual(self.fetch("v", "https://www.youtube.com/shorts/abc123"), (1, ["FAIL", "v", "no captions"]))
 
@@ -652,7 +664,8 @@ class FetchTest(unittest.TestCase):
         pdf.write_bytes(PDF)
         self.tools(pdftotext=lambda cmd: None)
         self.assertEqual(self.fetch("scan", pdf),
-                         (1, ["FAIL", "scan", "no text layer, and OCR needs pdftoppm and tesseract"]))
+                         (1, ["FAIL", "scan", "no text layer, and OCR needs pdftoppm and tesseract; "
+                                                  + m.install_hint("poppler", "tesseract")]))
 
         def pdftoppm(cmd):
             for n in (1, 2, 10):

@@ -297,7 +297,7 @@ class PulseTest(unittest.TestCase):
     def test_youtube_lane(self):
         plan = {"subqueries": [sub(lanes=("youtube",))]}
         code, lines, result, _ = self.run_pulse(plan, [])
-        self.assertEqual((code, result["lanes"]["youtube"]), (1, {"status": "skipped", "count": 0, "note": "yt-dlp is not installed"}))
+        self.assertEqual((code, result["lanes"]["youtube"]), (1, {"status": "skipped", "count": 0, "note": "yt-dlp is not installed; " + m.install_hint("yt-dlp")}))
         calls = []
 
         def run(cmd, capture_output=True, timeout=None):

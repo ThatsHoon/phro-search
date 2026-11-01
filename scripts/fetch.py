@@ -37,6 +37,7 @@ URL and published reads "archived <YYYY-MM-DD>", the snapshot's date, after the 
 Output, one tab-separated line:
   OK <name> <file> <chars> <first line> [<marks>]
   FAIL <name> <reason>                                  exit code 1
+A reason for a missing tool (pdftotext, pdftoppm, tesseract, yt-dlp) ends in a short install hint for this OS.
 Marks, comma-separated: ocr, auto-captions, arxiv-html; published-copy, accepted-copy, submitted-copy
 or copy (no version stated) for an open-access copy of a DOI, with landing-page when it came from a
 landing page rather than a PDF link; archived-copy for a dead page read from its Wayback snapshot;
@@ -441,12 +442,28 @@ def html_md(data, ctype, base):
     return " ".join(p.title.split()), md
 
 
+INSTALL = {  # tool: (Windows, macOS, Linux) command; Linux names the Debian and Ubuntu package
+    "poppler": ("scoop install poppler", "brew install poppler", "sudo apt install poppler-utils"),
+    "tesseract": ("winget install UB-Mannheim.TesseractOCR", "brew install tesseract", "sudo apt install tesseract-ocr"),
+    "yt-dlp": ("winget install yt-dlp.yt-dlp", "brew install yt-dlp", "pipx install yt-dlp"),
+}
+
+
+def install_hint(*tools):
+    """A short hint to install the tools on this OS, for a missing-tool FAIL line or note."""
+    os_ = 0 if sys.platform.startswith(("win", "cygwin", "msys")) else 1 if sys.platform == "darwin" else 2
+    cmds = [INSTALL[t][os_] for t in tools]
+    if os_ == 1:  # one brew call takes several formulae
+        cmds = ["brew install " + " ".join(c.split()[-1] for c in cmds)]
+    return "install: " + "; ".join(cmds)
+
+
 def pdf_text(work, data):
     """(reading-order text, layout text) of a PDF's text layer through pdftotext, form feeds between pages.
     Reading order keeps each column's sentences together, so quotes and grep use it; the layout copy keeps table rows."""
     exe = shutil.which("pdftotext")
     if not exe:
-        raise Fail("missing tool: pdftotext (poppler or Xpdf)")
+        raise Fail("missing tool: pdftotext (poppler or Xpdf); " + install_hint("poppler"))
     (work / "in.pdf").write_bytes(data)
     out = []
     for flags, name in (([], "out.txt"), (["-layout"], "layout.txt")):
@@ -518,8 +535,9 @@ def convert(work, data, ctype, base, paths, want_pdf=False):
         created, modified = pdf_dates(data)
         text, layout = pdf_text(work, data)
         if len("".join(text.split())) < TEXT_LAYER:
-            if not (shutil.which("pdftoppm") and shutil.which("tesseract")):
-                raise Fail("no text layer, and OCR needs pdftoppm and tesseract")
+            lack = [t for t, exe in (("poppler", "pdftoppm"), ("tesseract", "tesseract")) if not shutil.which(exe)]
+            if lack:
+                raise Fail("no text layer, and OCR needs pdftoppm and tesseract; " + install_hint(*lack))
             text = ocr(work)
             check("", text)
             return got({".pdf": data, ".txt": text}, text, "ocr", ["ocr"], final=base, published=created, modified=modified)
@@ -572,7 +590,7 @@ def captions(work, url):
     """What a YouTube video's captions give, through yt-dlp, without downloading the video."""
     exe = shutil.which("yt-dlp")
     if not exe:
-        raise Fail("missing tool: yt-dlp")
+        raise Fail("missing tool: yt-dlp; " + install_hint("yt-dlp"))
     base = [exe, "--ignore-config", "--no-playlist", "--no-warnings", "--skip-download"]
     info = json.loads(run(base + ["-J", url]))
     lang, auto = pick(info)

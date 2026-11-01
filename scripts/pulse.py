@@ -64,6 +64,22 @@ _CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\U0000061c\U0000200b-\U
 _QUOTES = str.maketrans("\U00002018\U00002019\U0000201a\U0000201b\U00002032\U0000201c\U0000201d\U0000201e\U0000201f\U00002033\U0000ff02\U0000ff07", "'''''\"\"\"\"\"\"'")
 
 
+INSTALL = {  # tool: (Windows, macOS, Linux) command; Linux names the Debian and Ubuntu package
+    "poppler": ("scoop install poppler", "brew install poppler", "sudo apt install poppler-utils"),
+    "tesseract": ("winget install UB-Mannheim.TesseractOCR", "brew install tesseract", "sudo apt install tesseract-ocr"),
+    "yt-dlp": ("winget install yt-dlp.yt-dlp", "brew install yt-dlp", "pipx install yt-dlp"),
+}
+
+
+def install_hint(*tools):
+    """A short hint to install the tools on this OS, for a missing-tool FAIL line or note."""
+    os_ = 0 if sys.platform.startswith(("win", "cygwin", "msys")) else 1 if sys.platform == "darwin" else 2
+    cmds = [INSTALL[t][os_] for t in tools]
+    if os_ == 1:  # one brew call takes several formulae
+        cmds = ["brew install " + " ".join(c.split()[-1] for c in cmds)]
+    return "install: " + "; ".join(cmds)
+
+
 def clean(s, cap=300):
     """One printable line: control, bidi and zero-width characters dropped, quote lookalikes made ASCII, whitespace collapsed."""
     return " ".join(_CTRL.sub("", str(s)).translate(_QUOTES).split())[:cap]
@@ -862,7 +878,7 @@ def main(argv=None):
     if not plan["subreddits"] and not plan["dedicated_subreddits"]:
         skip["reddit"] = "no subreddits in the plan; arctic-shift searches one subreddit at a time"
     if not shutil.which("yt-dlp"):
-        skip["youtube"] = "yt-dlp is not installed"
+        skip["youtube"] = "yt-dlp is not installed; " + install_hint("yt-dlp")
     states = run_lanes([x for x in LANES if x in wanted and x not in skip], ctx)
     lanes, items, gave = {}, [], False
     for name in (x for x in LANES if x in wanted):  # lanes the plan leaves out are not listed
