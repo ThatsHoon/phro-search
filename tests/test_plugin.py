@@ -205,6 +205,13 @@ class PluginTest(unittest.TestCase):
                 mode = name[:-3]
                 self.assertRegex(line, rf'Plan line: "PLAN: {mode}; [^";]+; ceiling \d+ [a-z ]+calls"')
 
+    def test_default_scope_is_english(self):
+        row = next(l for l in read(REFS / "intake.md").splitlines() if l.startswith("| Scope |"))
+        default = row.rstrip(" |").rsplit("|", 1)[1]
+        self.assertIn("sources in English", default)
+        self.assertRegex(default, r"the user's language too only when the topic is specific to that language's region")
+        self.assertNotIn("English and the user's language", default)
+
     def test_doc_command_parser(self):
         sample = ("Run `python -I ${CLAUDE_PLUGIN_ROOT}/scripts/models.py snapshot <topic> --board asr`.\n"
                   "| `chain.py find\\|refs` | `fetch.py` alone |\n"

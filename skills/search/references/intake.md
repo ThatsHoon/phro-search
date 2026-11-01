@@ -60,7 +60,7 @@ Ask in this order; skip a slot whose every answer leads to the same plan (it tak
 | Situation | visceral or compromised | What have you tried or ruled out? | nothing known |
 | Deliverable | after the use | options from the modes | follows from the use |
 | Constraints | when they remove options | memory or device, license, cost, latency, runtime | none |
-| Scope | when time, region or language changes the sources | options from the probe | no window; sources in English and the user's language |
+| Scope | when time, region or language changes the sources | options from the probe | no window; sources in English, the user's language too only when the topic is specific to that language's region (its standards, market, regulation) |
 | Evidence bar | when the field mixes papers and practice | papers, official docs, practitioner posts, measurements | by the field |
 | Audience | when it changes depth or register | you, your team, a decision maker | the user |
 | Done when | always; drafted by the system | These claims define done: change any? | the drafted claims |
