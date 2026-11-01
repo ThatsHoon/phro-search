@@ -130,6 +130,19 @@ class PluginTest(unittest.TestCase):
         self.assertIn("at most 10 searcher calls", dig)
         self.assertRegex(dig, r"(?i)disconfirm searcher")
 
+    def test_standards_section(self):
+        report = read(REFS / "report.md")
+        m = re.search(r"^## Standards\n(.*?)(?=^## )", report, re.M | re.S)
+        self.assertTrue(m, "report.md has no Standards section")
+        section = m.group(1)
+        for word in ("OGC", "ISO/TC 211", "TC 204", "OpenDRIVE", "OpenSCENARIO", "REP", "IETF", "W3C", "obsoleted by",
+                     "errata", "edition", "withdrawn", "normative", "informative", "superseded", "draft", "central claim",
+                     "catalog page", "IEC", "IEEE", "browser"):
+            self.assertIn(word, section)
+        self.assertRegex(read(REFS / "dig.md"), r"Standards section of `references/report\.md`")
+        homes = [name for name, text in docs() if re.search(r"(?i)\bnormative\b", text)]
+        self.assertEqual(homes, ["report.md"])  # one home for the rule
+
     def test_doc_command_parser(self):
         sample = ("Run `python -I ${CLAUDE_PLUGIN_ROOT}/scripts/models.py snapshot <topic> --board asr`.\n"
                   "| `chain.py find\\|refs` | `fetch.py` alone |\n"

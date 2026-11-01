@@ -56,6 +56,18 @@ One gap round at most: 1 or 2 researchers, only for a key question left without 
    - tangential: context.
 4. Write the report's view, `extracts-<stem>.json` (the stem of `report-<stem>.md`: the date, then -2 and on), with one claim per located finding, carrying its id, its claim text in the user's language, its located quotes and status `partial` (`sourced` once the support pass in Verify rates a quote full); conflicting findings go side by side under `disagreements`, unfetched pages under `unreached`. Run `report.py <topic> <stem> --check` and fix each MISMATCH by copying the source text exactly.
 
+## Standards
+
+For a source that is a standard, a specification or an RFC. Families: robotics and mapping (OGC; ISO/TC 211, geographic information; ISO/TC 204, intelligent transport systems; ASAM OpenDRIVE and OpenSCENARIO; ROS REPs), and IETF and W3C.
+- Before quoting one, take its body, document id, edition and status from the body's own index, never from a secondary page, and write them into the claim ("RFC 9110, Internet Standard, obsoletes RFC 7231"; "ISO 19115:2003, withdrawn, revised by ISO 19115-1:2014"):
+  - IETF: the RFC Editor's page for the RFC: status, obsoleted by, updated by, and its errata. A verified erratum that touches the quoted text is quoted with it.
+  - W3C: the document's status section and the latest version its TR page names (Recommendation, Candidate Recommendation, Working Draft, Note, superseded or obsolete).
+  - ISO, IEC and IEEE: the catalog page: edition, publication date, stage, and withdrawn or revised by.
+  - OGC: the standard's page in OGC's standards list (version and status); ASAM: the standard's page (release version); ROS: the REP's header in the REP index (Status, Replaced-By).
+- Mark each standards quote normative (a requirement stated in a normative clause or annex) or informative (notes, examples, introductions, informative annexes). Only a normative quote says what the standard requires.
+- A superseded, withdrawn or draft text never backs a central claim about current requirements; quote it only for history or for what a draft proposes, and say so in the claim.
+- ISO, IEC and IEEE full texts are out of reach: cite the catalog page for edition and status, send the full text to the user's browser path as a walled item, and quote its clauses only from a copy the user saves. A free preview counts as the text for the clauses it shows.
+
 ## Verify
 
 Before any vote, run the support pass (`references/briefs.md`) on the central claims' located quotes and write each `support` and `qualifier` into the view. A central claim with no full rating is reworded to what its source says, or lowered to supporting, before it is sent.
