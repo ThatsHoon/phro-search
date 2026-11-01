@@ -19,7 +19,7 @@ the first references/<mode>.md it read, else the mode of a "PLAN: <mode>;" line 
 neither is "search?" (check it by hand). A Skill call naming another skill is other:<name>.
 
 Output, tab-separated:
-  RUN <id> <n> <dig|...|search?|none|other:<skill>|error:<why>> <cost USD>
+  RUN <id> <n> <dig|...|search?|none|other:<skill>|error:<why>>[;error:<why>] <cost USD>
   PROMPT <id> <kind> <expect> fired <k>/<n> [right <m>/<n>] <PASS|FAIL> [<other skills>]
 The verdicts follow R1's thresholds on firing: 90 percent or more of the runs of in-scope prompts, 10 percent or
 less of near misses and out-of-scope prompts. Right mode is shown beside firing; T5.1 counted it.
@@ -28,7 +28,8 @@ less of near misses and out-of-scope prompts. Right mode is shown beside firing;
   OUT fired <k>/<n> <pct> threshold 10% <PASS|FAIL>         (out of scope)
   ROUTING <PASS|FAIL|INCOMPLETE <k> runs failed>
   COST <USD> <n> runs
-Failed runs (timeout, no result event) count in no rate and make the verdict INCOMPLETE. No new run starts once
+A run that fired and then failed (timeout, budget, no result event) still counts as fired, since the skill call
+came first; a failed run that never fired counts in no rate and makes the verdict INCOMPLETE. No new run starts once
 the runs so far cost --cap (default 50 USD, R1's cap per eval pass). --dry-run lists the commands (CMD <id> <n>
 <command> stdin <prompt>) and runs nothing. Exit 0 on PASS, 1 otherwise, 2 on a bad prompt file.
 """
@@ -114,11 +115,12 @@ def parse_stream(lines, skill="phro-search:search"):
 
 
 def outcome(got):
-    """One word for a run: the mode, search? (fired, mode unknown), none, other:<skill> or error:<why>."""
+    """One word for a run: the mode, search? (fired, mode unknown), none, other:<skill> or error:<why>; a run that
+    fired and then failed gives its mode and ;error:<why>."""
+    if got["fired"]:
+        return (got["mode"] or "search?") + (f";error:{got['error']}" if got["error"] else "")
     if got["error"]:
         return "error:" + got["error"]
-    if got["fired"]:
-        return got["mode"] or "search?"
     return "other:" + got["others"][0] if got["others"] else "none"
 
 
@@ -219,7 +221,7 @@ def main(argv=None):
         for n, got in sorted(results.get(r["id"], []), key=lambda x: x[0]):
             word = outcome(got)
             print("\t".join(["RUN", r["id"], str(n), word, "-" if got["cost"] is None else f"{got['cost']:.4f}"]))
-            if got["error"]:
+            if got["error"] and not got["fired"]:  # a fired run is evidence even when it fails later
                 failed += 1
                 continue
             graded += 1

@@ -152,6 +152,17 @@ class RunTest(unittest.TestCase):
         self.assertIn("ROUTING\tINCOMPLETE\t3 runs failed", out)
         self.assertEqual(code, 1)
 
+    def test_a_run_that_fired_then_failed_still_counts(self):
+        self.save("dig-en-1", 1, events())
+        self.save("report-ko-1", 1, [tool_use("Skill", {"skill": "phro-search:search"}),
+                                     tool_use("Read", {"file_path": "/p/skills/search/references/report.md"}, 93)])
+        self.save("near-en-1", 1, [tool_use("Skill", {"skill": "phro-search:search"}), result(0.2, error=True)])
+        code, out = self.run_main("--from", str(self.dir / "runs"), "--runs", "1")
+        self.assertIn("RUN\treport-ko-1\t1\treport;error:no result event\t-", out)
+        self.assertIn("PROMPT\treport-ko-1\tin\treport\tfired 1/1\tright 1/1\tPASS", out)
+        self.assertIn("PROMPT\tnear-en-1\tnear\tnone\tfired 1/1\tFAIL", out)  # a false firing is not hidden by the error
+        self.assertNotIn("INCOMPLETE", "\n".join(out))
+
     def test_filters(self):
         _, out = self.run_main("--dry-run", "--kind", "near", "--runs", "1")
         self.assertEqual([l.split("\t")[1] for l in out if l.startswith("CMD")], ["near-en-1"])
