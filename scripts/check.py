@@ -233,6 +233,11 @@ ELLIPSIS = re.compile(r"\.\.\.|\U00002026")
 WRAP = "\"'\U0000201c\U0000201d\U00002018\U00002019"  # quote marks around a whole quote
 
 
+def flat(text):
+    """Text as quotes are compared: soft hyphens dropped, every run of white space (no-break spaces too) one space."""
+    return " ".join(str(text or "").replace("\U000000ad", "").split())
+
+
 def in_order(pieces, text):
     at = 0
     for p in pieces:
@@ -292,14 +297,14 @@ def pulse_problems(raw, result, archive=None):
         urls = {i.get("url"), *(i.get("links") or {}).values()}
         sources += [(t, urls) for t in (i.get("title"), i.get("snippet"))]
         sources += [(c.get("text"), urls | {c.get("url")}) for c in i.get("comments") or []]
-    sources = [(" ".join(str(t or "").split()), u) for t, u in sources]
+    sources = [(flat(t), u) for t, u in sources]
     archive, texts = archive or {}, {}
 
     def in_archive(pieces, links):
         for u in links:
             path = archive.get(url_key(u))
             if path and path not in texts:
-                texts[path] = " ".join(path.read_text(encoding="utf-8", errors="replace").split())
+                texts[path] = flat(path.read_text(encoding="utf-8", errors="replace"))
             if path and in_order(pieces, texts[path]):
                 return True
         return False
@@ -313,7 +318,7 @@ def pulse_problems(raw, result, archive=None):
             n += 1
         quotes += 1
         text = " ".join(re.sub(r"^[ \t]*>[ \t]?", "", t) for t in lines[start:n])
-        pieces = [p for p in (" ".join(s.split()) for s in ELLIPSIS.split(text.strip().strip(WRAP))) if p]
+        pieces = [p for p in (flat(s) for s in ELLIPSIS.split(text.strip().strip(WRAP))) if p]
         if pieces:
             pieces[-1] = pieces[-1].rstrip(".,;:!? ") or pieces[-1]  # a full stop the brief adds is not a misquote
         hits = [u for t, u in sources if pieces and in_order(pieces, t)]

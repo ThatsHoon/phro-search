@@ -446,6 +446,13 @@ class PulseKindTest(unittest.TestCase):
         self.assertEqual(self.problems(BRIEF.replace("halves latency", "cuts latency in half")), [(9, "quote")])
         self.assertEqual(self.problems(BRIEF.replace("for me, and the new", "for me ... the new")), [])
         self.assertEqual(self.problems(BRIEF.replace("Works well for me, and the new", "the new ... Works well")), [(9, "quote")])
+
+    def test_soft_hyphens_and_no_break_spaces_are_ignored(self):
+        for brief in (BRIEF.replace("halves latency", "hal\u00adves\u00a0latency"),):  # kept from the source, or dropped
+            self.assertEqual(self.problems(brief), [])
+        shy = json.loads(json.dumps(RESULT).replace("halves latency", "hal\\u00adves latency"))
+        self.assertNotEqual(json.dumps(shy), json.dumps(RESULT))
+        self.assertEqual(self.problems(BRIEF, shy), [])
         self.assertEqual(self.problems(BRIEF.replace("for me, and", "for me,\n>   and")), [])
         snippet = BRIEF.replace('"Works well for me, and the new scheduler halves latency."', "A rewrite of the scheduler")
         self.assertEqual(self.problems(snippet.replace("item?id=12", "item?id=1")), [])
