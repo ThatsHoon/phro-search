@@ -299,6 +299,15 @@ class WatchTest(unittest.TestCase):
         self.assertIn("FAIL\tnews\trun deadline reached", out)
         self.assertIsNone(m._end)
 
+    def test_each_feed_gets_a_share_of_the_time_left(self):
+        self.feeds(("rss", "blog", RSS), ("atom", "news", ATOM))
+        with mock.patch.object(m, "DEADLINE", 20):  # blog's share is 10 s, so its 15 s Retry-After is not waited for
+            code, out, urls = self.run_watch({RSS: [(429, {"Retry-After": "15"}, b""), fixture("rss.xml")], ATOM: fixture("atom.xml")}, "check")
+        self.assertEqual(urls, [RSS, ATOM])
+        self.assertIn("FAIL\tblog\thttp 429; run deadline reached", out)
+        self.assertTrue(any(line.startswith("NEW\t") and "\tnews\t" in line for line in out), out)
+        self.assertIsNone(m._feed_end)
+
     def test_egress_blocks_listed_terms_before_any_request(self):
         url = "https://example.com/search?q=Acme%2DSecret"
         with mock.patch.object(m, "egress_terms", lambda cwd=None: [("acme-secret", "forbidden.txt")]):

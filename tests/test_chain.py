@@ -201,7 +201,7 @@ class ChainTest(unittest.TestCase):
         req = self.opener.reqs[0]
         self.assertEqual(req.get_header("User-agent"),
                          f"Mozilla/5.0 (compatible; phro-search/{m.VERSION}; +https://github.com/ThatsHoon/phro-search)")
-        self.assertEqual(self.opener.timeouts, [30])
+        self.assertEqual(self.opener.timeouts, [20])
         self.assertEqual([r.asked for r in self.opener.resps], [m.CAP + 1])
         self.assertTrue(req.full_url.startswith("https://api.openalex.org/works/W1964729842?"))
         for word in ("mailto", "api_key", "email"):
@@ -448,6 +448,9 @@ class ChainTest(unittest.TestCase):
         code, lines, urls = self.call("find", BATES, handler=lambda p, q: replies.pop(0))
         self.assertEqual((code, lines, len(urls)), (0, [BATES_ROW], 4))
         self.assertEqual(self.sleeps(), [2, 4, 7])
+        replies = [urllib.error.URLError(TimeoutError("timed out"))] * 2 + [fx("work_bates.json")]
+        code, lines, urls = self.call("find", BATES, handler=lambda p, q: replies.pop(0))
+        self.assertEqual((code, lines, len(urls)), (1, ["FAIL\ttimeout"], 2))  # a timeout is retried once
         wall = http_error(503)
         wall.headers["cf-mitigated"] = "challenge"
         github = http_error(403)

@@ -17,14 +17,14 @@ landing pages; then published, accepted, submitted; repository copies first) bef
 lookup costs no OpenAlex credits, and OPENALEX_API_KEY is sent when set. Nothing is written on
 FAIL, and an existing <name>.* is never overwritten.
 
-A dead public page (http 404 or 410, a DNS or TLS failure, a timeout after its retries) is taken from the
+A dead public page (http 404 or 410, a DNS or TLS failure, a second timeout) is taken from the
 Wayback Machine: its availability API names the closest snapshot, which is read with the id_ flag, so the
 original bytes come back and get the same checks. Never for 401, 403, 451, a bot check or a wall page, nor for
 a DOI's copies or publisher page. Every URL asked, the API's and the snapshot's included, and every redirect is
 checked against the forbidden terms.
 
-Requests: a 429, a 5xx or a timeout is retried after 2, 4 and 8 s (after Retry-After when it asks 60 s or less);
-any other status is not, nor a 403 or 503 from a bot check, which is a wall. All requests of one run share a
+Requests: a 429 or a 5xx is retried after 2, 4 and 8 s (after Retry-After when it asks 60 s or less); a timeout
+(20 s without an answer) is retried once, so a dead page leaves time for the Wayback Machine; any other status is not, nor a 403 or 503 from a bot check, which is a wall. All requests of one run share a
 deadline of 100 s: no request starts and no retry waits past it.
 
 Every OK that downloads adds a row to <sources_dir>/index.tsv: name, url, final, fetched, published, modified,
@@ -58,7 +58,8 @@ RAW = "https://raw.githubusercontent.com"
 UA = f"Mozilla/5.0 (compatible; phro-search/{VERSION}; +https://github.com/ThatsHoon/phro-search)"
 ACCEPT = "text/html,application/xhtml+xml,application/pdf,text/plain;q=0.8,*/*;q=0.5"
 CAP = 40 * 1024 * 1024  # bytes per source document
-BACKOFF = (2, 4, 8)  # seconds before each retry of a 429, a 5xx or a timeout
+BACKOFF = (2, 4, 8)  # seconds before each retry of a 429 or a 5xx; a timeout is retried once
+TIMEOUT = 20  # seconds one request may stall before it counts as a timeout
 RETRY_AFTER_CAP = 60  # longest Retry-After honored, in seconds; a longer one gets the backoff
 DEADLINE = 100  # seconds for all requests of one run together, under the Bash tool's default 2-minute timeout
 BOT_CHECK = (b"just a moment", b"checking your browser", b"captcha", b"verify you are human", b"are you a robot",
@@ -232,11 +233,12 @@ def uri(url):
 def get(url):
     """(body, content type, final URL) of one GET; every failure raised as Fail with a short reason."""
     req = urllib.request.Request(uri(url), headers={"User-Agent": UA, "Accept": ACCEPT})
+    timeouts = 0
     for backoff in (*BACKOFF, None):
         if left() <= 0:
             raise Fail("run deadline reached")
         try:
-            with OPENER.open(req, timeout=min(30, max(1, left()))) as r:
+            with OPENER.open(req, timeout=min(TIMEOUT, max(1, left()))) as r:
                 body = r.read(CAP + 1)
                 if len(body) > CAP:
                     raise Fail("too large: over 40 MB")
@@ -251,7 +253,8 @@ def get(url):
             why = e.reason if isinstance(e, urllib.error.URLError) else e
             short = ("dns" if isinstance(why, socket.gaierror) else "tls" if isinstance(why, ssl.SSLError)
                      else "timeout" if isinstance(why, TimeoutError) else f"network: {why}")
-            if short != "timeout" or backoff is None:
+            timeouts += short == "timeout"
+            if short != "timeout" or backoff is None or timeouts > 1:
                 raise (Dead if short in ("dns", "tls", "timeout") else Fail)(short) from None
             wait = backoff
         if wait > left():

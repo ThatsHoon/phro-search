@@ -29,9 +29,10 @@ failed, or for a bad state file.
 egress: add refuses a venue URL or an openalex:<source> that holds a forbidden term, and check checks each stored feed URL against the terms,
 read again before its request; a term list that cannot be read blocks the request (a FAIL line).
 
-requests: 1 s apart per host (export.arxiv.org 3 s). A 429, a 5xx or a timeout is retried after 2, 4 and 8 s (after
-Retry-After when it asks 60 s or less); any other status is not, nor a 403 or 503 from a bot check. All requests of one
-run share a deadline of 100 s: no request starts and no retry waits past it, and the feeds left then fail.
+requests: 1 s apart per host (export.arxiv.org 3 s). A 429 or a 5xx is retried after 2, 4 and 8 s (after Retry-After
+when it asks 60 s or less); a timeout (20 s without an answer) is retried once; any other status is not, nor a 403 or
+503 from a bot check. All requests of one run share a deadline of 100 s, and each feed gets an equal share of the time
+left (at least 5 s), so a slow feed fails alone: no request starts and no retry waits past either limit.
 """
 import argparse, email.utils, html, html.parser, json, os, re, socket, ssl, string, sys, time, unicodedata
 import urllib.error, urllib.parse, urllib.request
@@ -50,10 +51,12 @@ CAP, KEEP = 10 * 1024 * 1024, 500  # bytes per response; seen item URLs kept per
 FALLBACKS = ("/feed", "/rss", "/atom.xml", "/feed.xml", "/index.xml", "/rss.xml")
 NO_FEED = re.compile(r"(^|\.)(x\.com|twitter\.com|pixiv\.net|reddit\.com|redd\.it)$")  # hosts never requested
 EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
-BACKOFF = (2, 4, 8)  # seconds before each retry of a 429, a 5xx or a timeout
+BACKOFF = (2, 4, 8)  # seconds before each retry of a 429 or a 5xx; a timeout is retried once
+TIMEOUT = 20  # seconds one request may stall before it counts as a timeout
 RETRY_AFTER_CAP = 60  # longest Retry-After honored, in seconds; a longer one gets the backoff
 INDEX_OVER, SHORT = 20, 60  # over this many new items, check prints a numbered index of titles cut to SHORT characters
 DEADLINE = 100  # seconds for all requests of one run together, under the Bash tool's default 2-minute timeout
+MIN_SHARE = 5  # fewest seconds a feed gets of the time left, however many feeds remain
 BOT_CHECK = (b"just a moment", b"checking your browser", b"captcha", b"verify you are human", b"are you a robot",
              b"attention required", b"challenge-platform", b"/cdn-cgi/challenge", b"ddos-guard")
 
@@ -123,11 +126,13 @@ class _Redirect(urllib.request.HTTPRedirectHandler):
 OPENER = urllib.request.build_opener(_Redirect)
 _last = {}  # host -> monotonic time of its last request
 _end = None  # monotonic time when this run's requests stop; set by main
+_feed_end = None  # monotonic time when the current feed's share of the run stops; set by cmd_check
 
 
 def left():
-    """Seconds until the run deadline; infinite outside a run."""
-    return float("inf") if _end is None else _end - time.monotonic()
+    """Seconds until the run deadline or the current feed's share of it, whichever comes first; infinite outside a run."""
+    ends = [t for t in (_end, _feed_end) if t is not None]
+    return min(ends) - time.monotonic() if ends else float("inf")
 
 
 def bot_check(e):
@@ -158,6 +163,7 @@ def fetch(url):
     if NO_FEED.search(host):
         raise Fail("no public feed")
     req = urllib.request.Request(urllib.parse.quote(url, safe=string.punctuation), headers={"User-Agent": UA})
+    timeouts = 0
     for backoff in (*BACKOFF, None):
         wait = _last.get(host, float("-inf")) + (3 if host == "export.arxiv.org" else 1) - time.monotonic()
         if wait > 0:  # 1 s between requests to one host; arXiv's API terms ask for 3 s
@@ -166,7 +172,7 @@ def fetch(url):
             raise Fail("run deadline reached")
         _last[host] = time.monotonic()
         try:
-            with OPENER.open(req, timeout=min(30, max(1, left()))) as r:
+            with OPENER.open(req, timeout=min(TIMEOUT, max(1, left()))) as r:
                 body = r.read(CAP + 1)
         except urllib.error.HTTPError as e:
             if bot_check(e):
@@ -178,7 +184,8 @@ def fetch(url):
             e = e.reason if isinstance(e, urllib.error.URLError) else e
             kinds = ((socket.gaierror, "dns"), (ssl.SSLError, "tls"), (TimeoutError, "timeout"))
             why = next((w for t, w in kinds if isinstance(e, t)), None)
-            if why != "timeout" or backoff is None:
+            timeouts += why == "timeout"
+            if why != "timeout" or backoff is None or timeouts > 1:
                 raise Fail(why or clean(e if isinstance(e, str) else type(e).__name__, 80)) from None
             wait = backoff
         else:
@@ -507,7 +514,8 @@ def cmd_check(a):
         return fail(sp, "not a valid state file; fix or remove it")
     now = datetime.now(timezone.utc)
     new, quiet, failed, busy = [], [], [], 0
-    for f in feeds:
+    global _feed_end
+    for k, f in enumerate(feeds):
         try:  # the terms are read again for every feed, so a list changed since add still guards it
             hit = egress_hit(f["feed"], egress_terms())
         except Exception as e:  # fail closed: a term list that cannot be read blocks the request
@@ -516,11 +524,15 @@ def cmd_check(a):
         if hit:
             failed.append((f["name"], f"egress: '{hit[0]}' is listed in {hit[1]}; use a generic problem statement"))
             continue
+        if _end is not None:  # an equal share of the time left, so one slow feed cannot starve the rest
+            _feed_end = time.monotonic() + max(MIN_SHARE, (_end - time.monotonic()) / (len(feeds) - k))
         try:
             items = parse(fetch(request_url(f["kind"], f["feed"], now)), f["kind"])[2]
         except Fail as e:
             failed.append((f["name"], str(e)))
             continue
+        finally:
+            _feed_end = None
         old = state.get(f["feed"])
         if old is None or a.fresh:
             picked = [i for i in items if i["date"] and i["date"] >= now - timedelta(days=a.days)]

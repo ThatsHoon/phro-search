@@ -295,12 +295,12 @@ class FetchTest(Base):
 
     def test_retries_then_gives_up(self):
         for served, waits in (([429, b"{}"], [2]), ([(429, {"Retry-After": "5"}), b"{}"], [5]), ([503, b"{}"], [2]),
-                              ([TimeoutError(), TimeoutError(), b"{}"], [2, 4])):
+                              ([TimeoutError(), b"{}"], [2])):
             self.sleep.reset_mock()
             with self.subTest(served=served[0]), mock.patch.object(m, "OPENER", Opener([(("api/models",), served)])):
                 self.assertEqual(m.fetch(self.URL), b"{}")
                 self.assertEqual([c.args[0] for c in self.sleep.call_args_list if c.args[0] > 1.5], waits)
-        for served, why in (([429] * 4, "http 429"), ([404, b"{}"], "http 404")):
+        for served, why in (([429] * 4, "http 429"), ([404, b"{}"], "http 404"), ([TimeoutError()] * 2 + [b"{}"], "timeout")):
             with mock.patch.object(m, "OPENER", Opener([(("api/models",), served)])), self.assertRaises(m.Fail) as e:
                 m.fetch(self.URL)
             self.assertEqual(str(e.exception), why)
@@ -323,10 +323,11 @@ class FetchTest(Base):
                 with self.assertRaises(m.Fail) as e:
                     m.fetch(self.URL)
                 self.assertEqual((str(e.exception), len(opener.calls)), (why, 1))
-        with mock.patch.object(m, "DEADLINE", 5):
+        self.assertEqual(m.DEADLINE, {"shortlist": 270, "snapshot": 100, "follow": 100})  # only shortlist gets a 5-minute call
+        with mock.patch.dict(m.DEADLINE, follow=5):
             code, out = self.run_main([(("api/models/acme/x",), [(429, {"Retry-After": "30"}), b"{}"])], "follow", "acme/x")
         self.assertEqual((code, out.splitlines()[0], len(self.opener.calls)), (1, "FAIL\tacme/x\thttp 429; run deadline reached", 1))
-        with mock.patch.object(m, "DEADLINE", 0):
+        with mock.patch.dict(m.DEADLINE, follow=0):
             code, out = self.run_main([], "follow", "acme/x")
         self.assertEqual((code, out.splitlines()[0], self.opener.calls), (1, "FAIL\tacme/x\trun deadline reached", []))
         self.assertIsNone(m._end)

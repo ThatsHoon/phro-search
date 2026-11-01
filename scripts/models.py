@@ -8,10 +8,11 @@ boards: asr (Open ASR; tables english, multilingual, longform, private), tts (Op
         --clone for voice cloning, and streaming for one --hardware), llm (Open LLM, frozen since 2025-03-20),
         slm (Open SLM), hub:<org/dataset> (the leaderboard of a Hub benchmark dataset, mostly self-reported)
 Only the read-only routes in ROUTES are requested. HF_TOKEN is read from the environment, sent to huggingface.co only
-and never printed. Requests are 1 s apart per host. A 429, a 5xx or a timeout is retried after 2, 4 and 8 s (after
-Retry-After when it asks 60 s or less); any other status is not, nor a 403 or 503 from a bot check. All requests of one
-run share a deadline of 270 s, under the 5-minute timeout the models reference gives shortlist: no request starts and
-no retry waits past it.
+and never printed. Requests are 1 s apart per host. A 429 or a 5xx is retried after 2, 4 and 8 s (after Retry-After
+when it asks 60 s or less); a timeout (20 s without an answer) is retried once; any other status is not, nor a 403 or
+503 from a bot check. All requests of one run share a deadline: 270 s for shortlist, under the 5-minute timeout the
+models reference gives it, and 100 s for snapshot and follow, under the Bash tool's default 2 minutes. No request
+starts and no retry waits past it.
 Files are written whole or not at all (a temp file, then a rename). A same-day snapshot, a facts file or a card that an
 earlier run left cut short is taken or fetched again instead of being used; a card that differs otherwise is kept.
 output, tab-separated:
@@ -46,9 +47,10 @@ RESOLVE, TOP, FOLLOW, OVER = 40, 15, 5, 1.1  # rows looked up on the Hub, rows p
 REPO = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*")
 TAG, HREF = re.compile(r"<[^>]*>"), re.compile(r"""href=["']([^"']+)["']""")
 DECOR = ("So", "Sk", "Mn", "Me", "Cf")  # arrows, flags, emoji and their joiners in headers
-BACKOFF = (2, 4, 8)  # seconds before each retry of a 429, a 5xx or a timeout
+BACKOFF = (2, 4, 8)  # seconds before each retry of a 429 or a 5xx; a timeout is retried once
+TIMEOUT = 20  # seconds one request may stall before it counts as a timeout
 RETRY_AFTER_CAP = 60  # longest Retry-After honored, in seconds; a longer one gets the backoff
-DEADLINE = 270  # seconds for all requests of one run together
+DEADLINE = {"shortlist": 270, "snapshot": 100, "follow": 100}  # seconds for all requests of one run, per command
 BOT_CHECK = (b"just a moment", b"checking your browser", b"captcha", b"verify you are human", b"are you a robot",
              b"attention required", b"challenge-platform", b"/cdn-cgi/challenge", b"ddos-guard")
 
@@ -248,6 +250,7 @@ def fetch(url, data=None):
     if data is not None:
         body, headers["Content-Type"] = json.dumps(data).encode(), "application/json"
     req = urllib.request.Request(url, data=body, headers=headers)
+    timeouts = 0
     for backoff in (*BACKOFF, None):
         wait = _last.get(host, float("-inf")) + 1 - time.monotonic()
         if wait > 0:
@@ -256,7 +259,7 @@ def fetch(url, data=None):
             raise Fail("run deadline reached")
         _last[host] = time.monotonic()
         try:
-            with OPENER.open(req, timeout=min(60, max(1, left()))) as r:
+            with OPENER.open(req, timeout=min(TIMEOUT, max(1, left()))) as r:
                 out = r.read(CAP + 1)
         except urllib.error.HTTPError as e:
             if bot_check(e):
@@ -268,7 +271,8 @@ def fetch(url, data=None):
             e = e.reason if isinstance(e, urllib.error.URLError) else e
             kinds = ((socket.gaierror, "dns"), (ssl.SSLError, "tls"), (TimeoutError, "timeout"))
             why = next((w for t, w in kinds if isinstance(e, t)), None)
-            if why != "timeout" or backoff is None:
+            timeouts += why == "timeout"
+            if why != "timeout" or backoff is None or timeouts > 1:
                 raise Fail(why or clean(e if isinstance(e, str) else type(e).__name__, 80)) from None
             wait = backoff
         else:
@@ -1065,7 +1069,7 @@ def main(argv=None):
     args = ap.parse_args(argv)
     topic = Path(args.topic).expanduser()  # a quoted ~ reaches the script unexpanded
     global _end
-    _end = time.monotonic() + DEADLINE
+    _end = time.monotonic() + DEADLINE[args.cmd]
     try:
         terms = egress_terms()
         sent = [args.board if hasattr(args, "board") else "", getattr(args, "lang", None) or ""] + getattr(args, "repos", [])

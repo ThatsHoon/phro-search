@@ -16,8 +16,8 @@ Usage:
 
 An id is W123, https://openalex.org/W123, a bare DOI or a doi.org URL; an author id is A123.
 No key is needed; OPENALEX_API_KEY from the environment is sent when set and never printed.
-Requests are 1 s apart. A 429, a 5xx or a timeout is retried after 2, 4 and 8 s (after Retry-After when it asks 60 s
-or less); any other status is not, nor a 403 or 503 from a bot check. All requests of one run share a deadline of
+Requests are 1 s apart. A 429 or a 5xx is retried after 2, 4 and 8 s (after Retry-After when it asks 60 s or less);
+a timeout (20 s without an answer) is retried once; any other status is not, nor a 403 or 503 from a bot check. All requests of one run share a deadline of
 100 s: no request starts and no retry waits past it.
 
 Rows, tab-separated: <year> <cited_by_count> <W id> <title> <doi or -> <free pdf url or -> <type or -> <venue or ->
@@ -60,7 +60,8 @@ FIELDS = ("id,display_name,publication_year,cited_by_count,doi,best_oa_location,
 AUTHOR = "id,display_name,works_count,last_known_institutions"
 RATE_LIMITED = ("rate limited: the OpenAlex daily budget ($1.000, about 1,000 credits) may be used up; try tomorrow, "
                 "or set OPENALEX_API_KEY")
-BACKOFF = (2, 4, 8)  # seconds before each retry of a 429, a 5xx or a timeout
+BACKOFF = (2, 4, 8)  # seconds before each retry of a 429 or a 5xx; a timeout is retried once
+TIMEOUT = 20  # seconds one request may stall before it counts as a timeout
 RETRY_AFTER_CAP = 60  # longest Retry-After honored, in seconds; a longer one gets the backoff
 DEADLINE = 100  # seconds for all requests of one run together, under the Bash tool's default 2-minute timeout
 BOT_CHECK = (b"just a moment", b"checking your browser", b"captcha", b"verify you are human", b"are you a robot",
@@ -179,6 +180,7 @@ def get(path, params, missing=None):
         params = {**params, "api_key": key}
     req = urllib.request.Request(f"{API}{path}?{urllib.parse.urlencode(params)}", headers={"User-Agent": UA})
     delay = 0
+    timeouts = 0
     for backoff in (*BACKOFF, None):
         wait = max(delay, _last + 1 - time.monotonic())
         if wait > 0:
@@ -186,7 +188,7 @@ def get(path, params, missing=None):
         if left() <= 0:
             raise Fail("run deadline reached")
         try:
-            with _opener.open(req, timeout=min(30, max(1, left()))) as r:
+            with _opener.open(req, timeout=min(TIMEOUT, max(1, left()))) as r:
                 body = r.read(CAP + 1)
             break
         except urllib.error.HTTPError as e:
@@ -201,7 +203,8 @@ def get(path, params, missing=None):
             why = e.reason if isinstance(e, urllib.error.URLError) else e  # ssl.SSLError has a str .reason too
             short = ("dns" if isinstance(why, socket.gaierror) else "timeout" if isinstance(why, TimeoutError)
                      else "tls" if isinstance(why, ssl.SSLError) else clean(why, 80))
-            if short != "timeout" or backoff is None:
+            timeouts += short == "timeout"
+            if short != "timeout" or backoff is None or timeouts > 1:
                 raise Fail(short) from None
             delay = backoff
         finally:

@@ -578,7 +578,11 @@ class FetchTest(unittest.TestCase):
         self.patch(m.OPENER, "open", opener)
         self.assertEqual(self.fetch("t", "https://example.org/a")[0], 0)
         self.assertEqual(len(timeouts), 2)
-        self.assertTrue(all(0 < t <= 30 for t in timeouts))
+        self.assertTrue(all(0 < t <= 20 for t in timeouts))
+        replies[:] = [TimeoutError("timed out")] * 2 + [urllib.error.URLError(socket.gaierror(-2, "no archive"))] * 4
+        code, out = self.fetch("t2", "https://example.org/b")  # a second timeout makes the page dead: Wayback is asked
+        self.assertEqual((code, out[2]), (1, "timeout; Wayback: dns"))
+        self.assertEqual(len(timeouts), 5)
 
     def test_existing_name_is_refused(self):
         self.src.mkdir()
