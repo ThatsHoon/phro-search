@@ -122,6 +122,14 @@ class PluginTest(unittest.TestCase):
             with self.subTest(script=path.name):
                 self.assertEqual(sorted(set(m.group(1).split(",") if m else []) - named.get(path.name, set())), [])
 
+    def test_dig_disconfirm_searcher(self):
+        method = re.search(r"^Your method: (.*)$", read(REFS / "briefs.md"), re.M).group(1)
+        self.assertIn("find criticism, failed or partial replications, negative results, errata and corrections of "
+                      "<work or claim>", method)
+        dig = read(REFS / "dig.md")
+        self.assertIn("at most 10 searcher calls", dig)
+        self.assertRegex(dig, r"(?i)disconfirm searcher")
+
     def test_doc_command_parser(self):
         sample = ("Run `python -I ${CLAUDE_PLUGIN_ROOT}/scripts/models.py snapshot <topic> --board asr`.\n"
                   "| `chain.py find\\|refs` | `fetch.py` alone |\n"

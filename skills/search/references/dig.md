@@ -7,7 +7,7 @@ With none, the path `docs/research/<slug>.md` is a defaulted slot.
 ## Before round 0
 
 - The confirmed brief heads `map.md` with 3 to 6 required claims (`references/intake.md`, section 7). Ask the open ones in this order, in the question form of SKILL.md intake step 5.
-- Plan line: "dig: up to 4 rounds, 2 searchers per round, at most 8 searcher calls, a support reader per support pass".
+- Plan line: "dig: up to 4 rounds, 2 searchers per round, at most 10 searcher calls, a support reader per support pass".
 
 ## Round 0: map
 
@@ -34,6 +34,7 @@ Pick leads with a strong scent: named again and again, surveys and textbooks, ci
 - Papers go by DOI: a DOI or id lookup costs nothing, while a title or name search, and each `chain.py topic` list, costs 10 of the about 1,000 daily credits OpenAlex gives without a key. Check `chain.py find` title candidates by year, title, type and venue before using one; a title can match a commentary or another record. A work flagged retracted never backs a required claim. For a preprint, look for its published version (`chain.py oa` lists it when OpenAlex merged the records, else `chain.py find` on the title, checking type and venue) and quote that version when it exists. A fetch marked unchecked could not ask OpenAlex: run `chain.py find` on its DOI before it backs a claim.
 - OpenAlex lags: for a work under about a year old, 0 refs and 0 cites mean unknown, not none. Backward: grep the reference section of the downloaded text. Forward: a searcher looks for works citing the title.
 - Two plausible directions: two searchers on two hypotheses in one turn; compare when both return, then continue.
+- Disconfirm: when a required claim asks how well a method works or where it fails, spawn one disconfirm searcher in round 1, in the same turn as the round's other searchers, on the work or claim the answer rests on (the disconfirm method in `references/briefs.md`). Once per dig.
 - Download hits with `fetch.py <topic>/sources <name> <url>`, passing a paper's DOI. Before reporting a canonical work as unreached, look for another legal copy: `chain.py oa <DOI>`, the author's or lab's page, a technical report, an institutional repository, a curated site.
 - Locate: grep the downloaded text for each required claim's passage (`grep -n -i "<words>" <topic>/sources/<file>`, then read a few lines around it) and write `file:line` plus a short quote on the claim line in `map.md`. Location and quote only, no summary or conclusion. A PDF's `.txt` copy is in reading order, which joins a word split at a line end and so also drops the hyphen of a compound split there; check the `.layout.txt` copy when a hyphen matters, and quote a table from it, since it keeps the rows. The quote matters: a line number alone is hard to find.
 
@@ -43,7 +44,7 @@ Round 0 only builds the map. A round counts once leads were downloaded and at le
 
 Stop when one of these holds, and log which:
 1. Every required claim has a source location (file:line and a short quote) that the support pass rated full. Run the support pass (`references/briefs.md`) once every claim is located; a claim rated below full keeps the dig going, and the quotes later located for it get another pass.
-2. Saturation: 70 percent or more of the people and sources the searchers named this round were already in `map.md`, and few new terms appeared. Log the numbers ("11 of 14 already known"). Count only searchers that searched the same question with different methods; hypothesis branches overlap little by design, so judge each branch by its own claims. "Known" includes what the main session found itself, and the searchers get the same known list.
+2. Saturation: 70 percent or more of the people and sources the searchers named this round were already in `map.md`, and few new terms appeared. Log the numbers ("11 of 14 already known"). Count only searchers that searched the same question with different methods; hypothesis branches and the disconfirm searcher overlap little by design, so judge each by its own claims and leave it out of the count. "Known" includes what the main session found itself, and the searchers get the same known list.
 3. Four rounds done: list the claims not reached and why.
 4. Wall: the originals for the remaining claims are all behind logins or paywalls, with nothing left in front of the wall. A partial claim counts when its missing part is walled. Free pages blocked only by bot checks go to the user's browser first.
 5. Budget: a time or count limit agreed in the brief came first. Say how far each measure got (claims sourced, saturation numbers); never pretend a measure was met.
@@ -75,5 +76,5 @@ No summary or explanation unless the user asks.
 
 ## Limits
 
-- At most 2 searchers at once: saturation is counted between two methods, and more searchers cost more and blur the overlap.
+- At most 2 searchers at once, plus round 1's disconfirm searcher: saturation is counted between two methods, and more searchers cost more and blur the overlap.
 - Copies in `sources/` are for local reading only; reports quote briefly and link.

@@ -11,7 +11,7 @@ You are a searcher for a field dig.
 
 Question: <generic problem statement>
 Field terms so far: <terms, or "none yet; start from these words: ...">
-Your method: <one of: search by terms in English | search in <language> | find canonical surveys, textbooks and lecture notes | follow hypothesis <H> | the move <backward | forward | author | venue | neighbors | re-search> from these leads: <leads, each with why>>
+Your method: <one of: search by terms in English | search in <language> | find canonical surveys, textbooks and lecture notes | follow hypothesis <H> | find criticism, failed or partial replications, negative results, errata and corrections of <work or claim> | the move <backward | forward | author | venue | neighbors | re-search> from these leads: <leads, each with why>>
 Already known (do not report them again, but say when you see one named again): <people and sources, or "none">
 
 Return four lists:
