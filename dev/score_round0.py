@@ -16,8 +16,8 @@ surest key: map rows name works briefly ("Bates 1989, berrypicking"), so check M
 Searcher URLs are the Original URL cells of the map's Sources rows (--found keeps only rows whose Found in
 cell contains TEXT, case-insensitive). One counts as archived as the original when sources/index.tsv has a row
 with that URL as asked or as read, without the archived-copy mark (a dead page read from Wayback), and the map's
-label is not summary (its first word, so "summary (survey)" counts as summary). A wall or a failed fetch leaves no index row. A topic without index.tsv (older topics)
-counts a row whose Files cell names a file.
+label (its first word, so "summary (survey)" is summary) is not summary. A wall or a failed fetch leaves no index
+row. A topic without index.tsv (older topics) counts a row whose Files cell names a file.
 
 Output, tab-separated, per topic:
   GOLD <topic> <HIT|MISS> <work> <map: <found in> | index: <name> | ->
