@@ -474,9 +474,78 @@ class ChainTest(unittest.TestCase):
         self.assertEqual(new.full_url, "https://api.openalex.org/other")
         self.assertTrue(callable(m._Redirect.http_error_308))
 
+    # topic and related
+
+    def test_topic_lists_the_most_cited_works_without_paratext(self):
+        code, lines, urls = self.call("topic", "information", "foraging", "-n", "3", handler=lambda p, q: page(fx("cites.json"), q))
+        self.assertEqual((code, [path(u) for u in urls]), (0, ["/works"]))
+        q = query(urls[0])
+        self.assertEqual((q["filter"], q["sort"], q["per-page"]),
+                         (["title_and_abstract.search:information foraging,type:!paratext,type:!erratum,type:!editorial,"
+                           "type:!retraction"], ["cited_by_count:desc"], ["3"]))
+        self.assertNotIn("search", q)
+        self.assertEqual(lines[0], "# topic\tinformation foraging\t1759 matches")
+        self.assertEqual([l.split("\t")[2] for l in lines[1:]], ["W2111335329", "W1570418772", "W2017022128"])
+        self.assertEqual(lines[1], m.row(fx("cites.json")["results"][0]))
+
+    def test_topic_drops_excluded_types_the_api_returned(self):
+        reply = {"meta": {"count": 3}, "results": [
+            {"id": "https://openalex.org/W1", "display_name": "Front matter", "cited_by_count": 9, "type": "paratext"},
+            {"id": "https://openalex.org/W2", "display_name": "A survey", "cited_by_count": 8, "type": "review"},
+            {"id": "https://openalex.org/W3", "display_name": "Correction", "cited_by_count": 7, "type": "erratum"}]}
+        code, lines, _ = self.call("topic", "x", "y", handler=lambda p, q: reply)
+        self.assertEqual((code, [l.split("\t")[2] for l in lines[1:]]), (0, ["W2"]))
+
+    def test_topic_since_adds_recent_leaders(self):
+        code, lines, urls = self.call("topic", "berrypicking", "--since", "2022", "-n", "2",
+                                      handler=lambda p, q: page(fx("cites.json"), q))
+        self.assertEqual((code, len(urls)), (0, 2))
+        first, second = query(urls[0]), query(urls[1])
+        self.assertNotIn("from_publication_date", first["filter"][0])
+        self.assertEqual((second["filter"], second["sort"], second["per-page"]),
+                         (["title_and_abstract.search:berrypicking,type:!paratext,type:!erratum,type:!editorial,"
+                           "type:!retraction,from_publication_date:2022-01-01"], ["cited_by_count:desc"], ["2"]))
+        self.assertEqual([l for l in lines if l.startswith("#")],
+                         ["# topic\tberrypicking\t1759 matches", "# since\t2022\t1759 matches"])
+        self.assertEqual(len(lines), 6)
+
+    def test_topic_terms_are_cleaned_and_checked(self):
+        code, lines, urls = self.call("topic", "!Search AND browse|scan,", "OR NOT", handler=lambda p, q: fx("empty.json"))
+        self.assertEqual(query(urls[0])["filter"][0].split(",")[0], "title_and_abstract.search:Search and browse scan or not")
+        self.assertEqual((code, lines), (0, ["# topic\tSearch and browse scan or not\t0 matches",
+                                             "# note: no match; try fewer or more general terms, or the field's own words."]))
+        self.forbid("acme secret")
+        for terms in (["acme", "secret", "battery"], ["acme,secret", "battery"]):  # also after cleaning
+            with self.subTest(terms=terms):
+                code, lines, urls = self.call("topic", *terms)
+                self.assertEqual((code, urls), (1, []))
+                self.assertTrue(lines[0].startswith("FAIL\tegress: 'acme secret'"), lines)
+
+    def test_related_lists_neighbors_most_cited_first(self):
+        related = ["https://openalex.org/W2104217798", "https://openalex.org/W2111335329", "https://openalex.org/W1982896842"]
+        def handler(p, q):
+            if p == "/works/W5":
+                return {"id": "https://openalex.org/W5", "display_name": "Seed", "publication_year": 2010, "related_works": related}
+            rows = [w for w in fx("cites.json")["results"] if w["id"].rsplit("/", 1)[-1] in q["filter"][0][9:].split("|")]
+            return {"results": rows[::-1]}
+        code, lines, urls = self.call("related", "W5", "-n", "2", handler=handler)
+        self.assertEqual((code, [path(u) for u in urls]), (0, ["/works/W5", "/works"]))
+        self.assertIn("related_works", query(urls[0])["select"][0])
+        self.assertEqual(query(urls[1])["filter"], ["openalex:W2104217798|W2111335329|W1982896842"])
+        self.assertEqual(lines[0], "# work\tW5\t2010\tSeed\t-")
+        self.assertEqual([l.split("\t")[2] for l in lines[1:]], ["W2111335329", "W2104217798"])
+
+    def test_related_without_neighbors(self):
+        seed = {"id": "https://openalex.org/W6", "display_name": "Alone", "publication_year": 2026, "related_works": []}
+        code, lines, urls = self.call("related", "10.1234/alone", handler=lambda p, q: seed)
+        self.assertEqual((code, len(urls)), (0, 1))
+        self.assertEqual(lines, ["# work\tW6\t2026\tAlone\t-", "# note: OpenAlex lists no related works for this one; "
+                                 "try chain.py cites or refs."])
+
     def test_bad_usage_exits_2(self):
         for argv in (["refs", "just a title"], ["cites", "W1", "-n", "0"], ["refs", "W1", "-n", "201"], ["find"], [],
-                     ["cites", "W1", "--since", "20"], ["cites", "W1", "--sort", "newest"], ["oa", "a title"]):
+                     ["cites", "W1", "--since", "20"], ["cites", "W1", "--sort", "newest"], ["oa", "a title"],
+                     ["topic"], ["topic", "x", "--since", "20"], ["topic", "x", "-n", "0"], ["related", "a title"]):
             with self.subTest(argv=argv), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as cm:
                 m.main(argv)
             self.assertEqual(cm.exception.code, 2)

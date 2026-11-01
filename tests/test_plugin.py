@@ -110,6 +110,18 @@ class PluginTest(unittest.TestCase):
                     self.assertEqual([s for s in subs if s not in known], [])
                     self.assertEqual([f for f in flags if not re.search(re.escape(f) + r"(?![\w-])", help_text)], [])
 
+    def test_every_subcommand_is_documented(self):
+        named = {}
+        for _, text in docs():
+            for script, subs, _ in doc_commands(text):
+                named.setdefault(script, set()).update(subs)
+        for path in sorted(SCRIPTS.glob("*.py")):
+            r = subprocess.run([sys.executable, "-I", str(path), "--help"], capture_output=True, encoding="utf-8",
+                               errors="replace", timeout=60)
+            m = re.search(r"^usage: \S+ \[-h\] \{([\w,-]+)\} \.\.\.", r.stdout, re.M)
+            with self.subTest(script=path.name):
+                self.assertEqual(sorted(set(m.group(1).split(",") if m else []) - named.get(path.name, set())), [])
+
     def test_doc_command_parser(self):
         sample = ("Run `python -I ${CLAUDE_PLUGIN_ROOT}/scripts/models.py snapshot <topic> --board asr`.\n"
                   "| `chain.py find\\|refs` | `fetch.py` alone |\n"

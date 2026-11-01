@@ -1,10 +1,16 @@
-"""Walk citations and authors through the OpenAlex API: references, citing works, an author's works, legal copies.
+"""Walk citations and authors through the OpenAlex API: a topic's most cited works, references, citing works,
+related works, an author's works, legal copies.
 
 Usage:
   chain.py find <doi-or-title>          one work for a DOI or W id, else 5 title candidates by citations
   chain.py refs <id-or-doi> [-n 20]     works the given work references (backward, footnote chasing)
   chain.py cites <id-or-doi> [-n 20] [--sort cited|recent] [--since YEAR]
                                         works citing the given work (forward, citation searching)
+  chain.py topic <anchor terms> [--since YEAR] [-n 20]
+                                        works whose title or abstract has the terms, most cited first, without
+                                        paratext, errata, editorials and retraction notices; --since adds a second
+                                        list of the most cited works published in or after that year
+  chain.py related <id-or-doi> [-n 20]  works OpenAlex lists as related to the given work, most cited first
   chain.py author <name-or-id> [-n 20]  an author's works, most cited first
   chain.py oa <id-or-doi>               the work's open-access copies, best first
 
@@ -18,7 +24,9 @@ oa rows: <published|accepted|submitted|-> <repository|publisher|other> <pdf url 
   <license or ->, copies with a PDF link first, then landing pages; in each, published before accepted before
   submitted, and repository copies (arXiv included) first
 Other lines, a label and then tab-separated fields:
-  # work <W id> <year> <title> <flags or ->      first line of refs, cites and oa
+  # work <W id> <year> <title> <flags or ->      first line of refs, cites, related and oa
+  # topic <terms as sent> <N> matches           first line of topic
+  # since <YEAR> <N> matches                    before topic's second list
   # author <A id> <name> <institution or -> <N> works
   # other matches <A id> <name> (<institution>)  one field; up to 3 lines after the author line
   # note: ...                                    zero results
@@ -52,6 +60,8 @@ RATE_LIMITED = ("rate limited: the OpenAlex daily budget ($1.000, about 1,000 cr
 NOTE_NO_MATCH = "# note: no match; try the DOI, or a shorter title without the subtitle."
 NOTE_NO_OA = ("# note: no open-access copy is listed; look for the author's or lab's page, a technical report or an "
               "institutional repository, or ask the user to open the publisher page in a browser.")
+NOTE_NO_TOPIC = "# note: no match; try fewer or more general terms, or the field's own words."
+NOTE_NO_RELATED = "# note: OpenAlex lists no related works for this one; try chain.py cites or refs."
 NOTE_EMPTY = ("# note: 0 results. OpenAlex often lacks citation links for works under about a year old, so this means "
               "unknown, not none: grep the reference section of the downloaded text, or search for works citing the title.")
 
@@ -242,9 +252,9 @@ def work_key(s):
 
 
 def work(key):
-    """The work for a W id or DOI, with its reference list."""
+    """The work for a W id or DOI, with its reference list and related works."""
     path = "/works/" + urllib.parse.quote(key if key[0] == "W" else "doi:" + key, safe="/:")
-    return get(path, {"select": FIELDS + ",referenced_works"}, missing=key)
+    return get(path, {"select": FIELDS + ",referenced_works,related_works"}, missing=key)
 
 
 def works(flt, n, sort="cited_by_count:desc"):
@@ -267,6 +277,23 @@ def find(q):
     show([work(key)] if key else works("title.search:" + title_query(q), 5), NOTE_NO_MATCH)
 
 
+SKIP_TYPES = ("paratext", "erratum", "editorial", "retraction")  # not works a field cites as its canon
+
+
+def topic(terms, n, since=None):
+    egress(terms)
+    q = title_query(terms)
+    egress(q)  # cleaning turns commas and pipes into spaces, which can form a listed term
+    base = "title_and_abstract.search:" + q + "".join(",type:!" + k for k in SKIP_TYPES)
+    lists = [("# topic\t" + cell(q, 200), base)]
+    if since:
+        lists.append(("# since\t" + since, base + f",from_publication_date:{since}-01-01"))
+    for label, flt in lists:
+        reply = get("/works", {"filter": flt, "sort": "cited_by_count:desc", "per-page": n, "select": FIELDS})
+        print(f"{label}\t{cell((reply.get('meta') or {}).get('count'))} matches")
+        show([w for w in reply.get("results") or [] if w.get("type") not in SKIP_TYPES], NOTE_NO_TOPIC)
+
+
 def header(w):
     print(f"# work\t{cell(short(w.get('id')))}\t{cell(w.get('publication_year'))}\t{cell(w.get('display_name'), 200)}\t{flags(w)}")
 
@@ -280,10 +307,10 @@ def chain(kind, key, n, sort="cited", since=None):
         flt = "cites:" + wid + (f",from_publication_date:{since}-01-01" if since else "")
         rows = works(flt, n, "publication_date:desc" if sort == "recent" else "cited_by_count:desc")
     else:
-        ids = [short(u) for u in w.get("referenced_works") or []]
+        ids = [short(u) for u in w.get("referenced_works" if kind == "refs" else "related_works") or []]
         rows = [r for i in range(0, len(ids), BATCH) for r in works("openalex:" + "|".join(ids[i:i + BATCH]), BATCH)]
         rows = sorted(rows, key=lambda r: -(r.get("cited_by_count") or 0))[:n]
-    show(rows, NOTE_EMPTY)
+    show(rows, NOTE_EMPTY if kind != "related" else NOTE_NO_RELATED)
 
 
 def oa(key):
@@ -345,7 +372,11 @@ def main(argv=None):
     limit.add_argument("-n", type=count, default=20, metavar="N", help="rows to print, 1 to 200 (default 20)")
     p = sub.add_parser("find", help="resolve a DOI or W id, or list 5 title candidates")
     p.add_argument("query", nargs="+", help="a DOI, a doi.org URL, a W id, or the words of a title")
-    for name, what in (("refs", "works the given work references"), ("cites", "works citing the given work")):
+    p = sub.add_parser("topic", parents=[limit], help="the most cited works whose title or abstract has the terms")
+    p.add_argument("terms", nargs="+", help="anchor terms of the field")
+    p.add_argument("--since", type=year, metavar="YEAR", help="add a list of the most cited works published in or after this year")
+    for name, what in (("refs", "works the given work references"), ("cites", "works citing the given work"),
+                       ("related", "works OpenAlex lists as related to the given work")):
         p = sub.add_parser(name, parents=[limit], help=what + ", most cited first")
         p.add_argument("work", type=work_arg, help="W id, openalex.org URL, DOI or doi.org URL")
         if name == "cites":
@@ -362,6 +393,8 @@ def main(argv=None):
             find(" ".join(args.query))
         elif args.cmd == "author":
             author(" ".join(args.name), args.n)
+        elif args.cmd == "topic":
+            topic(" ".join(args.terms), args.n, args.since)
         elif args.cmd == "oa":
             oa(args.work)
         else:
