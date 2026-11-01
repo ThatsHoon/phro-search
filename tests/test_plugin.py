@@ -213,6 +213,26 @@ class PluginTest(unittest.TestCase):
         self.assertRegex(default, r"the user's language too only when the topic is specific to that language's region")
         self.assertNotIn("English and the user's language", default)
 
+    def test_python3_and_readme_requirements(self):
+        scripts = re.search(r"^## Scripts\n\n(.*?)$", read(SKILL), re.M).group(1)
+        self.assertIn("`python3 -I ${CLAUDE_PLUGIN_ROOT}/scripts/<name>.py`", scripts)
+        self.assertRegex(scripts, r"`python` on Windows")
+        readme = read(ROOT / "README.md")
+        req = re.search(r"^## Requirements\n(.*?)(?=^## )", readme, re.M | re.S)
+        self.assertTrue(req, "README has no Requirements section")
+        req = req.group(1)
+        for word in ("Python 3.10", "Git Bash", "poppler", "pdftotext", "tesseract", "pdftoppm", "yt-dlp", "macOS", "Linux",
+                     "Windows", "~/.claude/phro-search/forbidden.txt", ".phro/project.json", "forbidden_terms",
+                     '"Bash(python3 -I ', '"Bash(python -I '):
+            self.assertIn(word, req)
+        install = ast.literal_eval(shared(SCRIPTS / "fetch.py", {"INSTALL"})["INSTALL"].split("=", 1)[1].strip())
+        for tool, commands in install.items():
+            for command in commands:
+                with self.subTest(tool=tool, command=command):
+                    self.assertIn(command.replace("brew install ", ""), req)  # the README may join brew formulae
+        self.assertIn("CLAUDE_CODE_FORK_SUBAGENT=0", readme)
+        self.assertNotRegex(readme, r"(?m)^python -I -m unittest")
+
     def test_doc_command_parser(self):
         sample = ("Run `python -I ${CLAUDE_PLUGIN_ROOT}/scripts/models.py snapshot <topic> --board asr`.\n"
                   "| `chain.py find\\|refs` | `fetch.py` alone |\n"
