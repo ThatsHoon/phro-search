@@ -1,0 +1,47 @@
+id	kind	expect	lang	prompt	note
+dig-en-1	in	dig	en	Trace speculative decoding for LLM inference back to the original papers and archive them.	T5.2 dig task
+dig-en-2	in	dig	en	I'm new to satellite-based wildfire and flood mapping. Find the canonical papers and the operational user guides.	T1.8 topic
+dig-en-3	in	dig	en	Find prior art on retrieval-augmented generation before 2020, down to the original sources.	T5.1 reconstructed
+dig-ko-1	in	dig	ko	정보 탐색 행동 연구, berrypicking 모델 원문까지 파줘.	T5.1 reconstructed
+dig-ko-2	in	dig	ko	음성 대역폭 확장(bandwidth extension) 선행 연구 찾아줘. 대표 논문이랑 실무자들 방법까지.	T5.1 reconstructed
+report-en-1	in	report	en	pandas vs Polars vs DuckDB for 5 to 20 GB tables on one 32 GB machine: write me a decision-ready report.	T5.3 formalized report topic
+report-en-2	in	report	en	Compare open-source vector databases for a 50M-vector production search service and recommend one, with checked claims.	T5.1 reconstructed
+report-ko-1	in	report	ko	라즈베리파이 5에서 돌릴 오픈소스 OCR 엔진들 비교해서 보고서로 정리해줘.	T5.1 reconstructed
+report-ko-2	in	report	ko	사내 LLM 서빙 프레임워크로 vLLM, TGI, SGLang 중 뭘 쓸지 근거 확인해서 보고서로 정리해줘.	T5.1 reconstructed
+report-ko-3	in	report	ko	자율주행 지도 표준 현황(OpenDRIVE, NDS, Lanelet2)을 정리한 보고서 써줘.	T5.1 reconstructed; landscape report
+pulse-en-1	in	pulse	en	What have people been saying about uv, the Python package manager, in the last 14 days?	T5.3 pulse topic
+pulse-en-2	in	pulse	en	What did the community ship or argue about in AI agent tooling over the last 30 days?	T3.5 topic
+pulse-ko-1	in	pulse	ko	요즘 반응 어때? 소형 다국어 LLM 쪽으로 지난 30일.	T3.5 topic
+pulse-ko-2	in	pulse	ko	지난 일주일 동안 Claude Code 플러그인 관련해서 레딧이랑 HN에서 무슨 얘기 나왔는지 알려줘.	T5.1 reconstructed
+pulse-ko-3	in	pulse	ko	전화 음성 대역폭 확장 쪽 최근 한 달 동향 좀 봐줘.	T3.5 topic
+docs-en-1	in	docs	en	What timeout does requests.get use when none is passed? Check the docs and the source.	T5.2 docs task
+docs-en-2	in	docs	en	Does SQLite in WAL mode allow two writers? Cite the official docs.	T5.1 verbatim; stayed off in 3 of 3 runs after the tune
+docs-ko-1	in	docs	ko	FastAPI에서 BackgroundTasks가 응답을 보낸 다음에 실행되는 게 맞는지 문서랑 소스로 확인해줘.	T5.1 reconstructed
+docs-ko-2	in	docs	ko	PyTorch DataLoader의 persistent_workers가 에폭 사이에 워커를 정말 유지하는지 소스 코드에서 확인해줘.	T5.1 reconstructed
+models-en-1	in	models	en	best small embedding model for on-device semantic search on a phone	T5.1 verbatim; went to huggingface-best in 3 of 3 runs
+models-en-2	in	models	en	Which TTS model should I use for zero-shot voice cloning with streaming, under 2B parameters?	T4.5 request
+models-en-3	in	models	en	best model for classifying short texts under 150M parameters, from public leaderboards	T4.5 request
+models-ko-1	in	models	ko	온디바이스 한국어 음성 인식 모델 추천해줘. 가중치 1GB 이하로.	T4.5 request
+models-ko-2	in	models	ko	독일어 회의 녹음 받아쓰기에 쓸 ASR 모델 추천. 4비트 1GB 이하, 라이선스는 Apache나 MIT.	T5.3 models topic
+watch-en-1	in	watch	en	Check the venues of my satellite flood mapping topic for new posts since 2026-10-01.	T5.2 watch task
+watch-en-2	in	watch	en	Any new papers or posts from the feeds my speculative decoding topic follows?	T5.1 reconstructed
+watch-ko-1	in	watch	ko	berrypicking 토픽에서 아는 venue들 새 글 확인해줘.	T5.1 reconstructed
+watch-ko-2	in	watch	ko	대역폭 확장 토픽 피드에 지난주 이후 새로 올라온 거 있어?	T5.1 reconstructed
+out-en-1	out	none	en	Write a Python function that reverses a linked list.	T5.1 reconstructed
+out-en-2	out	none	en	What's the default port of PostgreSQL?	T5.1 reconstructed; a single fact
+out-en-3	out	none	en	Rename the variable x to count everywhere in main.py.	T5.1 reconstructed
+out-ko-1	out	none	ko	이 문장 영어로 번역해줘: 회의는 다음 주로 미뤄졌습니다.	T5.1 reconstructed
+out-ko-2	out	none	ko	240의 15퍼센트가 얼마야?	T5.1 reconstructed
+out-ko-3	out	none	ko	이 레포에서 TODO 주석 전부 찾아줘.	T5.1 reconstructed; a local file search
+near-ko-1	near	none	ko	아래 회의록 보고서로 정리해줘: 10/28 주간회의. 참석 김, 이, 박. 결정: 배포는 11/5로 연기, QA 인력 1명 추가. 할 일: 이가 릴리스 노트 초안, 박이 회귀 테스트 목록 정리.	R1, P9: a document in hand
+near-ko-2	near	none	ko	방금 붙여준 설문 결과 보고서로 정리해줘: 응답 42명, 만족 31명, 보통 8명, 불만 3명. 불만 사유는 로딩 속도 2명, 가격 1명.	R1, P9: a document in hand
+near-en-1	near	none	en	Turn these notes into a short report for my manager: shipped login fix, two flaky tests left, on-call handover Friday.	P9: a document in hand
+near-en-2	near	none	en	What's the best model for my tabular churn data in scikit-learn? 5k rows, 20 numeric features, binary label.	R1: a scikit-learn best model for
+near-ko-3	near	none	ko	사이킷런으로 이 분류 데이터에 제일 좋은 모델이 뭐야? 샘플 3천 개, 피처 15개야.	R1: a scikit-learn best model for
+near-ko-4	near	none	ko	슬랙 #ml-infra 채널 새 글 확인해줘.	R1: Slack
+near-en-3	near	none	en	Check for new posts in our Slack #releases channel since yesterday.	R1: Slack
+near-ko-5	near	none	ko	테스트가 또 깨졌어. 원인 좀 파줘.	R1: a coding-session complaint
+near-en-4	near	none	en	Why does this build keep failing on CI? Dig into it.	R1: a coding-session complaint
+near-ko-6	near	none	ko	pytest가 요즘 너무 느려졌어. 왜 그런지 찾아줘.	R1: a coding-session complaint
+near-en-5	near	none	en	Summarize the README in this repo for me.	P9: summarizing a document in hand
+near-ko-7	near	none	ko	내가 학습시킨 두 모델 결과 비교해줘: A는 F1 0.81, B는 F1 0.79, 추론은 A가 2배 느려.	P9: a model choice that needs no leaderboard
