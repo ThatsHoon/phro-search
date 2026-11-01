@@ -96,7 +96,7 @@ Write `<topic>/pulse/<stem>.md` (the stem of the result, such as `2026-10-30`) i
 - At least one quote per cluster, copied exactly (whitespace may differ; "..." joins pieces kept in order). Its author, lane and link go on the line after it, with a translation when the quote is not in the user's language.
 - A failed, partial, rate-limited or skipped lane is named on the coverage line with its reason; it is never reported as silence.
 - Prose, no tool narration; numbers as the lanes gave them ("412 points, 230 comments").
-- Run `check.py --kind pulse <topic>/pulse/<stem>.md` and rewrite only the flagged spots until it prints OK.
+- Check the brief with `check.py --kind pulse <topic>/pulse/<stem>.md`.
 
 ## 8. Deliver
 

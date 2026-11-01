@@ -174,6 +174,14 @@ class PluginTest(unittest.TestCase):
                     if re.search(r"(claims\.json|plan\.json|notes/)[^\n]*`references/formats\.md`", line)]
         self.assertEqual(pointers, [])
 
+    def test_check_loop_on_a_saved_file(self):
+        rules = read(SKILL).split("## Rules for every mode", 1)[1]
+        self.assertRegex(" ".join(rules.split()), r"(?i)write the whole reply[^\n]*to a file[^\n]*`check\.py`[^\n]*edit only the "
+                                                  r"spans it flags")
+        texts = docs() + [("STYLE.md", read(ROOT / "STYLE.md"))] + [(p.name, read(p)) for p in sorted((ROOT / "agents").glob("*.md"))]
+        self.assertEqual([name for name, text in texts if re.search(r"(?i)flagged spot|flagged span|spans it flags|until it prints|exact reply", text)],
+                         ["SKILL.md"])  # one home for the loop
+
     def test_doc_command_parser(self):
         sample = ("Run `python -I ${CLAUDE_PLUGIN_ROOT}/scripts/models.py snapshot <topic> --board asr`.\n"
                   "| `chain.py find\\|refs` | `fetch.py` alone |\n"

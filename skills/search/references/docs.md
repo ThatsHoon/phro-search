@@ -61,6 +61,6 @@ Question: <question>. Use: <use>. Version: <name> <version>. Date: <YYYY-MM-DD>.
 ```
 
 - Every line under Evidence cites code (`<path>:<line>` with the version) or the version's documentation (URL and section); a claim resting on a blog or Q&A answer goes under Caveats as unconfirmed. Where the code and the docs disagree, the installed code wins for this version, and the disagreement goes under Caveats.
-- Run `check.py <path>` and rewrite only the flagged spots until it prints OK.
+- Check the note with `check.py <path>`.
 - Reply in the user's language with the note path and the answer in at most 3 lines. "Not found in primary sources", with what was checked, is a valid answer.
 - Ask the feedback question in one line; docs keeps no log and no topic folder.

@@ -25,4 +25,4 @@ Output rules for the prose written for the user: chat answers, briefs, and the p
 
 ## Check
 
-`check.py` prints each problem as `<line>:<rule>: <detail>`. A count over its limit prints a line 0 summary, then each hit with its line. Rewrite only the flagged spots, then run it again until it prints `OK`. Quote lines, fenced code, inline code and URLs are not checked, except for invisible characters.
+`check.py` prints each problem as `<line>:<rule>: <detail>`. A count over its limit prints a line 0 summary, then each hit with its line. Quote lines, fenced code, inline code and URLs are not checked, except for invisible characters.

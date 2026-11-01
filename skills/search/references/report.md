@@ -121,7 +121,7 @@ Write the report in this session, where the claims, votes and extracts already a
 - Cite claims inline as [c3] or [c3, c7]. Every fact cites a claim; add nothing that is not in claims.json.
 - The BLUF and the conclusion cite survived claims only. A refuted claim appears in a section only as refuted, with why.
 - Prose, not lists, outside the tables. Say what is unknown, give the strongest case for the other side, and take a position where the evidence allows one.
-- Run `check.py --kind report <topic>/report-<stem>.md` and rewrite only the flagged spots until it prints OK.
+- Check the report with `check.py --kind report <topic>/report-<stem>.md`.
 
 ## Deliver
 

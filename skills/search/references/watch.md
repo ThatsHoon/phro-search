@@ -29,7 +29,6 @@ In the user's language, per item: title, date, venue, and the original's first l
 - Over 20 new items: deliver the ones picked from the index, and say what was left out and where the full list is (`watch/<file>.md`). Picking selects; it never summarizes.
 - Quiet feeds' latest items go last, briefly. Failed feeds are listed with their reason; a failed feed is never reported as quiet.
 - Download only what the user picks, or what bears on a required claim: `fetch.py <topic>/sources <name> <url>`, then add it to the sources table with its label.
-- Run `check.py` on the exact reply after its last edit, then send that text unchanged.
 
 ## 5. Back to dig
 

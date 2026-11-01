@@ -109,7 +109,7 @@ Caveats, every one that applies:
 
 ## 6. Deliver
 
-Run `check.py --kind models <topic_dir>/models-<date>.md` and rewrite only the flagged spots until it prints OK. Then reply in the user's language, with no lead-in: the one-line answer, the table's top rows, the pick and alternates with when to choose each, the caveats, the check on their data, the file path and the feedback question. Log the run (board, snapshot, filters, models followed, hops, minutes).
+Check the file with `check.py --kind models <topic_dir>/models-<date>.md`. Then reply in the user's language, with no lead-in: the one-line answer, the table's top rows, the pick and alternates with when to choose each, the caveats, the check on their data, the file path and the feedback question. Log the run (board, snapshot, filters, models followed, hops, minutes).
 
 Stop when every model on the front that was followed has its metric, size, license and each must-have feature confirmed, denied or not stated after the hops.
 
