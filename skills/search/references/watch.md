@@ -19,6 +19,7 @@ Pick venues from the map's Venues and People and add each with `watch.py add <to
 `watch.py check <topic_dir>` lists what is new since the last check. A feed's first check shows the last 14 days (`--days N` changes that). Each run is saved as `watch/<date-time>.md`; earlier runs are never overwritten.
 - A quiet feed still shows its latest item whatever its date, so a big post just outside the window stays visible.
 - A first check records the items outside its window as seen; to widen the window afterwards, run `watch.py check <topic_dir> --days 30 --fresh`.
+- Exit codes: exit 0 when some feeds failed and others answered or were quiet, so read the `FAIL` lines, not only the code; exit 1 when every feed failed. A failed feed was already retried on a 429, a 5xx or a timeout; check it again later rather than at once.
 
 ## 4. Deliver
 

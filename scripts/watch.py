@@ -14,6 +14,10 @@ output, one tab-separated line per result:
   FAIL    url or name  reason
   # note
 
+exit codes: add and list exit 1 on a FAIL line, else 0. check: exit 0 when every feed answered or was quiet, and also
+exit 0 when some feeds failed and others answered or were quiet (their FAIL lines name them); exit 1 when every feed
+failed, or for a bad state file.
+
 requests: 1 s apart per host (export.arxiv.org 3 s). A 429, a 5xx or a timeout is retried after 2, 4 and 8 s (after
 Retry-After when it asks 60 s or less); any other status is not, nor a 403 or 503 from a bot check. All requests of one
 run share a deadline of 100 s: no request starts and no retry waits past it, and the feeds left then fail.

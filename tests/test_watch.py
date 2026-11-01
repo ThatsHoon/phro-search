@@ -184,6 +184,19 @@ class WatchTest(unittest.TestCase):
         self.assertEqual(out[3], "# 2 new from 1 feeds, 0 quiet, 1 failed: watch/2026-10-30-1200.md")
         self.assertEqual(list(self.state()), [ATOM])
 
+    def test_check_exit_codes(self):
+        self.feeds(("rss", "flaky", RSS), ("atom", "down", ATOM))
+        code, out, _ = self.run_watch({RSS: [503, fixture("rss.xml")], ATOM: 404}, "check")  # one answered after a 503
+        self.assertEqual((code, out[-2]), (0, "FAIL\tdown\thttp 404"))
+        code, out, _ = self.run_watch({RSS: fixture("rss.xml"), ATOM: 404}, "check")  # nothing new now: quiet
+        self.assertEqual((code, out[0].split("\t")[0]), (0, "LATEST"))
+        code, out, _ = self.run_watch({RSS: [503] * 4, ATOM: 404}, "check")  # every feed failed
+        self.assertEqual((code, out[-1].split(", ")[-1].split(":")[0]), (1, "2 failed"))
+        doc = (Path(__file__).resolve().parents[1] / "skills" / "search" / "references" / "watch.md").read_text(encoding="utf-8")
+        for text in (m.__doc__, doc):  # the exit codes are stated where the model and a reader look
+            self.assertIn("exit 1 when every feed failed", " ".join(text.split()))
+            self.assertIn("exit 0 when some feeds failed and others answered", " ".join(text.split()))
+
     def test_titles_with_control_and_bidi_characters_print_clean(self):
         dirty = ("<rss><channel><title>T</title><item><title>Safe\U0000202e\U0000200b\x85 \U0000201cquoted\U0000201d\ttitle</title>"
                  "<link>https://e.example.com/1</link><pubDate>Thu, 29 Oct 2026 00:00:00 GMT</pubDate>"
