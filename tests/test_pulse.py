@@ -423,5 +423,14 @@ class PulseTest(unittest.TestCase):
             self.assertEqual((str(e.exception), e.exception.rate, len(opener.urls)), (why, rate, 1))
 
 
+    def test_a_lane_error_keeps_its_message(self):
+        def broken(st, ctx):
+            raise KeyError("points")
+            yield
+        with mock.patch.dict(m.SEARCH, {"hn": (broken, None)}):
+            code, lines, _, _ = self.run_pulse({"subqueries": [sub(lanes=("hn",))]}, [])
+        lane = next(f for f in (line.split("\t") for line in lines) if f[0] == "LANE")
+        self.assertIn("error: KeyError: 'points'", "\t".join(lane))
+
 if __name__ == "__main__":
     unittest.main()

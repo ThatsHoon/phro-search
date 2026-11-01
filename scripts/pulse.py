@@ -408,6 +408,12 @@ def youtube_search(st, ctx):
     yield from found.values()
 
 
+def reason_of(e):
+    """An exception as a short reason: its type and, when it has one, its message."""
+    msg = clean(e, 120)
+    return clean(type(e).__name__, 40) + (f": {msg}" if msg else "")
+
+
 def ytdlp(st, ctx, cmd):
     """Standard output of one yt-dlp call, cut at the lanes' deadline; None after noting why it gave nothing."""
     st["requests"] += 1
@@ -417,7 +423,7 @@ def ytdlp(st, ctx, cmd):
         st["errors"].append("yt-dlp timeout")
         return None
     except OSError as e:
-        st["errors"].append(f"yt-dlp: {clean(type(e).__name__, 40)}")
+        st["errors"].append(f"yt-dlp: {reason_of(e)}")
         return None
     if r.returncode != 0:
         st["errors"].append(f"yt-dlp exit {r.returncode}")
@@ -439,7 +445,7 @@ def run_lane(name, st, ctx):
             for i in best[:TOP_ITEMS]:
                 st["comments"][i["id"]] = comments(st, ctx, i)
     except Exception as e:  # a bug or an odd response fails this lane only
-        st["errors"].append(f"error: {clean(type(e).__name__, 40)}")
+        st["errors"].append(f"error: {reason_of(e)}")
     st["done"] = True
 
 
