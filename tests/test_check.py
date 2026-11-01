@@ -260,6 +260,16 @@ Start new pipelines in Polars and keep pandas at the plotting edge [c1, c2].
 |---|---|
 | c1 | faster joins |
 """
+TABLED = REPORT.replace("""## Polars is faster on joins
+""", """## Polars wins on speed, pandas on reach
+
+| option | join speed | ecosystem |
+|---|---|---|
+| Polars | faster [c1] | unknown |
+| pandas | slower [c1] | widest [c2] (unverified) |
+
+## Polars is faster on joins
+""")
 VERDICTS = [{"id": "c1", "verdict": "survived"}, {"id": "C2", "verdict": "survived"},
             {"id": "c3", "verdict": "refuted"}, {"id": "c4"}]
 
@@ -354,6 +364,37 @@ class ReportKindTest(unittest.TestCase):
     def test_style_rules_still_apply(self):
         code, out = self.run_report(REPORT.replace("faster [c1]", "faster [c1] \U00002014 by far"))
         self.assertEqual((code, out[0][:7]), (1, "3:dash:"))
+
+    def test_table_cells_cite_a_claim_or_say_unknown(self):
+        self.assertEqual(self.run_report(TABLED), (0, ["OK"]))
+        self.assertEqual(self.problems(TABLED.replace("| unknown |", "| 알 수 없음 |")), [])
+        self.assertEqual(self.problems(TABLED.replace("| unknown |", "| UNKNOWN |")), [])
+        self.assertEqual(self.problems(TABLED.replace("| unknown |", "| 알려지지 않음 |")), [])
+        text = TABLED.replace("| unknown |", "| large |").replace("widest [c2] (unverified)", "widest")
+        self.assertEqual(m.report_problems(text, {"c1": "survived", "c2": "survived", "c3": "refuted"}),
+                         [(9, "table", 'ecosystem: "large" cites no claim; cite it as [c1] or write unknown'),
+                          (10, "table", 'ecosystem: "widest" cites no claim; cite it as [c1] or write unknown')])
+        code, out = self.run_report(text)
+        self.assertEqual((code, out[-1]), (1, "FAIL\t2 problems"))
+
+    def test_table_scope(self):
+        # The header row and the first column name things; an empty cell cites nothing.
+        self.assertEqual(self.problems(TABLED.replace("| unknown |", "|  |")), [(9, "table")])
+        # A cell with an escaped pipe stays one cell; a table without a leading pipe is still a table.
+        self.assertEqual(self.problems(TABLED.replace("faster [c1]", "a \\| b [c1]")), [])
+        bare = TABLED.replace("| Polars | faster [c1] | unknown |", "Polars | faster | unknown")
+        self.assertEqual(self.problems(bare.replace("| option | join speed | ecosystem |", "option | join speed | ecosystem")
+                                       .replace("|---|---|---|", "---|---|---")), [(9, "table")])
+        # Every section up to the conclusion is in scope, the conclusion included, and ### subsections with them.
+        self.assertEqual(self.problems(REPORT.replace("[c1, c2].", "[c1, c2].\n\n| pick | why |\n|---|---|\n| Polars | fast |")),
+                         [(23, "table")])
+        self.assertEqual(self.problems(REPORT.replace("32 GB of memory.", "32 GB of memory.\n\n| a | b |\n|---|---|\n| x | y |")),
+                         [(15, "table")])
+        # The evidence table and the sections after it are exempt, and so is a table in fenced code.
+        self.assertEqual(self.problems(REPORT + "\n## Refuted and unverified claims\n\n| id | why |\n|---|---|\n| c3 | two refutations |\n"), [])
+        self.assertEqual(self.problems(TABLED.replace("| Polars | faster [c1] | unknown |", "```\n| Polars | fast | big |\n```")), [])
+        # Pipes in prose without a separator line are not a table.
+        self.assertEqual(self.problems(REPORT.replace("10 GB table [c1].", "10 GB table [c1], a | b.")), [])
 
 
 BRIEF = """# 위젯 엔진 30일 동향

@@ -143,6 +143,20 @@ class PluginTest(unittest.TestCase):
         homes = [name for name, text in docs() if re.search(r"(?i)\bnormative\b", text)]
         self.assertEqual(homes, ["report.md"])  # one home for the rule
 
+    def test_report_decision_template(self):
+        report = read(REFS / "report.md")
+        before = re.search(r"^## Before spawning\n(.*?)(?=^## )", report, re.M | re.S).group(1)
+        self.assertNotIn("measurements) when the question is contested", before)  # every choice, not only contested ones
+        self.assertRegex(before, r"choice between options[^\n]*independent viewpoint")
+        self.assertRegex(before, r"\| a choice between options on criteria \| 4 or 5")
+        self.assertIn('"report: 5 researchers, 1 support reader, up to 30 verifier calls: at most 38 agent calls"', before)
+        write = re.search(r"^## Write\n(.*?)(?=^## Deliver)", report, re.M | re.S).group(1)
+        for words in ("decision table", "When another option wins", "What would change this answer", "1 to 3",
+                      "unknown", "unverified", "entities", "key questions", "landscape", "standards"):
+            self.assertIn(words.lower(), write.lower())
+        homes = [name for name, text in docs() if re.search(r"(?i)what would change this answer", text)]
+        self.assertEqual(homes, ["report.md"])  # one home for the rule
+
     def test_doc_command_parser(self):
         sample = ("Run `python -I ${CLAUDE_PLUGIN_ROOT}/scripts/models.py snapshot <topic> --board asr`.\n"
                   "| `chain.py find\\|refs` | `fetch.py` alone |\n"

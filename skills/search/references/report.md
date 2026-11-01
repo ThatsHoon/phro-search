@@ -6,17 +6,17 @@ A decision-ready answer from many sources. Researchers gather findings with exac
 
 - The confirmed brief heads `map.md`. Its required claims are 3 to 6 key questions (Q1 to Q6) the report must answer, at least one in the request's own words.
 - Decision criteria: for a choice between options, the axes they are compared on (cost, accuracy, license, effort), taken from the brief's use and constraints.
-- Subtopics: split the question so that no two overlap and together they cover every key question. Add one viewpoint independent of the vendors (critics, failure reports, independent measurements) when the question is contested.
+- Subtopics: split the question so that no two overlap and together they cover every key question. For a choice between options, one researcher always takes the viewpoint independent of the vendors (critics, failure reports, independent measurements) across every option; add that viewpoint to any other question when it is contested.
 
 | The question | Researchers |
 |---|---|
 | one focused question | 3: how it works and where it is used; measured results; limits, failures and criticism |
-| a choice between options on criteria | 3 or 4, one per group of criteria, each covering every option |
-| options, entities or regions taken one by one | one per option, at most 5, plus one for head-to-head comparisons when they exist |
+| a choice between options on criteria | 4 or 5: one per group of criteria, each covering every option, and the independent viewpoint |
+| options, entities or regions taken one by one | one per option, at most 5, plus one for head-to-head comparisons when they exist, and the independent viewpoint when the options are a choice |
 | a large set to enumerate | at most 6 slices along a natural split (kind, year, region) |
 
 - Checkpoint: show the subtopics and the decision criteria in one round before spawning. Skip it when the user's brief already named them or there is no user to answer; log the skip and why.
-- Plan line: "report: 4 researchers, 1 support reader, up to 30 verifier calls: at most 37 agent calls" (researchers, at most 2 for a gap round, the support reader, 3 per central claim).
+- Plan line: "report: 5 researchers, 1 support reader, up to 30 verifier calls: at most 38 agent calls" (researchers, at most 2 for a gap round, the support reader, 3 per central claim).
 
 ## Research
 
@@ -97,12 +97,16 @@ Write the report in this session, where the claims, votes and extracts already a
 ```
 # <title>
 <one paragraph that answers the question first (BLUF), naming its as-of date (YYYY-MM-DD) and citing the claims it rests on>
+## <a heading that states the pick, or the landscape's main finding>: the decision table (a choice), or the table of entities by key questions (a landscape or standards report)
 ## <3 to 5 sections whose headings state their finding>
+## <when another option wins> (a choice): the conditions under which another option is the better pick, each citing the claims behind it
+## <what would change this answer> (a choice): the 1 to 3 central claims the pick rests on most, and for each the check the user can run
 ## <a heading that starts with the word for conclusion in the report's language>: new implications only, citing the claims they rest on
 ## <evidence>: a table with the columns id, claim, label, location (sources/<file>:<line>, or URL only), URL, vote
 ## <refuted and unverified claims>: each with the reason from its votes
 ```
 
+- The decision table: the options as rows, the brief's decision criteria as columns. Each cell is a short value with the claims behind it ("40 ms [c3]"), or unknown, in the report's language, when no claim backs it. Mark a cell unverified when none of its claims survived votes; a refuted claim never fills a cell. A landscape or standards report has no pick: its table puts the entities (projects, vendors, standards) as rows and the key questions as columns, under the same cell rule, and it has no "when another option wins" or "what would change this answer".
 - Cite claims inline as [c3] or [c3, c7]. Every fact cites a claim; add nothing that is not in claims.json.
 - The BLUF and the conclusion cite survived claims only. A refuted claim appears in a section only as refuted, with why.
 - Prose, not lists, outside the tables. Say what is unknown, give the strongest case for the other side, and take a position where the evidence allows one.
