@@ -73,7 +73,8 @@ intake: level=<formalized|conscious|compromised|visceral>; rounds=<n>; questions
 stop: <dig: claims sourced | saturation k of n | 4 rounds | wall | budget; report: answered | budget>
 stopped agents: <none | which>
 intake-end: rescopes=<n>; drift=<claims added, dropped, reworded>
-feedback: "<the user's answer, verbatim>"
+feedback: fit=<yes|partly|no>; missing=<what the answer says is missing or off: item | item, or none>
+- feedback, verbatim: "<the user's answer>"
 ```
 
 The `brief:` and `feedback:` lines start at column 0 so that later intakes can grep them. Modes with other steps log them in this shape; their references name the sections.
