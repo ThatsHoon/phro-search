@@ -14,7 +14,9 @@ output, one tab-separated line per result:
   kind    name  feed  source                    (list)
   NEW     date  name  title  url  first line    (check, newest first; the original's first line, no summary; for an
                                                 openalex source the DOI, else the landing page, and the abstract's
-                                                first sentence rebuilt from OpenAlex's abstract_inverted_index)
+                                                first sentence rebuilt from OpenAlex's abstract_inverted_index; an
+                                                openalex source is read back to the last check, at most 500 works,
+                                                and a # note says when that cap cut it)
   INDEX   n  date  name  short title            (check, over 20 new items: a numbered index instead of NEW lines,
                                                 newest first; item n's link and first line are under "- n. " in
                                                 watch/<UTC time>.md)
@@ -57,6 +59,7 @@ RETRY_AFTER_CAP = 60  # longest Retry-After honored, in seconds; a longer one ge
 INDEX_OVER, SHORT = 20, 60  # over this many new items, check prints a numbered index of titles cut to SHORT characters
 DEADLINE = 100  # seconds for all requests of one run together, under the Bash tool's default 2-minute timeout
 MIN_SHARE = 5  # fewest seconds a feed gets of the time left, however many feeds remain
+OA_PAGES = 5  # pages of 100 works read per openalex source and check, back to the check's start date
 BOT_CHECK = (b"just a moment", b"checking your browser", b"captcha", b"verify you are human", b"are you a robot",
              b"attention required", b"challenge-platform", b"/cdn-cgi/challenge", b"ddos-guard")
 
@@ -263,15 +266,17 @@ def first_sentence(text):
     return clean(text[:m.end()] if m else text, 200)
 
 
-def _works(body):
+def _works(body, counted=None):
     """Items of an OpenAlex works response, {"results": [work, ...]}: the DOI, else the landing page, else the work's
-    OpenAlex URL, with the abstract's first sentence."""
+    OpenAlex URL, with the abstract's first sentence. The number of works in the response is appended to counted."""
     try:
         rows = json.loads(body)["results"]
         if not isinstance(rows, list):
             raise TypeError
     except (ValueError, KeyError, TypeError):
         raise Fail("not an OpenAlex works response") from None
+    if counted is not None:
+        counted.append(len(rows))
     items = []
     for w in (w for w in rows if isinstance(w, dict)):
         loc = w.get("primary_location") if isinstance(w.get("primary_location"), dict) else {}
@@ -303,6 +308,19 @@ def request_url(kind, feed, now):
     params = [(k, v + f",to_publication_date:{now:%Y-%m-%d}" if k == "filter" else v)
               for k, v in urllib.parse.parse_qsl(u.query, keep_blank_values=True)]
     return with_key(urllib.parse.urlunsplit(u._replace(query=urllib.parse.urlencode(params, safe=":,"))))
+
+
+def openalex_items(feed, now, since):
+    """(items, cut) of an openalex source: pages of its newest works, read until a work predates since (a UTC
+    datetime) or a page comes back short; cut is True when OA_PAGES pages ran out first."""
+    items = []
+    for page in range(1, OA_PAGES + 1):
+        url = request_url("openalex", feed, now)
+        rows = _works(fetch(url if page == 1 else f"{url}&page={page}"), counted := [])
+        items += rows
+        if counted[0] < 100 or any(i["date"] and i["date"] < since for i in rows):
+            return items, False
+    return items, True
 
 
 def openalex_source(spec):
@@ -515,7 +533,7 @@ def cmd_check(a):
     if not isinstance(state, dict):
         return fail(sp, "not a valid state file; fix or remove it")
     now = datetime.now(timezone.utc)
-    new, quiet, failed, busy = [], [], [], 0
+    new, quiet, failed, notes, busy = [], [], [], [], 0
     global _feed_end
     for k, f in enumerate(feeds):
         try:  # the terms are read again for every feed, so a list changed since add still guards it
@@ -528,20 +546,31 @@ def cmd_check(a):
             continue
         if _end is not None:  # an equal share of the time left, so one slow feed cannot starve the rest
             _feed_end = time.monotonic() + max(MIN_SHARE, (_end - time.monotonic()) / (len(feeds) - k))
+        old = state.get(f["feed"])
+        first = old is None or a.fresh
+        # an openalex source lists only works published since the last check, not older ones indexed late
+        since = now - timedelta(days=a.days) if first else to_utc(str(old.get("checked", ""))[:10])
         try:
-            items = parse(fetch(request_url(f["kind"], f["feed"], now)), f["kind"])[2]
+            if f["kind"] == "openalex":
+                start = since or now - timedelta(days=a.days)
+                items, cut = openalex_items(f["feed"], now, start)
+                if cut:
+                    notes.append(f"{clean(f['name'])}: the newest {OA_PAGES * 100} works reach back only to "
+                                 f"{_day(min((i['date'] for i in items if i['date']), default=None))}; older ones since "
+                                 f"{start:%Y-%m-%d} were not read")
+            else:
+                items = parse(fetch(f["feed"]), f["kind"])[2]
         except Fail as e:
             failed.append((f["name"], str(e)))
             continue
         finally:
             _feed_end = None
-        old = state.get(f["feed"])
-        if old is None or a.fresh:
-            picked = [i for i in items if i["date"] and i["date"] >= now - timedelta(days=a.days)]
-        else:  # an openalex source lists only works published since the last check, not older ones indexed late
+        if first:
+            picked = [i for i in items if i["date"] and i["date"] >= since]
+        else:
             seen = set(old.get("seen", []))
-            since = to_utc(str(old.get("checked", ""))[:10]) if f["kind"] == "openalex" else None
-            picked = [i for i in items if i["url"] not in seen and (since is None or (i["date"] and i["date"] >= since))]
+            cut_off = since if f["kind"] == "openalex" else None
+            picked = [i for i in items if i["url"] not in seen and (cut_off is None or (i["date"] and i["date"] >= cut_off))]
         if picked:
             busy += 1
             new += [(i, f["name"]) for i in picked]
@@ -568,6 +597,8 @@ def cmd_check(a):
     for name, why in failed:
         print(f"FAIL\t{clean(name)}\t{clean(why)}")
         md.append(f"- {clean(name)}: {clean(why)}")
+    if notes:
+        md += ["", "## Notes", ""] + [f"- {n}" for n in notes]
     (top / "watch").mkdir(parents=True, exist_ok=True)
     stem, n = now.strftime("%Y-%m-%d-%H%M"), 1
     while True:  # never overwrite an earlier check
@@ -583,6 +614,8 @@ def cmd_check(a):
     os.replace(tmp, sp)
     if len(new) > INDEX_OVER:
         print(f"# over {INDEX_OVER} new items, so an index: grep -n -A1 '^- <n>\\. ' watch/{path.name} for an item's link and first line")
+    for n in notes:
+        print(f"# {n}")
     print(f"# {len(new)} new from {busy} feeds, {len(quiet)} quiet, {len(failed)} failed: watch/{path.name}")
     return 1 if failed and not (new or quiet) else 0
 

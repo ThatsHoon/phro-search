@@ -371,6 +371,21 @@ class WatchTest(unittest.TestCase):
         self.assertIn(["Late-indexed widget paper", "https://journal.example.com/article/4"],
                       [ln.split("\t")[3:5] for ln in out if ln.startswith("NEW")])
 
+    def test_openalex_source_pages_back_to_the_last_check(self):
+        self.feeds(("openalex", "Journal of Widgets", OA_FEED))
+        full = lambda day, start: works(*[work(start + k, f"Paper {start + k}", day) for k in range(100)])
+        routes = {OA_NOW: full("2026-10-29", 0), OA_NOW + "&page=2": works(work(500, "Paper 500", "2026-10-25"),
+                                                                           work(501, "Too old", "2026-09-01"))}
+        code, out, urls = self.run_watch(routes, "check")  # first check: --days back (14)
+        self.assertEqual(urls, [OA_NOW, OA_NOW + "&page=2"])
+        self.assertTrue(any("Paper 500" in ln for ln in out))
+        self.assertFalse(any("Too old" in ln for ln in out))
+        with mock.patch.object(m, "OA_PAGES", 1):
+            code, out, urls = self.run_watch({OA_NOW: full("2026-10-30", 200)}, "check", "--fresh")
+        self.assertEqual(urls, [OA_NOW])
+        self.assertIn("# Journal of Widgets: the newest 100 works reach back only to 2026-10-30; older ones since 2026-10-16 "
+                      "were not read", out)
+
     def test_openalex_source_by_name(self):
         def search(*names):
             return json.dumps({"results": [{"id": f"https://openalex.org/S{n}", "display_name": d} for n, d in names]}).encode()
