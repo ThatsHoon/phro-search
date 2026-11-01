@@ -1,6 +1,6 @@
 # phro-search structure review
 
-Date: 2026-11-01. Base: commit d233fd6 (main). The owner confirmed the decisions in section 3 and the backlog list in section 5 on 2026-11-01, over two rounds of questions and a final confirmation of the summary, after sending a first round back for rethinking; text marked "consequence" follows directly from them. Section 4 lists the reviewer's proposals that were not confirmed, and section 7 lists what is still open. This review changed no plugin code.
+Date: 2026-11-01. Base: commit d233fd6 (main). The owner confirmed the decisions in section 3 and the backlog list in section 5 on 2026-11-01, over two rounds of questions and a final confirmation of the summary, after sending a first round back for rethinking. After the first version of this document, the owner also accepted the 18 details in section 4 and re-confirmed two decisions that rested on corrected facts (R1's eval environment, R17's Windows shell). Text marked "consequence" follows directly from the decisions; section 7 lists what is still unknown. This review changed no plugin code.
 
 Method: a full read of the manifest, skill, references, hook, scripts, tests, evals and plan; script audits with the unit tests run (216 pass); an adversarial check of each finding against the code; checks of Claude Code platform behavior in the official docs (appendix A); then grilling over a design tree, one round per frontier, until no decision was open; then a citation check of this document.
 
@@ -113,7 +113,7 @@ Build three eval sets, and change a default only on their numbers:
 
 Also run one dig and one report interactively with Claude Code's defaults, and rate the 5 real requests on the delivered result as well as the brief (extends T5.3).
 
-Where (agreed): the routing set runs headless on Windows with read-only tools, as T5.1 did; the outcome sets run in WSL. The reason given during the grilling was wrong: headless claude -p on native Windows can run scripts, and only the plugin-eval sandbox cannot (F40). This choice is to be re-confirmed (section 7).
+Where (re-confirmed after a corrected fact): both sets run headless with claude -p in the owner's Windows environment, as T5.1 and T5.2 did, and scripts grade them. The routing set uses read-only tools, with the competing skills present. WSL serves only sets written as claude plugin eval cases, since that sandbox refuses Bash and Write grants on native Windows (F40). The grilling first chose WSL for the outcome sets on the wrong belief that headless claude -p could not run scripts there.
 
 Thresholds: routing passes at 90 percent or more firing on in-scope prompts and 10 percent or less on out-of-scope and near-miss prompts, over 3 runs each; each eval pass has a cost cap of 50 USD; the other thresholds are in R4, R6 and R8.
 
@@ -121,7 +121,7 @@ Rejected: process-only evals (F27); routing evals inside claude plugin eval (F40
 
 ### R2. Rounds that survive background subagents
 
-Dig and report log each round's pending agents in log.md, close a round only when every agent has reported or been stopped, and re-read references/<mode>.md after a compaction. Consequence: saturation is never counted before both methods have reported. README explains CLAUDE_CODE_FORK_SUBAGENT=0, which lets Claude wait when asked, as the skill's wait instructions do (appendix A6); a stronger setting is proposal P17. R1's interactive runs verify it. Addresses F1.
+Dig and report log each round's pending agents in log.md, close a round only when every agent has reported or been stopped, and re-read references/<mode>.md after a compaction. Consequence: saturation is never counted before both methods have reported. README explains CLAUDE_CODE_FORK_SUBAGENT=0, which lets Claude wait when asked, as the skill's wait instructions do (appendix A6); the stronger setting is P17. R1's interactive runs verify it. Addresses F1.
 
 ### R3. Plugin agents for tool isolation
 
@@ -192,7 +192,7 @@ Families: robotics and mapping (OGC, ISO/TC 211 and TC 204, ASAM OpenDRIVE and O
 
 ### R12. Korean sources
 
-Korean community and academic sources are secondary and are used only for Korea-specific topics (national standards, market, regulation). How intake.md:65's default scope encodes this is proposal P18. No Korean-specific adapters; watch already finds feeds through typed alternate links (watch.py:207-225). For a Korea-specific pulse topic, a web supplement may be quoted once fetch.py has archived it and the quote is located in that copy; pulse.md:51 and check.py:16-18 change to allow it. Addresses F23.
+Korean community and academic sources are secondary and are used only for Korea-specific topics (national standards, market, regulation). intake.md:65 encodes this as a general rule (P18). No Korean-specific adapters; watch already finds feeds through typed alternate links (watch.py:207-225). For a Korea-specific pulse topic, a web supplement may be quoted once fetch.py has archived it and the quote is located in that copy; pulse.md:51 and check.py:16-18 change to allow it. Addresses F23.
 
 Rejected: adapters for GeekNews, velog, Naver blog, KCI or RISS.
 
@@ -213,7 +213,7 @@ The independent-viewpoint researcher (critics, failure reports, independent meas
 
 ### R15. Triggers and routing
 
-Keep one router skill (D1, plan:654). Replace the 600-character test on the description (tests/test_plugin.py:133) with a cap of about 1,000 characters on description plus when_to_use. Add only the phrases that raise recall in R1's routing set while the near misses stay quiet; candidate phrases are in section 4 (P9). Addresses F32.
+Keep one router skill (D1, plan:654). Replace the 600-character test on the description (tests/test_plugin.py:133) with a cap of about 1,000 characters on description plus when_to_use. Add only the phrases that raise recall in R1's routing set while the near misses stay quiet; the candidate phrases are P9. Addresses F32.
 
 Rejected: a separate docs skill (one more listing entry in every session and a competing trigger, while the router picked the right mode for 19 of 19 dig, report, pulse and watch prompts, plan:616); the full 1,536 characters.
 
@@ -227,7 +227,7 @@ Rejected: a cross-topic lessons ledger written by scripts, because it would repl
 
 The hook fails closed only where a term list exists. With no list (no forbidden.txt under HOME or USERPROFILE, no .phro/project.json from the working folder upward) it exits 0 at once, without starting Python. With a list it tries py -3, python3 and python in turn and exits 2 when none runs (consequence: with a repair hint, and a test that runs the hooks.json command itself with no Python on PATH, with and without a list). No global onFailure. watch.py check re-checks the terms before each feed request (B3), restoring the plan's existing rule (plan:495). Ad hoc curl from the main session is accepted as a known gap; R3 closes the hole on the research path. Addresses F41, F42.
 
-Two limits found after the grilling, both open in section 7: a hook timeout still lets the call through (proposal P10 closes it); and on Windows without Git Bash a POSIX wrapper cannot run and any failure blocks, which would cut web access for users with no list, against this decision's intent.
+Two limits found after the grilling, both settled afterwards: a hook timeout would still let the call through, which P10 closes; and on Windows without Git Bash a POSIX wrapper cannot run and any failure blocks, which would cut web access for users with no list (F41). For the second, README requires Git Bash on Windows (R18), and one check on a machine without Git Bash confirms the inferred behavior and what its error message says.
 
 Rejected: a global "onFailure": "block" (F41); scanning Bash and PowerShell commands in the hook, which would start a process on every Bash call in every session and block local commands that name a listed term, which tests/test_egress.py:94-99 lets through by design.
 
@@ -235,13 +235,13 @@ Rejected: a global "onFailure": "block" (F41); scanning Bash and PowerShell comm
 
 - One retry policy in every HTTP helper: retry 429, 5xx and timeouts with the plan's 2, 4 and 8 s backoff (plan:541); GitHub's rate-limit 403 is not retried and a bot-check 403 stays a wall. Consequence: pulse.py keeps retrying arctic-shift's 422 "slow down" (pulse.py:143). Addresses F7.
 - SKILL.md says python3 outside Windows; the references use the scripts path SKILL.md gives; docs takes a fast path that skips the earlier-topic grep and the ~/research lookup, since it keeps no topic (docs.md:47). Addresses F4, F6, F39.
-- README: requirements, per-OS install hints, how to create the term list, an example allow rule for the scripts, and the note on waits (R2). Addresses F38.
+- README: requirements, Git Bash among them on Windows because the hook runs through it (R17), per-OS install hints, how to create the term list, an example allow rule for the scripts, and the note on waits (R2). Addresses F38.
 
 Rejected: a doctor.py preflight, a second copy of the requirements that drifts (the plan already left out last30days' doctor, plan:108).
 
-## 4. Proposals awaiting confirmation
+## 4. Details accepted after the first version
 
-The reviewer's proposals. None was confirmed one by one; each needs the owner's yes before it is built.
+The reviewer proposed these after the grilling, and the owner accepted all 18 on 2026-11-01. They refine the decisions in section 3.
 
 - P1. Verifiers get the located paragraph instead of two lines either side (R5; report.md:68).
 - P2. chain.py related <W id> for the neighbors move; a second chain.py topic call with --since for recent leaders; excluding paratext, erratum and editorial types from the topic list (R8).
@@ -264,7 +264,7 @@ The reviewer's proposals. None was confirmed one by one; each needs the owner's 
 
 ## 5. Backlog
 
-Ordered by effect on research outcomes. The owner confirmed this list in the second round; items without an R in section 3 rest on that confirmation, and only the parts listed in section 4 are proposals. Bug labels from the review: B1 quoted ~ paths, B2 PDFs without pdftotext, B3 watch check egress, B4 commas in chain find titles, B5 models.py deadline and tracebacks, B6 non-atomic writes, B7 pulse lane errors without messages, B8 fetch name reuse, B9 watch exit codes.
+Ordered by effect on research outcomes. The owner confirmed this list in the second round; items without an R in section 3 rest on that confirmation, and section 4 adds the accepted details. Bug labels from the review: B1 quoted ~ paths, B2 PDFs without pdftotext, B3 watch check egress, B4 commas in chain find titles, B5 models.py deadline and tracebacks, B6 non-atomic writes, B7 pulse lane errors without messages, B8 fetch name reuse, B9 watch exit codes.
 
 1. PDF reading-order text, layout copy, arXiv HTML first; closes B2 (R9; F9, F16).
 2. OpenAlex: title normalization (B4), fields and flags, chain.py oa, DOI to open-access copies, recent cites, optional key (R9; F8, F15).
@@ -278,9 +278,9 @@ Ordered by effect on research outcomes. The owner confirmed this list in the sec
 10. Disconfirm searcher (R7; F19).
 11. hf lane, MTEB, a measured board for current LLMs (R13; F22).
 12. Standards section (R11; F21); Wayback for dead public pages (R9).
-13. Safety: egress in watch check (B3, F42); the hook change (R17, F41), once its shell is settled (section 7); ~ expansion at every entry point (B1, F37); quote lines normalize no-break spaces and soft hyphens instead of failing (F44).
+13. Safety: egress in watch check (B3, F42); the hook change with its own deadline (R17, P10, F41) and one check on Windows without Git Bash; ~ expansion at every entry point (B1, F37); quote lines normalize no-break spaces and soft hyphens instead of failing (F44).
 14. Tokens: watch prints a numbered index, with the full lines in watch/<stamp>.md (F29); formats.md blocks for single modes move into their mode references (F30); the check loop works on a saved file and edits only the flagged spans (F31); the intake grep reads related topics only (F26); the plan line becomes a literal, language-neutral first line at the spawn step (F5).
-15. The normalized feedback line, with missing items fed into the eval sets (R16; F25); quoting archived supplements in Korea-specific pulse topics, and the intake scope rule once P18 is decided (R12; F23).
+15. The normalized feedback line, with missing items fed into the eval sets (R16; F25); quoting archived supplements in Korea-specific pulse topics, and the intake scope rule (R12, P18; F23).
 16. Triggers (R15; F32), once the routing set exists.
 17. Atomic writes in models.py (B6, F11); watch exit codes documented (B9, F13).
 18. README, python3 and the references' scripts path (R18; F6, F38, F39).
@@ -312,18 +312,14 @@ Consequential, following from the confirmed decisions:
 - T5.3 (plan:626): rate the 5 real requests on the delivered result as well as the brief, and add interactive dig and report runs (R1).
 - T5.6 (plan:646): README requirements and the note on waits before publishing (R2, R18).
 
-## 7. Open items and assumptions
+## 7. Open items
 
-- Re-confirm where the evals run (R1). The reason given during the grilling was wrong (F40). The reviewer now recommends running both sets headless with claude -p in the owner's Windows environment, as T5.1 and T5.2 did, with script graders, and using WSL only for sets written as claude plugin eval cases.
-- Settle the hook's shell (R17, F41): require Git Bash in the README, or make the hook run without a POSIX shell (for example an exec-form command). Test the exec form on a machine without Git Bash first, since the docs state the blocking rule for shell-form hooks.
-- Close the hook's timeout path (R17): proposal P10.
 - The subagent_type value for plugin agents is not documented; test it before R3 relies on it.
 - Substitution of ${CLAUDE_PLUGIN_ROOT} in files read with Read is not documented (F6); backlog item 18 removes the dependence.
 - report.md:80 says Claude Code refuses a subagent's write; this is unconfirmed, and R3 makes it moot.
 - OpenAlex's keyless budget: plan:565 measured 1,000 credits a day per IP address, and one OpenAlex docs page suggests a different figure. Check it live when adding the optional key.
 - The routes and terms of the measured-board candidates (R13) are not checked yet.
 - T5.3's rating of 5 real requests is still open (plan:643).
-- The proposals in section 4 await the owner's answer.
 
 ## Appendix A. Platform facts relied on
 
