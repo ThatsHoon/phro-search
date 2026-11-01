@@ -17,7 +17,7 @@ A decision-ready answer from many sources. Researchers gather findings with exac
 
 - Checkpoint: show the subtopics and the decision criteria in one round before spawning. Skip it when the user's brief already named them or there is no user to answer; log the skip and why.
 - Log `research`, `archive`, `verify` and `write` sections in the round's shape of log.md (spawned, came back, fetched, decisions); `verify` adds `votes: <n> central claims; <s> survived, <r> refuted, <u> unverified; <m> missing votes`.
-- Plan line: "PLAN: report; 5 researchers, 1 support reader, up to 30 verifier calls; ceiling 38 agent calls" (researchers, at most 2 for a gap round, the support reader, 3 per central claim).
+- Plan line: "PLAN: report; 5 researchers, up to 2 support readers, up to 30 verifier calls; ceiling 39 agent calls" (researchers, at most 2 for a gap round, a support reader and one more for reworded claims, 3 per central claim).
 
 ## Research
 
@@ -81,7 +81,7 @@ For a source that is a standard, a specification or an RFC. Families: robotics a
 
 ## Verify
 
-Before any vote, run the support pass (`references/briefs.md`) on the central claims' located quotes and write each `support` and `qualifier` into the view. A central claim with no full rating is reworded to what its source says, or lowered to supporting, before it is sent.
+Before any vote, run the support pass (`references/briefs.md`) on every located quote in the view, central and supporting, and write each `support` and `qualifier` into the view. A central claim with no full rating is lowered to supporting, or reworded to what its source says and rated again: one more support pass takes all the reworded claims together, and a reworded claim still below full is lowered to supporting. Only a central claim rated full is sent.
 
 Three verifiers per central claim, one per starting point: counter-evidence; source standing and date; benchmark and marketing. Several claims may share a turn, at most 12 verifiers at once; record a claim's verdict only when each of its three verifiers has replied or been stopped.
 
@@ -117,7 +117,7 @@ Write the report in this session, where the claims, votes and extracts already a
 ## <refuted and unverified claims>: each with the reason from its votes
 ```
 
-- The decision table: the options as rows, the brief's decision criteria as columns. Each cell is a short value with the claims behind it ("40 ms [c3]"), or unknown, in the report's language, when no claim backs it. Mark a cell unverified when none of its claims survived votes; a refuted claim never fills a cell. A landscape or standards report has no pick: its table puts the entities (projects, vendors, standards) as rows and the key questions as columns, under the same cell rule, and it has no "when another option wins" or "what would change this answer".
+- The decision table: the options as rows, the brief's decision criteria as columns. Each cell is a short value with the claims behind it ("40 ms [c3]"), or the word unknown alone, in the report's language, when no claim backs it. Mark a cell unverified when none of its claims survived votes; a refuted claim never fills a cell. A landscape or standards report has no pick: its table puts the entities (projects, vendors, standards) as rows and the key questions as columns, under the same cell rule, and it has no "when another option wins" or "what would change this answer".
 - Cite claims inline as [c3] or [c3, c7]. Every fact cites a claim; add nothing that is not in claims.json.
 - The BLUF and the conclusion cite survived claims only. A refuted claim appears in a section only as refuted, with why.
 - Prose, not lists, outside the tables. Say what is unknown, give the strongest case for the other side, and take a position where the evidence allows one.

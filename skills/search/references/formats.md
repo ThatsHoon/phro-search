@@ -95,7 +95,7 @@ Written by `fetch.py`, one row per fetched source, never edited by hand: a heade
 ```
 
 - `status` is `sourced`, `partial` or `none`. One claim per required claim, in the user's language. `note` is one flat line on who did what: no conclusions, no ratings.
-- `support` is the support reader's rating of the quote (full, partial, none or contradicts); a `sourced` claim needs a full one. `qualifier` is the source's own sentence that limits the claim, located and checked like a quote.
+- `support` is the support reader's rating of the quote (full, partial, none or contradicts); a `sourced` claim needs a full one from a source that is not retracted. `qualifier` is the source's own sentence that limits the claim, located and checked like a quote.
 - `text` is copied from the source exactly: the same characters and spelling, auto-caption errors kept. Whitespace and line breaks may differ. Skip text with the ellipsis character (…); the pieces must appear in order (older PDF text copies, made in page layout, mix two columns on one line).
 - `line` is the `grep -n` line of the first piece, `end` the last line when the extract spans lines; the check looks 2 lines either side.
 - Dig writes `extracts.json`. Each report writes its own view, `extracts-<stem>.json`, with the stem of its `report-<stem>.md`; there each claim also carries `id`, its claims.json id, and holds that claim's located quotes, and the evidence page shows its votes.

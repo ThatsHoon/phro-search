@@ -208,6 +208,9 @@ class ReportTest(unittest.TestCase):
                          ["CLAIM\tclaim 1\tevery quote comes from a retracted source; a retracted work backs no claim",
                           "CLAIM\tclaim 2\tevery quote comes from a retracted source; a retracted work backs no claim",
                           "FAIL\t2 claim problems; report.html not written"])
+        mixed = self.topic({"a.md": "alpha\n", "b.md": "beta\n"}, [claim(r, quote("b.md", 1, "beta", support="partial"))])
+        self.assertEqual(self.report(mixed, "--check")[1].splitlines()[0],
+                         "CLAIM\tclaim 1\tsourced, but only quotes from retracted sources give full support")
         # fetch.py's retracted mark in sources/index.tsv counts too
         topic = self.topic({"a.md": "alpha\n"}, [claim(quote("a.md", 1, "alpha"))])
         head = "name\turl\tfinal\tfetched\tpublished\tmodified\textraction\tversion\tmarks\tfiles"

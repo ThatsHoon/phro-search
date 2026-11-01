@@ -17,7 +17,8 @@ space (U+00A0, U+202F) or a soft hyphen in a quote line is allowed, since a quot
               BLUF and the conclusion cite survived claims only;
        table: in a Markdown table above the evidence table (the title, the BLUF and every ## section up to
               and including the conclusion), every cell but the header row and the first column cites a
-              claim or says unknown (or the word for unknown in the report's language);
+              claim or is only the word unknown (or its word in the report's language); a row with fewer
+              cells than the header leaves the missing ones empty;
        view: the evidence view exists.
 --kind pulse also checks a pulse brief against the pulse.py result (<stem>.json) beside it:
        lanes: one line names every lane the run listed (Hacker News, Reddit, GitHub, arXiv, YouTube,
@@ -158,7 +159,8 @@ def cells(row):
 
 
 def table_problems(block):
-    """Each data cell of a Markdown table in block, past the first column, that neither cites a claim nor says unknown."""
+    """Each data cell of a Markdown table in block, past the first column, that neither cites a claim nor is only the
+    word unknown; the cells a short row lacks count as empty."""
     found, i = [], 0
     while i + 1 < len(block):
         head, rule = block[i][1], block[i + 1][1]
@@ -168,8 +170,9 @@ def table_problems(block):
         names, i = cells(head), i + 2
         while i < len(block) and "|" in block[i][1]:
             n, row = block[i]
-            for k, cell in enumerate(cells(row)[1:], 1):
-                if not CITE.search(cell) and not UNKNOWN.search(cell):
+            got = cells(row)
+            for k, cell in enumerate(got[1:] + [""] * (len(names) - len(got)), 1):
+                if not CITE.search(cell) and not UNKNOWN.fullmatch(cell.strip(" .*_")):
                     name = names[k] if k < len(names) and names[k] else f"column {k + 1}"
                     found.append((n, "table", f'{snippet(name, 0)}: "{snippet(cell, 0)}" cites no claim; '
                                               "cite it as [c1] or write unknown"))

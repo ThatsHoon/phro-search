@@ -380,6 +380,11 @@ class ReportKindTest(unittest.TestCase):
     def test_table_scope(self):
         # The header row and the first column name things; an empty cell cites nothing.
         self.assertEqual(self.problems(TABLED.replace("| unknown |", "|  |")), [(9, "table")])
+        # A short row's missing cells count as empty, and unknown must be the whole cell.
+        self.assertEqual(self.problems(TABLED.replace("| Polars | faster [c1] | unknown |", "| Polars | faster [c1] |")),
+                         [(9, "table")])
+        self.assertEqual(self.problems(TABLED.replace("| unknown |", "| *Unknown.* |")), [])
+        self.assertEqual(self.problems(TABLED.replace("| unknown |", "| large, exact size unknown |")), [(9, "table")])
         # A cell with an escaped pipe stays one cell; a table without a leading pipe is still a table.
         self.assertEqual(self.problems(TABLED.replace("faster [c1]", "a \\| b [c1]")), [])
         bare = TABLED.replace("| Polars | faster [c1] | unknown |", "Polars | faster | unknown")

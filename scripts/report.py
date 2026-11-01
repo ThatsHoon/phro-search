@@ -11,9 +11,9 @@ each verdict must follow from its votes (2 refutations: refuted; fewer than 2 vo
 unverified; else survived), at most 3 votes, and a vote's "checked" date written
 YYYY-MM-DD. The claims a view cites are checked too: every id is in claims.json, each
 central one has a quote in the view that is not marked retracted, and the view cites at
-most 10 central claims. In any view, a sourced claim needs a quote whose support (from the
-support pass) is full, and a claim whose quotes all come from retracted sources cannot be
-sourced or partial. A quote's qualifier, the sentence that limits it, is checked like a quote.
+most 10 central claims. In any view, a sourced claim needs a quote from a source that is not
+retracted whose support (from the support pass) is full, and a claim whose quotes all come
+from retracted sources cannot be sourced or partial. A quote's qualifier, the sentence that limits it, is checked like a quote.
 The page shows each source's dates from sources/index.tsv when there is one, with the snapshot date of an
 archived copy.
 
@@ -206,10 +206,13 @@ def claim_problems(claims, data, flagged=frozenset()):
         return q["file"] in flagged or bool(re.search(r"\bretracted\b", q.get("mark") or "", re.I))
     out = []
     for i, c in enumerate(data["claims"], 1):
-        if STATUS[c["status"]] == "sourced" and not any(q.get("support") == "full" for q in c["quotes"]):
-            out.append((f"claim {i}", "sourced, but no quote gives full support; run the support pass"))
+        full = [q for q in c["quotes"] if q.get("support") == "full"]
         if STATUS[c["status"]] in ("sourced", "partial") and c["quotes"] and all(map(retracted, c["quotes"])):
             out.append((f"claim {i}", "every quote comes from a retracted source; a retracted work backs no claim"))
+        elif STATUS[c["status"]] == "sourced" and not full:
+            out.append((f"claim {i}", "sourced, but no quote gives full support; run the support pass"))
+        elif STATUS[c["status"]] == "sourced" and all(map(retracted, full)):
+            out.append((f"claim {i}", "sourced, but only quotes from retracted sources give full support"))
     if claims is None:
         return out
     cited = {}
