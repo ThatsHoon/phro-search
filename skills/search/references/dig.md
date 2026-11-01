@@ -1,12 +1,14 @@
 # dig
 
-With none, the path `docs/research/<slug>.md` is a defaulted slot.
+Catch up on a field, from generic words down to its original sources. Two things carry the mode: originals are archived, never summarized, and the stop is set by evidence, not by confidence.
+
+- No summaries: detailed notes taken while still exploring, before a focus forms, may bring premature closure (Kuhlthau 1991). An agent's summary closes on the agent's view and drops the details the user judges by. The user reads the originals; the agent points at them.
 - Branch instead of committing: picking one direction early makes later searches reinforce it. With two plausible directions, branch and compare (Zhou et al. 2026).
 - Chain when words fail: following references and citations avoids having to describe the subject (Bates 1989).
 
 ## Before round 0
 
-- The confirmed brief heads `map.md` with 3 to 6 required claims (`references/intake.md`, section 7). Ask the open ones in this order, in the question form of SKILL.md intake step 5.
+- The confirmed brief heads `map.md` with 3 to 6 required claims (`references/intake.md`, section 7).
 - Plan line: "PLAN: dig; up to 4 rounds, 2 searchers per round, a support reader per support pass; ceiling 10 searcher calls".
 
 ## Round 0: map

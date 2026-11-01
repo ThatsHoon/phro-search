@@ -5,9 +5,7 @@ Answer a technical question the open code depends on (an API's behavior, a spec 
 ## Before the agents
 
 - Settle the library and its version from the repo: lockfiles and manifests first (`uv.lock`, `poetry.lock`, `requirements*.txt`, `package-lock.json`, `go.sum`, `Cargo.lock`), then the installed copy (`pip show <package>`, `node_modules/<package>/package.json`). Ask which library or version only when the repo does not settle it, with the candidates found as options.
-- Find where the repo keeps notes: a folder of research or decision notes (`docs/notes/`, `docs/research/`, `docs/adr/`, `notes/`), its file naming and its language. Catch up on a field, from generic words down to its original sources. Two things carry the mode: originals are archived, never summarized, and the stop is set by evidence, not by confidence.
-
-- No summaries: notes taken before a focus forms may bring premature closure (Kuhlthau 1991), and an agent's summary also closes on the agent's view and drops the details the user judges by. The user reads the originals; the agent points at them.
+- Find where the repo keeps notes: a folder of research or decision notes (`docs/notes/`, `docs/research/`, `docs/adr/`, `notes/`), its file naming and its language. With none, the path `docs/research/<slug>.md` is a defaulted slot, so it goes through the gate before anything is written.
 - Plan line: "PLAN: docs; local reader and web gatherer, note at <path>; ceiling 2 agent calls"; with no installed copy, the web gatherer alone (ceiling 1).
 - The web gatherer's brief may name the library, its version and public APIs.
 
