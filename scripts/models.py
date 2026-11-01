@@ -12,6 +12,8 @@ and never printed. Requests are 1 s apart per host. A 429, a 5xx or a timeout is
 Retry-After when it asks 60 s or less); any other status is not, nor a 403 or 503 from a bot check. All requests of one
 run share a deadline of 270 s, under the 5-minute timeout the models reference gives shortlist: no request starts and
 no retry waits past it.
+Files are written whole or not at all (a temp file, then a rename). A same-day snapshot, a facts file or a card that an
+earlier run left cut short is taken or fetched again instead of being used; a card that differs otherwise is kept.
 output, tab-separated:
   SNAPSHOT <file>  <n> rows  <k> linked off the Hub  revision <sha>    then NEW <model> and GONE <model>, up to 20 each
   KEPT     <file>  (a snapshot of that board was already taken today)
@@ -28,7 +30,7 @@ output, tab-separated:
 exit 0; 1 when the board or a model could not be read (also a reply of an unexpected shape); 2 for bad arguments, an egress hit or a changed board
 (schema-drift: nothing is guessed).
 """
-import argparse, hashlib, html, json, math, os, re, socket, ssl, sys, time, unicodedata
+import argparse, hashlib, html, json, math, os, re, socket, ssl, sys, tempfile, time, unicodedata
 import urllib.error, urllib.parse, urllib.request
 from collections import Counter
 from datetime import datetime, timezone
@@ -368,6 +370,36 @@ def stem_of(args, b, tname):
     return "board-" + "-".join(slug(p) for p in parts)
 
 
+def write_atomic(path, data):
+    """Write text (UTF-8, LF line ends) or bytes to path through a temp file in its folder and os.replace, so a crash
+    never leaves a cut file behind."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data.encode("utf-8") if isinstance(data, str) else data)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def whole_snapshot(path):
+    """True when a snapshot file is complete: its meta line, its header, rows with as many cells, a final newline."""
+    try:
+        raw = path.read_bytes().decode("utf-8")
+    except (OSError, UnicodeDecodeError):
+        return False
+    lines = raw.split("\n")
+    if not raw.endswith("\n") or len(lines) < 3 or not lines[0].startswith("# board="):
+        return False
+    cells = lines[1].count("\t")
+    return all(line.count("\t") == cells for line in lines[2:-1])
+
+
 def snapshots(src, stem):
     """The snapshot files of a stem, oldest first."""
     pat = re.compile(re.escape(stem) + r"-(\d{4}-\d{2}-\d{2})(?:-(\d+))?\.tsv")
@@ -528,9 +560,11 @@ def snapshot(args, topic):
     stem, day = stem_of(args, b, tname), today()
     old = snapshots(src, stem)
     same = [p for p in old if p.name.startswith(f"{stem}-{day}")]
-    if same and not args.refresh:
-        print(f"KEPT\t{same[-1].as_posix()}\tone snapshot per board and day; --refresh takes another")
+    kept = [p for p in same if whole_snapshot(p)]
+    if kept and not args.refresh:
+        print(f"KEPT\t{kept[-1].as_posix()}\tone snapshot per board and day; --refresh takes another")
         return 0
+    old = [p for p in old if whole_snapshot(p)]  # a cut file is no baseline
     heads, rows = READ[b["route"]](b, t, args)
     labels = [label(h) for h in heads]
     need = [t["model"], *t["metrics"], *[x for x in (t["speed"], t["size"] and t["size"][0], t["license"], t["date"],
@@ -552,11 +586,12 @@ def snapshot(args, topic):
         meta.update(lang=slug(args.lang or "english"), clone=str(bool(args.clone)).lower())
     elif tname == "streaming":
         meta["hardware"] = slug(args.hardware or "a100")
-    src.mkdir(parents=True, exist_ok=True)
-    path = src / (f"{stem}-{day}.tsv" if not same else f"{stem}-{day}-{len(same) + 1}.tsv")
+    n = len(same) + 1
+    while (path := src / (f"{stem}-{day}-{n}.tsv" if n > 1 else f"{stem}-{day}.tsv")).exists():
+        n += 1  # a cut snapshot stays where it is; sources are never overwritten
     body = ["# " + " ".join(f"{k}={v}" for k, v in meta.items()), "\t".join(labels + ["link"])]
     body += ["\t".join([text(c) for c in r] + [clean(link, 300)]) for r, link in zip(rows, links)]
-    path.write_text("\n".join(body) + "\n", encoding="utf-8")
+    write_atomic(path, "\n".join(body) + "\n")
     keys = lambda p: {r[t["model"]] for r in read_snapshot(p)[2]}
     now = keys(path)
     print(f"SNAPSHOT\t{path.as_posix()}\t{len(rows)} rows\t{sum(not repo_of(x) for x in links)} linked off the Hub"
@@ -640,7 +675,8 @@ def facts(repo):
             "downloads": m.get("downloads"), "likes": m.get("likes"),
             "card": any(f.get("rfilename") == "README.md" for f in files),
             "config_file": any(f.get("rfilename") == "config.json" for f in files),
-            "files": [f.get("rfilename") for f in files][:300], "fetched": today()}
+            "files": [f.get("rfilename") for f in files][:300], "fetched": today(),
+            "_card_size": next((f.get("size") for f in files if f.get("rfilename") == "README.md"), None)}
 
 
 def hub_path(topic, repo):
@@ -648,17 +684,22 @@ def hub_path(topic, repo):
 
 
 def save_facts(topic, f):
+    """Write a repo's facts, one key per line; keys starting with _ are for this run only."""
     path = hub_path(topic, f["repo"])
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(f, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")  # one key per line
+    write_atomic(path, json.dumps({k: v for k, v in f.items() if not k.startswith("_")}, indent=1,
+                                  ensure_ascii=False) + "\n")
     return path
 
 
 def cached_facts(topic, repo):
+    """Today's facts file of a repo when it is whole, else the facts fetched again and saved."""
     path = hub_path(topic, repo)
     if path.is_file():
-        f = json.loads(path.read_text(encoding="utf-8"))
-        if f.get("fetched") == today():
+        try:
+            f = json.loads(path.read_bytes().decode("utf-8"))
+        except (OSError, ValueError):  # cut short or unreadable: fetched again
+            f = None
+        if isinstance(f, dict) and f.get("fetched") == today():
             return f
     f = facts(repo)
     if f:
@@ -749,7 +790,7 @@ def row_line(c, metric, speed):
 def shortlist(args, topic):
     tname = args.table or ("multilingual" if args.board == "asr" and args.lang else None)
     b, t, tname = board(args.board, tname)
-    files = snapshots(topic / "sources", stem_of(args, b, tname))
+    files = [p for p in snapshots(topic / "sources", stem_of(args, b, tname)) if whole_snapshot(p)]  # never a cut one
     if not files:
         raise Usage(f"no snapshot of {args.board} {tname} in {topic.as_posix()}/sources yet: run snapshot first")
     meta, heads, rows = read_snapshot(files[-1])
@@ -842,11 +883,10 @@ def shortlist(args, topic):
         if c["dropped"] and c["dropped"] != "not looked up":
             dropped[c["dropped"].split(":")[0]] += 1
     out = topic / "models" / "shortlist.json"
-    out.parent.mkdir(parents=True, exist_ok=True)
     filters = {k: getattr(args, k) for k in ("lang", "max_gb", "license", "since", "off_hub")}
-    out.write_text(json.dumps({"board": args.board, "table": tname, "snapshot": files[-1].name, "metric": metric,
-                               "direction": direction, "filters": filters, "models": order}, indent=1,
-                              ensure_ascii=False) + "\n", encoding="utf-8")
+    write_atomic(out, json.dumps({"board": args.board, "table": tname, "snapshot": files[-1].name, "metric": metric,
+                                  "direction": direction, "filters": filters, "models": order}, indent=1,
+                                 ensure_ascii=False) + "\n")
     off = [c for c in order if c["off_hub"] and not c["dropped"]]
     print(f"# {args.board} {tname}: {metric}, {direction} is better; {files[-1].name}; {len(order)} models, "
           f"{len(kept)} kept, {sum(c['front'] for c in kept)} on the front, {len(off)} off the Hub")
@@ -910,8 +950,12 @@ def follow(args, topic):
         raise Usage(f"not a Hub repo id: {', '.join(bad)}")
     task = args.task
     if not task:
-        sl = topic / "models" / "shortlist.json"
-        name = json.loads(sl.read_text(encoding="utf-8")).get("board", "") if sl.is_file() else ""
+        sl, name = topic / "models" / "shortlist.json", ""
+        if sl.is_file():
+            try:
+                name = json.loads(sl.read_bytes().decode("utf-8")).get("board", "")
+            except (OSError, ValueError, AttributeError):
+                print("# models/shortlist.json is unreadable: the llm features are used; pass --task")
         task = name if name in ("asr", "tts") else "llm"
     feats, needs = dict(FEATURES[task]), []
     for n in (x.strip() for x in (args.need or "").split(",")):
@@ -932,11 +976,12 @@ def follow(args, topic):
             files, gated = [], False
             if f["card"]:
                 card = topic / "sources" / f"hf-{repo.replace('/', '--')}-{f['sha'][:7]}.md"
-                if not card.is_file():  # sources are never overwritten: quotes cite their lines
+                old = card.read_bytes() if card.is_file() else None
+                if not old or len(old) < (f.get("_card_size") or 0):  # missing, empty, or shorter than the Hub says
                     try:
                         body = fetch(f"{HUB}/{repo}/raw/{f['sha']}/README.md")
-                        card.parent.mkdir(parents=True, exist_ok=True)
-                        card.write_bytes(body)
+                        if old is None or body.startswith(old):  # sources are never overwritten, a cut copy is
+                            write_atomic(card, body)
                     except Fail as e:
                         if e.code not in (401, 403):
                             raise
@@ -1041,7 +1086,7 @@ def main(argv=None):
     except Fail as e:
         print(f"FAIL\t{getattr(args, 'board', 'hub')}\t{e}")
         return 1
-    except ValueError as e:
+    except (ValueError, OSError) as e:
         print(f"FAIL\t{getattr(args, 'board', 'hub')}\t{clean(e, 120)}")
         return 1
     except Exception as e:  # a reply of an unexpected shape: a FAIL line, never a traceback

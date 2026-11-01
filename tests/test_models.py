@@ -104,7 +104,7 @@ def hub_entry(rank, model_id, value, verified=False, params=None, lower=False):
 def model(repo, params=None, dtype="BF16", license="apache-2.0", languages=(), created="2026-05-01", files=(), tags=(),
           gated=False, card=None, total=None):
     """/api/models/<repo>?blobs=true."""
-    sib = [{"rfilename": ".gitattributes", "size": 100}, {"rfilename": "README.md", "size": 2000},
+    sib = [{"rfilename": ".gitattributes", "size": 100}, {"rfilename": "README.md", "size": len(CARD.encode())},
            {"rfilename": "config.json", "size": 500}] + [{"rfilename": n, "size": s} for n, s in files]
     body = {"_id": "x", "id": repo, "sha": SHA, "pipeline_tag": "text-to-speech", "library_name": "transformers",
             "createdAt": f"{created}T00:00:00.000Z", "lastModified": "2026-10-01T00:00:00.000Z", "gated": gated,
@@ -579,9 +579,9 @@ class FollowTest(Base):
         self.assertEqual(facts["papers"], [{"id": "2601.00001", "title": "Tiny TTS", "abstract": "Word timestamps are out of scope.",
                                             "published": "2026-01-02", "github": "https://github.com/acme/tiny-tts"}])
         self.assertIn(f"FACTS\tacme/tts-a\t{card.as_posix()}\t", out)
-        card.write_text("edited", encoding="utf-8")
+        card.write_text("edited\n" * 400, encoding="utf-8")
         self.run_main(self.routes(), "follow", "acme/tts-a", "--task", "tts")
-        self.assertEqual(card.read_text(encoding="utf-8"), "edited")
+        self.assertEqual(card.read_text(encoding="utf-8"), "edited\n" * 400)
         self.assertFalse(any("README.md" in u for u in self.opener.urls()))
 
     def test_features_needs_and_hops(self):
@@ -615,6 +615,38 @@ class FollowTest(Base):
         self.assertFalse(list((self.topic / "sources").glob("hf-acme--gated-*")))
         self.assertIn("FACTS\tacme/tts-a\t", out)
 
+    def test_atomic_writes_and_cut_files(self):
+        target = self.topic / "a" / "f.txt"
+        m.write_atomic(target, "one\n")
+        with mock.patch.object(m.os, "replace", side_effect=OSError("disk full")), self.assertRaises(OSError):
+            m.write_atomic(target, "two\n")
+        self.assertEqual((target.read_bytes(), sorted(p.name for p in target.parent.iterdir())), (b"one\n", ["f.txt"]))
+        routes = [(("api/leaderboard/formatted",), js([llm_entry("acme/llm-a"), llm_entry("acme/llm-b")]))]
+        with mock.patch.object(m.os, "replace", side_effect=OSError("disk full")):
+            code, out = self.run_main(routes, "snapshot", "--board", "llm")
+        self.assertEqual((code, list((self.topic / "sources").iterdir())), (1, []), out)  # nothing half written is left
+        code, out = self.run_main(routes, "snapshot", "--board", "llm")
+        self.assertEqual(code, 0, out)
+        path = self.topic / "sources" / f"board-llm-{m.today()}.tsv"
+        whole = path.read_bytes()
+        path.write_bytes(whole[:-30])  # a snapshot cut short by an older version
+        code, out = self.run_main([], "shortlist", "--board", "llm")
+        self.assertEqual((code, self.opener.calls), (2, []), out)  # never read as a table
+        self.assertIn("run snapshot", out)
+        code, out = self.run_main([(("api/leaderboard/formatted",), [503, js([llm_entry("acme/llm-a")])])], "snapshot", "--board", "llm")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("KEPT", out)  # a cut snapshot is no baseline: another is taken, and no NEW or GONE against it
+        self.assertNotIn("# since", out)
+        self.assertTrue((self.topic / "sources" / f"board-llm-{m.today()}-2.tsv").is_file())
+        hub = m.hub_path(self.topic, "acme/x")
+        hub.parent.mkdir(parents=True)
+        hub.write_text('{"repo": "acme/x", "fetch', encoding="utf-8")  # a cut facts file is fetched again
+        with mock.patch.object(m, "OPENER", Opener([(api("acme/x"), [503, model("acme/x", 10**8)])])):
+            self.assertEqual(m.cached_facts(self.topic, "acme/x")["repo"], "acme/x")
+        saved = json.loads(hub.read_text(encoding="utf-8"))
+        self.assertEqual((saved["repo"], saved["fetched"]), ("acme/x", m.today()))
+        self.assertFalse([k for k in saved if k.startswith("_")])
+
     def test_an_odd_reply_is_a_fail_line_not_a_traceback(self):
         routes = [(api("acme/odd"), [503, js([1])]), *self.routes()]  # a transient 503, then a list for a model
         code, out = self.run_main(routes, "follow", "acme/odd", "acme/tts-a", "--task", "tts")
@@ -626,6 +658,29 @@ class FollowTest(Base):
         self.assertEqual(code, 1, out)
         self.assertEqual(len(out.splitlines()), 1, out)
         self.assertTrue(out.startswith("FAIL\tllm\tunexpected reply from the board: "), out)
+
+    def test_a_cut_card_is_fetched_again_and_another_is_kept(self):
+        code, out = self.run_main(self.routes(), "follow", "acme/tts-a", "--task", "tts")
+        card = self.topic / "sources" / "hf-acme--tts-a-aaaaaaa.md"
+        whole = card.read_bytes()
+        for cut in (b"", whole[:len(whole) // 2]):  # an empty card and one cut short
+            card.write_bytes(cut)
+            routes = [(("raw/" + SHA + "/README.md",), [503, CARD.encode()]), *self.routes()]
+            code, out = self.run_main(routes, "follow", "acme/tts-a", "--task", "tts")
+            self.assertEqual((code, card.read_bytes()), (0, whole), out)
+        card.write_bytes(b"another card")  # shorter than the Hub says but not a cut copy: never overwritten
+        self.run_main(self.routes(), "follow", "acme/tts-a", "--task", "tts")
+        self.assertEqual(card.read_bytes(), b"another card")
+        self.assertEqual(list(card.parent.glob("*.tmp")), [])
+
+    def test_an_unreadable_shortlist_falls_back_to_the_llm_features(self):
+        sl = self.topic / "models" / "shortlist.json"
+        sl.parent.mkdir(parents=True)
+        sl.write_text('{"board": "tt', encoding="utf-8")
+        code, out = self.run_main(self.routes(), "follow", "acme/tts-a")
+        self.assertEqual(code, 0, out)
+        self.assertIn("# models/shortlist.json is unreadable: the llm features are used; pass --task", out)
+        self.assertIn("FEATURE\tacme/tts-a\ttool calling\t", out)
 
     def line_of(self, needle):
         lines = (self.topic / "models" / "hub" / "acme--tts-a.json").read_text(encoding="utf-8").split("\n")
