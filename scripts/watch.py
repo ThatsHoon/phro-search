@@ -15,6 +15,9 @@ output, one tab-separated line per result:
   NEW     date  name  title  url  first line    (check, newest first; the original's first line, no summary; for an
                                                 openalex source the DOI, else the landing page, and the abstract's
                                                 first sentence rebuilt from OpenAlex's abstract_inverted_index)
+  INDEX   n  date  name  short title            (check, over 20 new items: a numbered index instead of NEW lines,
+                                                newest first; item n's link and first line are under "- n. " in
+                                                watch/<UTC time>.md)
   LATEST  date  name  title  url                (check, the latest item of a feed with nothing new)
   FAIL    url or name  reason
   # note
@@ -49,6 +52,7 @@ NO_FEED = re.compile(r"(^|\.)(x\.com|twitter\.com|pixiv\.net|reddit\.com|redd\.i
 EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 BACKOFF = (2, 4, 8)  # seconds before each retry of a 429, a 5xx or a timeout
 RETRY_AFTER_CAP = 60  # longest Retry-After honored, in seconds; a longer one gets the backoff
+INDEX_OVER, SHORT = 20, 60  # over this many new items, check prints a numbered index of titles cut to SHORT characters
 DEADLINE = 100  # seconds for all requests of one run together, under the Bash tool's default 2-minute timeout
 BOT_CHECK = (b"just a moment", b"checking your browser", b"captcha", b"verify you are human", b"are you a robot",
              b"attention required", b"challenge-platform", b"/cdn-cgi/challenge", b"ddos-guard")
@@ -534,10 +538,13 @@ def cmd_check(a):
         state[f["feed"]] = {"seen": (kept + list(urls))[-KEEP:], "checked": now.strftime("%Y-%m-%dT%H:%M:%SZ")}
     new.sort(key=lambda r: _key(r[0]), reverse=True)
     md = [f"# watch {top.resolve().name} {now:%Y-%m-%d %H:%M} UTC", "", "## New", ""]
-    for i, name in new:
+    for k, (i, name) in enumerate(new, 1):
         d, n, t, u = _day(i["date"]), clean(name), clean(i["title"]), clean(i["url"])
-        print(f"NEW\t{d}\t{n}\t{t}\t{u}\t{i['first']}")
-        md += [f"- {d} {n}: [{t}]({u})"] + ([f"  > {i['first']}"] if i["first"] else [])
+        if len(new) > INDEX_OVER:  # the full line stays in the file, found by its number
+            print(f"INDEX\t{k}\t{d}\t{n}\t{clean(t, SHORT)}")
+        else:
+            print(f"NEW\t{d}\t{n}\t{t}\t{u}\t{i['first']}")
+        md += [f"- {k}. {d} {n}: [{t}]({u})"] + ([f"  > {i['first']}"] if i["first"] else [])
     md += ["", "## Quiet feeds, latest item", ""]
     for i, name in quiet:
         d, n, t, u = _day(i["date"]), clean(name), clean(i["title"]), clean(i["url"])
@@ -560,6 +567,8 @@ def cmd_check(a):
     tmp = sp.with_name(sp.name + ".tmp")
     tmp.write_text(json.dumps(state, ensure_ascii=False, indent=1), encoding="utf-8")
     os.replace(tmp, sp)
+    if len(new) > INDEX_OVER:
+        print(f"# over {INDEX_OVER} new items, so an index: grep -n -A1 '^- <n>\\. ' watch/{path.name} for an item's link and first line")
     print(f"# {len(new)} new from {busy} feeds, {len(quiet)} quiet, {len(failed)} failed: watch/{path.name}")
     return 1 if failed and not (new or quiet) else 0
 

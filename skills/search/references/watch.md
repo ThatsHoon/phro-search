@@ -18,6 +18,7 @@ Pick venues from the map's Venues and People and add each with `watch.py add <to
 ## 3. Check
 
 `watch.py check <topic_dir>` lists what is new since the last check. A feed's first check shows the last 14 days (`--days N` changes that). Each run is saved as `watch/<date-time>.md`; earlier runs are never overwritten.
+- Over 20 new items, `check` prints a numbered index instead (`INDEX` lines: number, date, feed, short title). Pick the items the request needs by number, then read only those from the run's file with the Grep tool (pattern `^- <n>\. `, two lines each: the link and the original's first line).
 - A quiet feed still shows its latest item whatever its date, so a big post just outside the window stays visible.
 - A first check records the items outside its window as seen; to widen the window afterwards, run `watch.py check <topic_dir> --days 30 --fresh`.
 - Exit codes: exit 0 when some feeds failed and others answered or were quiet, so read the `FAIL` lines, not only the code; exit 1 when every feed failed. A failed feed was already retried on a 429, a 5xx or a timeout; check it again later rather than at once.
@@ -25,7 +26,7 @@ Pick venues from the map's Venues and People and add each with `watch.py add <to
 ## 4. Deliver
 
 In the user's language, per item: title, date, venue, and the original's first line as a `>` quote. No agent summary and no score: the writer's own first line is the reader's cue.
-- Over about 20 items: filter by kind to match the request, and say what was filtered and where the full list is (`watch/<file>.md`). Filtering selects; it never summarizes.
+- Over 20 new items: deliver the ones picked from the index, and say what was left out and where the full list is (`watch/<file>.md`). Picking selects; it never summarizes.
 - Quiet feeds' latest items go last, briefly. Failed feeds are listed with their reason; a failed feed is never reported as quiet.
 - Download only what the user picks, or what bears on a required claim: `fetch.py <topic>/sources <name> <url>`, then add it to the sources table with its label.
 - Run `check.py` on the exact reply after its last edit, then send that text unchanged.

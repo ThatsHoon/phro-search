@@ -190,8 +190,41 @@ class WatchTest(unittest.TestCase):
         self.assertEqual((self.top / "watch" / "2026-10-30-1200.md").read_text(encoding="utf-8"), first)
         self.assertTrue((self.top / "watch" / "2026-10-30-1200-2.md").is_file())
         self.assertTrue(first.startswith("# watch topic 2026-10-30 12:00 UTC\n\n## New\n\n"
-                                         "- 2026-10-27 blog: [Recent post](https://blog.example.com/posts/recent)\n"
+                                         "- 1. 2026-10-27 blog: [Recent post](https://blog.example.com/posts/recent)\n"
                                          "  > First line of the recent post & more.\n"))
+
+    def test_many_new_items_print_a_numbered_index(self):
+        def rss(n):
+            items = "".join(f"<item><title>Post {k} with a title long enough to be cut short in the printed index line</title>"
+                            f"<link>https://blog.example.com/posts/{k}</link>"
+                            f"<pubDate>Tue, {k:02d} Oct 2026 09:00:00 GMT</pubDate><description>Line {k}.</description></item>"
+                            for k in range(1, n + 1))
+            return f"<rss><channel><title>B</title>{items}</channel></rss>".encode()
+        self.feeds(("rss", "blog", RSS))
+        _, out, _ = self.run_watch({RSS: rss(20)}, "check", "--days", "40")  # 20 new: full lines as before
+        self.assertEqual([ln.split("\t")[0] for ln in out[:-1]], ["NEW"] * 20)
+        shutil.rmtree(self.top / "watch")
+        (self.top / "watch-state.json").unlink()
+        _, out, _ = self.run_watch({RSS: rss(25)}, "check", "--days", "40")  # over 20: a numbered index only
+        index = [ln.split("\t") for ln in out if ln.startswith("INDEX")]
+        self.assertEqual(len(index), 25)
+        self.assertEqual(index[0][:4], ["INDEX", "1", "2026-10-25", "blog"])
+        self.assertEqual(index[-1][:4], ["INDEX", "25", "2026-10-01", "blog"])
+        self.assertTrue(index[0][4].startswith("Post 25 with a title") and len(index[0][4]) <= 60, index[0][4])
+        joined = "\n".join(out)
+        self.assertNotIn("NEW\t", joined)
+        self.assertNotIn("https://blog.example.com/posts/", joined)  # links and first lines stay in the file
+        self.assertNotIn("Line 25.", joined)
+        self.assertIn("grep", out[-2])
+        self.assertEqual(out[-1], "# 25 new from 1 feeds, 0 quiet, 0 failed: watch/2026-10-30-1200.md")
+        md = (self.top / "watch" / "2026-10-30-1200.md").read_text(encoding="utf-8")
+        self.assertIn("- 1. 2026-10-25 blog: [Post 25 with a title long enough to be cut short in the printed index line]"
+                      "(https://blog.example.com/posts/25)\n  > Line 25.\n", md)
+        self.assertIn("\n- 25. 2026-10-01 blog: [Post 1 ", md)
+        doc = (Path(__file__).resolve().parents[1] / "skills" / "search" / "references" / "watch.md").read_text(encoding="utf-8")
+        for text in (m.__doc__, doc):
+            self.assertIn("INDEX", text)
+            self.assertRegex(" ".join(text.split()), r"(?i)over 20 new items")
 
     def test_one_failing_feed_does_not_stop_the_others(self):
         self.feeds(("rss", "down", RSS), ("atom", "up", ATOM))
