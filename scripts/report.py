@@ -381,7 +381,7 @@ def main(argv=None):
                                              "write evidence-<stem>.html")
     ap.add_argument("--check", action="store_true", help="only check the quotes; do not write the page")
     args = ap.parse_args(argv)
-    topic = pathlib.Path(args.topic_dir)
+    topic = pathlib.Path(args.topic_dir).expanduser()  # a quoted ~ reaches the script unexpanded
     if args.stem is not None and not re.fullmatch(r"[0-9A-Za-z][0-9A-Za-z.-]*", args.stem):
         print(f"FAIL\tbad stem: {clean(args.stem, 40)}")
         return 1

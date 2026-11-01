@@ -749,7 +749,7 @@ def main(argv=None):
     p.add_argument("--deadline", type=float, default=DEADLINE, metavar="S", help=f"seconds for all lanes together (default {DEADLINE})")
     a = p.parse_args(argv)
     try:
-        plan = load_plan(a.plan, a.days)
+        plan = load_plan(os.path.expanduser(a.plan), a.days)  # a quoted ~ reaches the script unexpanded
     except ValueError as e:
         print(f"FAIL\tplan\t{clean(e)}")
         return 2

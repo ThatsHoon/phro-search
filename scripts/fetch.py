@@ -866,6 +866,7 @@ def main(argv=None):
     ap.add_argument("name", help="file stem: lowercase letters, digits, dots and hyphens")
     ap.add_argument("source", metavar="url-or-path", help="an http(s) URL, or the path of a local page or PDF")
     a = ap.parse_args(argv)
+    a.sources_dir = a.sources_dir.expanduser()  # a quoted ~ reaches the script unexpanded
     global _end
     _end = time.monotonic() + DEADLINE
     try:

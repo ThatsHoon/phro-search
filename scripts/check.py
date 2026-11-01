@@ -266,6 +266,8 @@ def main(argv=None):
                     "claims.json beside the file; pulse: against the pulse.py result (<stem>.json) beside the brief; "
                     "models: every <path>:<line> cited against the files in the deliverable's folder")
     args = ap.parse_args(argv)
+    if args.file != "-":
+        args.file = str(Path(args.file).expanduser())  # a quoted ~ reaches the script unexpanded
     try:
         data = sys.stdin.buffer.read() if args.file == "-" else Path(args.file).read_bytes()
         raw = data.decode("utf-8")

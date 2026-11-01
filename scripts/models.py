@@ -1063,7 +1063,7 @@ def main(argv=None):
     s.add_argument("--need", help="must-have features, comma-separated")
     s.add_argument("--task", choices=tuple(FEATURES), help="feature list (default: from the shortlist's board)")
     args = ap.parse_args(argv)
-    topic = Path(args.topic)
+    topic = Path(args.topic).expanduser()  # a quoted ~ reaches the script unexpanded
     global _end
     _end = time.monotonic() + DEADLINE
     try:
