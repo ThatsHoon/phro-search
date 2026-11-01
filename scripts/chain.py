@@ -1,16 +1,23 @@
-"""Walk citations and authors through the OpenAlex API (keyless): references, citing works, an author's works.
+"""Walk citations and authors through the OpenAlex API: references, citing works, an author's works, legal copies.
 
 Usage:
   chain.py find <doi-or-title>          one work for a DOI or W id, else 5 title candidates by citations
   chain.py refs <id-or-doi> [-n 20]     works the given work references (backward, footnote chasing)
-  chain.py cites <id-or-doi> [-n 20]    works citing the given work (forward, citation searching)
+  chain.py cites <id-or-doi> [-n 20] [--sort cited|recent] [--since YEAR]
+                                        works citing the given work (forward, citation searching)
   chain.py author <name-or-id> [-n 20]  an author's works, most cited first
+  chain.py oa <id-or-doi>               the work's open-access copies, best first
 
 An id is W123, https://openalex.org/W123, a bare DOI or a doi.org URL; an author id is A123.
+No key is needed; OPENALEX_API_KEY from the environment is sent when set and never printed.
 
-Rows, tab-separated: <year> <cited_by_count> <W id> <title> <doi or -> <free pdf url or ->
+Rows, tab-separated: <year> <cited_by_count> <W id> <title> <doi or -> <free pdf url or -> <type or -> <venue or ->
+  <flags or ->, flags from: retracted, preprint, erratum (also retraction notices), comment (letters, editorials,
+  peer reviews, paratext), accepted-copy (an open-access accepted manuscript exists)
+oa rows: <published|accepted|submitted|-> <repository|publisher|other> <pdf url or -> <landing url or -> <source or ->
+  <license or ->, published before accepted before submitted, repository copies (arXiv included) first in each
 Other lines, a label and then tab-separated fields:
-  # work <W id> <year> <title>                   first line of refs and cites
+  # work <W id> <year> <title>                   first line of refs, cites and oa
   # author <A id> <name> <institution or -> <N> works
   # other matches <A id> <name> (<institution>)  one field; up to 3 lines after the author line
   # note: ...                                    zero results
@@ -36,10 +43,14 @@ API = "https://api.openalex.org"
 UA = f"Mozilla/5.0 (compatible; phro-search/{VERSION}; +https://github.com/ThatsHoon/phro-search)"
 CAP = 10 * 1024 * 1024  # bytes read per API page
 BATCH = 50  # ids per openalex: filter
-FIELDS = "id,display_name,publication_year,cited_by_count,doi,best_oa_location,open_access"
+FIELDS = ("id,display_name,publication_year,cited_by_count,doi,best_oa_location,open_access,type,publication_date,"
+          "is_retracted,primary_location,locations")
 AUTHOR = "id,display_name,works_count,last_known_institutions"
-RATE_LIMITED = "rate limited: the OpenAlex free daily budget may be used up; try tomorrow"
+RATE_LIMITED = ("rate limited: the OpenAlex daily budget ($1.000, about 1,000 credits) may be used up; try tomorrow, "
+                "or set OPENALEX_API_KEY")
 NOTE_NO_MATCH = "# note: no match; try the DOI, or a shorter title without the subtitle."
+NOTE_NO_OA = ("# note: no open-access copy is listed; look for the author's or lab's page, a technical report or an "
+              "institutional repository, or ask the user to open the publisher page in a browser.")
 NOTE_EMPTY = ("# note: 0 results. OpenAlex often lacks citation links for works under about a year old, so this means "
               "unknown, not none: grep the reference section of the downloaded text, or search for works citing the title.")
 
@@ -119,6 +130,9 @@ def egress(text):
 def get(path, params, missing=None):
     """JSON from the API: 1 s between requests, 2/4/8 s backoff on 429, every failure raised as Fail."""
     global _last
+    key = os.environ.get("OPENALEX_API_KEY", "").strip()
+    if key:
+        params = {**params, "api_key": key}
     req = urllib.request.Request(f"{API}{path}?{urllib.parse.urlencode(params)}", headers={"User-Agent": UA})
     delay = 0
     for backoff in (2, 4, 8, None):
@@ -162,12 +176,43 @@ def short(url):
     return str(url or "").rsplit("/", 1)[-1]
 
 
+OA_RANKS = {"publishedVersion": 0, "acceptedVersion": 1, "submittedVersion": 2}
+
+
+def oa_kind(loc):
+    """repository (arXiv included), publisher or other, for one OpenAlex location."""
+    src = loc.get("source") or {}
+    urls = f"{loc.get('pdf_url') or ''} {loc.get('landing_page_url') or ''}"
+    if src.get("type") == "repository" or re.search(r"//(?:[\w-]+\.)*arxiv\.org/", urls):
+        return "repository"
+    return "publisher" if src.get("type") in ("journal", "conference", "book series", "ebook platform") else "other"
+
+
+def oa_order(w):
+    """The open-access locations of an OpenAlex work, best first: published, accepted, submitted, then unknown
+    versions; within each, repository copies (arXiv included) before other hosts and publisher pages, which often bot-check."""
+    kinds = {"repository": 0, "other": 1, "publisher": 2}
+    locs = [loc for loc in w.get("locations") or [] if isinstance(loc, dict) and loc.get("is_oa")
+            and (loc.get("pdf_url") or loc.get("landing_page_url"))]
+    return sorted(locs, key=lambda loc: (OA_RANKS.get(loc.get("version"), 3), kinds[oa_kind(loc)]))
+
+
+def flags(w):
+    """What the reader must know before relying on a work, or -."""
+    kind = w.get("type")
+    out = ["retracted"] * bool(w.get("is_retracted")) + ["preprint"] * (kind == "preprint")
+    out += ["erratum"] * (kind in ("erratum", "retraction")) + ["comment"] * (kind in ("letter", "editorial", "peer-review", "paratext"))
+    out += ["accepted-copy"] * any(loc.get("version") == "acceptedVersion" for loc in oa_order(w))
+    return ",".join(out) or "-"
+
+
 def row(w):
     """One result row for a work."""
     pdf = (w.get("best_oa_location") or {}).get("pdf_url") or (w.get("open_access") or {}).get("oa_url")
     doi = str(w.get("doi") or "").removeprefix("https://doi.org/")
+    venue = ((w.get("primary_location") or {}).get("source") or {}).get("display_name")
     return "\t".join((cell(w.get("publication_year")), cell(w.get("cited_by_count")), cell(short(w.get("id"))),
-                      cell(w.get("display_name"), 200), cell(doi), cell(pdf)))
+                      cell(w.get("display_name"), 200), cell(doi), cell(pdf), cell(w.get("type")), cell(venue, 120), flags(w)))
 
 
 def show(rows, note):
@@ -198,30 +243,56 @@ def work(key):
     return get(path, {"select": FIELDS + ",referenced_works"}, missing=key)
 
 
-def works(flt, n):
-    """The n most cited works that match a filter."""
-    reply = get("/works", {"filter": flt, "sort": "cited_by_count:desc", "per-page": n, "select": FIELDS})
+def works(flt, n, sort="cited_by_count:desc"):
+    """The first n works that match a filter, most cited first unless sort says otherwise."""
+    reply = get("/works", {"filter": flt, "sort": sort, "per-page": n, "select": FIELDS})
     return reply.get("results") or []
+
+
+def title_query(q):
+    """A title made safe for the title.search filter: commas and | (filter syntax) become spaces, a leading !
+    (negation) is dropped, and upper-case AND, OR and NOT (boolean operators) are lowercased."""
+    q = re.sub(r"[,|]", " ", q).strip().lstrip("!")
+    return " ".join(re.sub(r"\b(AND|OR|NOT)\b", lambda m: m.group(1).lower(), q).split())
 
 
 def find(q):
     egress(q)
     key = work_key(q)
-    show([work(key)] if key else works("title.search:" + q, 5), NOTE_NO_MATCH)
+    show([work(key)] if key else works("title.search:" + title_query(q), 5), NOTE_NO_MATCH)
 
 
-def chain(kind, key, n):
+def header(w):
+    print(f"# work\t{cell(short(w.get('id')))}\t{cell(w.get('publication_year'))}\t{cell(w.get('display_name'), 200)}")
+
+
+def chain(kind, key, n, sort="cited", since=None):
     egress(key)
     w = work(key)
     wid = short(w.get("id"))
-    print(f"# work\t{cell(wid)}\t{cell(w.get('publication_year'))}\t{cell(w.get('display_name'), 200)}")
+    header(w)
     if kind == "cites":
-        rows = works("cites:" + wid, n)
+        flt = "cites:" + wid + (f",from_publication_date:{since}-01-01" if since else "")
+        rows = works(flt, n, "publication_date:desc" if sort == "recent" else "cited_by_count:desc")
     else:
         ids = [short(u) for u in w.get("referenced_works") or []]
         rows = [r for i in range(0, len(ids), BATCH) for r in works("openalex:" + "|".join(ids[i:i + BATCH]), BATCH)]
         rows = sorted(rows, key=lambda r: -(r.get("cited_by_count") or 0))[:n]
     show(rows, NOTE_EMPTY)
+
+
+def oa(key):
+    egress(key)
+    w = work(key)
+    header(w)
+    names = {"publishedVersion": "published", "acceptedVersion": "accepted", "submittedVersion": "submitted"}
+    locs = oa_order(w)
+    for loc in locs:
+        print("\t".join((names.get(loc.get("version"), "-"), oa_kind(loc), cell(loc.get("pdf_url")),
+                         cell(loc.get("landing_page_url")), cell((loc.get("source") or {}).get("display_name"), 120),
+                         cell(loc.get("license")))))
+    if not locs:
+        print(NOTE_NO_OA)
 
 
 def author(name, n):
@@ -249,6 +320,12 @@ def count(s):
     return int(s)
 
 
+def year(s):
+    if not re.fullmatch(r"[12]\d{3}", s):
+        raise argparse.ArgumentTypeError("must be a four-digit year")
+    return s
+
+
 def work_arg(s):
     key = work_key(s)
     if not key:
@@ -266,6 +343,12 @@ def main(argv=None):
     for name, what in (("refs", "works the given work references"), ("cites", "works citing the given work")):
         p = sub.add_parser(name, parents=[limit], help=what + ", most cited first")
         p.add_argument("work", type=work_arg, help="W id, openalex.org URL, DOI or doi.org URL")
+        if name == "cites":
+            p.add_argument("--sort", choices=("cited", "recent"), default="cited",
+                           help="cited: most cited first (default); recent: newest first")
+            p.add_argument("--since", type=year, metavar="YEAR", help="only works published in or after this year")
+    p = sub.add_parser("oa", help="the work's open-access copies, best first")
+    p.add_argument("work", type=work_arg, help="W id, openalex.org URL, DOI or doi.org URL")
     p = sub.add_parser("author", parents=[limit], help="an author's works, most cited first")
     p.add_argument("name", nargs="+", help="author name, or an A id or openalex.org author URL")
     args = ap.parse_args(argv)
@@ -274,8 +357,10 @@ def main(argv=None):
             find(" ".join(args.query))
         elif args.cmd == "author":
             author(" ".join(args.name), args.n)
+        elif args.cmd == "oa":
+            oa(args.work)
         else:
-            chain(args.cmd, args.work, args.n)
+            chain(args.cmd, args.work, args.n, getattr(args, "sort", "cited"), getattr(args, "since", None))
     except Fail as e:
         print(f"FAIL\t{clean(e)}")
         return 1

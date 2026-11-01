@@ -48,10 +48,10 @@ One gap round at most: 1 or 2 researchers, only for a key question left without 
 
 ## Archive and locate
 
-1. Collect the URLs of the finding lines; one per host and path. Fetch at most 25 with `fetch.py <topic>/sources <name> <url>`: first the pages behind findings the answer would rest on, then by label (paper, official, first-hand before summary). Reuse what `sources/` already holds; never download again. Every FAIL goes to `log.md`; a walled page behind a likely central finding goes to the user's browser, as in dig.
+1. Collect the URLs of the finding lines; one per host and path. Fetch at most 25 with `fetch.py <topic>/sources <name> <url>`, passing a paper's DOI so its legal open-access copies come first: first the pages behind findings the answer would rest on, then by label (paper, official, first-hand before summary). Reuse what `sources/` already holds; never download again. Every FAIL goes to `log.md`; a walled page behind a likely central finding goes to the user's browser, as in dig.
 2. Locate each finding: grep a distinctive phrase of its quote in the fetched copy (`grep -n -F -e "<phrase>" -e "<phrase>" <topic>/sources/<file>` for several at once), read a few lines around a hit, and take the text exactly as the copy has it. Not found (the page changed, the researcher paraphrased, the fetch failed): the finding stays URL-only.
 3. Write `claims.json` (`references/formats.md`): one entry per finding the report may use, ids c1, c2 and on. Importance:
-   - central: the answer would change if it were false; at most 10, each located; a URL-only finding is never central;
+   - central: the answer would change if it were false; at most 10, each located; a URL-only finding is never central, nor is one whose source is retracted;
    - supporting: backs a section;
    - tangential: context.
 4. Write `extracts.json` with one claim per located finding, carrying its id, its claim text in the user's language and its located quotes; conflicting findings go side by side under `disagreements`, unfetched pages under `unreached`. Run `report.py <topic> --check` and fix each MISMATCH by copying the source text exactly.

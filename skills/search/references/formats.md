@@ -43,11 +43,12 @@ One label per source, no scores; the reader decides what to trust by reading the
 - `summary`: collected or restated knowledge (explainers, roundups, encyclopedias, glossaries). Good for finding what to follow backward; back claims with `first-hand` or `paper` sources where possible.
 - `official`: documents and announcements by the maker of a tool or product.
 
-Marks after the label, when known: `examples` (the writer's own work is shown; read these first when the user wants how skilled people do it), `measured` (the writer's own measurements or comparisons), `self-reported` (a score or feature stated by its own authors), `ai-assisted` (the writer says an AI wrote it), `promo` (leads to something the writer sells), `unread` (downloaded, read by nobody yet), `auto-captions` (automatic captions: frequent errors, quote only what is legible, have the user check the video), `unverified` (from a search report, not read in the original).
+Marks after the label, when known: `retracted` (OpenAlex marks the work retracted: it never backs a required or central claim), `preprint` (a submitted version, such as fetch.py's submitted-copy: quote the published version when one exists), `examples` (the writer's own work is shown; read these first when the user wants how skilled people do it), `measured` (the writer's own measurements or comparisons), `self-reported` (a score or feature stated by its own authors), `ai-assisted` (the writer says an AI wrote it), `promo` (leads to something the writer sells), `unread` (downloaded, read by nobody yet), `auto-captions` (automatic captions: frequent errors, quote only what is legible, have the user check the video), `unverified` (from a search report, not read in the original).
 
 ## File names and locations
 
 - `<author>-<year>-<short-title>` in lowercase ASCII with hyphens; arXiv papers `arxiv-<id>-<short-title>`.
+- A PDF gives `<name>.pdf`, `<name>.txt` (its text in reading order: grep and quote this) and `<name>.layout.txt` (page layout, table rows kept); an arXiv paper read from its HTML version gives `<name>.md`.
 - A location is `sources/<file>:<line>`; video captions are located by time, `sources/<file>.md [12:34]`.
 
 ## log.md
@@ -89,7 +90,7 @@ The `brief:` and `feedback:` lines start at column 0 so that later intakes can g
 ```
 
 - `status` is `sourced`, `partial` or `none`. One claim per required claim, in the user's language. `note` is one flat line on who did what: no conclusions, no ratings.
-- `text` is copied from the source exactly: the same characters and spelling, auto-caption errors kept. Whitespace and line breaks may differ. Skip text with the ellipsis character (…); the pieces must appear in order (two-column PDFs mix columns on one line).
+- `text` is copied from the source exactly: the same characters and spelling, auto-caption errors kept. Whitespace and line breaks may differ. Skip text with the ellipsis character (…); the pieces must appear in order (older PDF text copies, made in page layout, mix two columns on one line).
 - `line` is the `grep -n` line of the first piece, `end` the last line when the extract spans lines; the check looks 2 lines either side.
 - In report mode each claim also carries `id`, its claims.json id, and holds that claim's located quotes; the evidence page then shows its votes.
 - `translation` goes with quotes that are not in the user's language; the page marks it as a translation.

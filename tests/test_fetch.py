@@ -1,6 +1,7 @@
 import contextlib
 import io
 import json
+import os
 import re
 import subprocess
 import tempfile
@@ -42,7 +43,8 @@ class Server:
             def do_GET(self):
                 seen.append(self.path)
                 agents.append(self.headers.get("User-Agent"))
-                answer = routes.get(self.path, (404, {}, b"not found"))
+                key = self.path if self.path in routes else self.path.split("?", 1)[0]
+                answer = routes.get(key, (404, {}, b"not found"))
                 if isinstance(answer, list):
                     answer = answer.pop(0) if len(answer) > 1 else answer[0]
                 status, headers, body = answer
@@ -176,23 +178,121 @@ class FetchTest(unittest.TestCase):
             self.assertEqual(self.fetch(name, s.url + path),
                              (1, ["FAIL", name, "expected PDF, got an HTML page: Sign in | Publisher"]))
 
-    def test_arxiv_html_fallback(self):
-        s = self.serve({"/pdf/2508.00001": (200, {"Content-Type": "application/pdf"}, PDF),
-                        "/html/2508.00001": (200, HTML, page("<article><h1>Paper title</h1>" + LONG + "</article>"))})
+    def saved(self):
+        """The files in sources/, the index left out."""
+        return sorted(p.name for p in self.src.iterdir() if p.name != "index.tsv")
+
+    def test_arxiv_html_comes_first(self):
+        # No pdftotext on PATH: the HTML version is enough, so arXiv works without poppler.
+        s = self.serve({"/html/2508.00001": (200, HTML, page("<article><h1>Paper title</h1>" + LONG + "</article>"))})
         self.patch(m, "ARXIV", s.url)
-        self.tools(pdftotext=lambda cmd: Path(cmd[-1]).write_text(" \f \n", encoding="utf-8"))
-        code, f = self.fetch("arxiv-2508.00001-x", "https://arxiv.org/abs/2508.00001")
+        code, f = self.fetch("arxiv-2508.00001-x", "https://arxiv.org/pdf/2508.00001.pdf")
         self.assertEqual((code, f[2], f[4], f[5]), (0, "arxiv-2508.00001-x.md", "# Paper title", "arxiv-html"))
-        self.assertEqual(s.seen, ["/pdf/2508.00001", "/html/2508.00001"])
-        self.assertEqual(sorted(p.name for p in self.src.iterdir()), ["arxiv-2508.00001-x.md", "arxiv-2508.00001-x.pdf"])
+        self.assertEqual(s.seen, ["/html/2508.00001"])
+        self.assertEqual(self.saved(), ["arxiv-2508.00001-x.md"])
+
+    def test_arxiv_falls_back_to_the_pdf(self):
+        fatal = page("<article><p>Conversion to HTML had a Fatal error and exited abruptly. This document may be "
+                     "truncated or damaged.</p>" + LONG + "</article>")
+        s = self.serve({"/html/2508.00001": (404, HTML, page("<p>No HTML for this paper</p>")),
+                        "/html/2508.00003": (200, HTML, fatal),
+                        "/pdf/2508.00001": (200, {"Content-Type": "application/pdf"}, PDF),
+                        "/pdf/2508.00003": (200, {"Content-Type": "application/pdf"}, PDF)})
+        self.patch(m, "ARXIV", s.url)
+        self.tools(pdftotext=lambda cmd: Path(cmd[-1]).write_text("Paper title\n" + "word " * 400, encoding="utf-8"))
+        for n in ("1", "3"):
+            code, f = self.fetch(f"p{n}", f"https://arxiv.org/abs/2508.0000{n}")
+            self.assertEqual((code, f[2]), (0, f"p{n}.txt"))
+        self.assertEqual(s.seen, ["/html/2508.00001", "/pdf/2508.00001", "/html/2508.00003", "/pdf/2508.00003"])
 
     def test_nothing_is_written_after_a_fail(self):
         s = self.serve({"/pdf/2508.00002": (200, {"Content-Type": "application/pdf"}, PDF)})  # no HTML version
         self.patch(m, "ARXIV", s.url)
-        self.tools(pdftotext=lambda cmd: Path(cmd[-1]).write_text("", encoding="utf-8"))
-        self.assertEqual(self.fetch("p", "https://arxiv.org/pdf/2508.00002.pdf"), (1, ["FAIL", "p", "http 404"]))
-        self.assertEqual(s.seen, ["/pdf/2508.00002", "/html/2508.00002"])
-        self.assertEqual(list(self.src.iterdir()), [])
+        self.assertEqual(self.fetch("p", "https://arxiv.org/pdf/2508.00002.pdf"),
+                         (1, ["FAIL", "p", "arXiv HTML: http 404; PDF: missing tool: pdftotext (poppler or Xpdf)"]))
+        self.assertEqual(s.seen, ["/html/2508.00002", "/pdf/2508.00002"])
+        self.assertFalse(self.src.exists() and self.saved())
+
+    def test_pdf_text_in_reading_order_with_a_layout_copy(self):
+        reading = "Left column first sentence.\nLeft column second sentence.\nRight column text.\n" + "word " * 400
+        layout = "Left column first sentence.      Right column text.\nLeft column second sentence.\n" + "word " * 400
+
+        def pdftotext(cmd):
+            Path(cmd[-1]).write_text(layout if "-layout" in cmd else reading, encoding="utf-8")
+        self.tools(pdftotext=pdftotext)
+        pdf = self.tmp / "two-column.pdf"
+        pdf.write_bytes(PDF)
+        code, f = self.fetch("cols", pdf)
+        self.assertEqual((code, f[2], f[3], f[4]), (0, "cols.txt", str(len(reading)), "Left column first sentence."))
+        self.assertEqual((self.read("cols.txt"), self.read("cols.layout.txt")), (reading, layout))
+        self.assertEqual(self.saved(), ["cols.layout.txt", "cols.pdf", "cols.txt"])
+
+    # DOIs: open-access copies first
+
+    def doi_server(self, work=None, **routes):
+        """A loopback server for the OpenAlex lookup, the copies and the publisher; fetch.py pointed at it."""
+        table = {}
+        s = self.serve(table)
+        if work is not None:
+            text = json.dumps(work).replace("{u}", s.url)
+            table["/works/doi:10.1234/abc"] = (200, {"Content-Type": "application/json"}, text.encode())
+        table.update(routes)
+        self.patch(m, "OPENALEX", s.url)
+        self.patch(m, "DOI", s.url)
+        return s
+
+    def paths(self, s):
+        return [p.split("?", 1)[0] for p in s.seen]
+
+    def test_doi_tries_open_access_copies_first(self):
+        work = {"id": "https://openalex.org/W1", "type": "article", "is_retracted": False, "locations": [
+            {"is_oa": True, "version": "acceptedVersion", "pdf_url": "{u}/repo.pdf", "source": {"type": "repository"}},
+            {"is_oa": True, "version": "publishedVersion", "pdf_url": "{u}/pub.pdf", "landing_page_url": "{u}/pub",
+             "source": {"type": "journal"}},
+            {"is_oa": False, "version": "publishedVersion", "pdf_url": "{u}/closed.pdf"}]}
+        s = self.doi_server(work, **{"/pub.pdf": (403, {}, b""),
+                                     "/repo.pdf": (200, {"Content-Type": "application/pdf"}, PDF)})
+        self.tools(pdftotext=lambda cmd: Path(cmd[-1]).write_text("Accepted manuscript\n" + "word " * 400, encoding="utf-8"))
+        code, f = self.fetch("paper", "https://doi.org/10.1234/abc")
+        self.assertEqual((code, f[2], f[5]), (0, "paper.txt", "accepted-copy"))
+        self.assertEqual(self.paths(s), ["/works/doi:10.1234/abc", "/pub.pdf", "/repo.pdf"])
+
+    def test_doi_goes_to_the_publisher_when_no_copy_works(self):
+        article = (200, HTML, page("<article>" + LONG + "</article>"))
+        for name, work in (("none", {"id": "W2", "locations": []}), ("gone", None)):  # no copies; OpenAlex 404
+            with self.subTest(name=name):
+                s = self.doi_server(work, **{"/10.1234/abc": article})
+                code, f = self.fetch(name, "doi:10.1234/abc")
+                self.assertEqual((code, f[2], len(f)), (0, f"{name}.md", 5))
+                self.assertEqual(self.paths(s), ["/works/doi:10.1234/abc", "/10.1234/abc"])
+
+    def test_doi_fail_counts_the_copies_tried(self):
+        work = {"id": "W3", "is_retracted": True, "locations": [
+            {"is_oa": True, "version": "publishedVersion", "pdf_url": "{u}/pub.pdf", "source": {"type": "journal"}}]}
+        self.doi_server(work, **{"/pub.pdf": (403, {}, b""), "/10.1234/abc": (403, {}, b"")})
+        self.assertEqual(self.fetch("p", "10.1234/abc"), (1, ["FAIL", "p", "http 403: open it in a browser and pass the "
+                                                                    "saved file path (1 open-access copy failed too)"]))
+        self.assertFalse(self.src.exists() and self.saved())
+
+    def test_doi_of_a_retracted_work_is_marked(self):
+        self.doi_server({"id": "W4", "is_retracted": True, "locations": []},
+                        **{"/10.1234/abc": (200, HTML, page("<article>" + LONG + "</article>"))})
+        self.assertEqual(self.fetch("r", "https://dx.doi.org/10.1234/abc")[1][5], "retracted")
+
+    def test_doi_egress_and_key(self):
+        work = {"id": "W5", "locations": [
+            {"is_oa": True, "version": "submittedVersion", "pdf_url": "{u}/projectx/draft.pdf", "source": {}}]}
+        s = self.doi_server(work, **{"/10.1234/abc": (200, HTML, page("<article>" + LONG + "</article>"))})
+        self.patch(m, "egress_terms", lambda: [("projectx", "forbidden.txt")])
+        with mock.patch.dict(os.environ, {"OPENALEX_API_KEY": "k-secret-123"}):
+            code, f = self.fetch("k", "10.1234/abc")
+        self.assertEqual(code, 0)
+        self.assertNotIn("k-secret-123", "\t".join(f))
+        self.assertIn("api_key=k-secret-123", s.seen[0])
+        self.assertEqual(self.paths(s), ["/works/doi:10.1234/abc", "/10.1234/abc"])  # the copy naming projectx is never asked for
+        self.assertEqual(self.fetch("e", "doi:10.1234/projectx")[1][2],
+                         "egress: 'projectx' is listed in forbidden.txt; use a generic problem statement")
+        self.assertEqual(len(s.seen), 2)
 
     def test_refused_hosts_make_no_request(self):
         opener = mock.Mock(side_effect=AssertionError("a request was made"))
@@ -227,6 +327,7 @@ class FetchTest(unittest.TestCase):
         self.assertEqual(self.fetch("saved", pdf), (0, ["OK", "saved", "saved.txt", str(len(text)), "Title line of the paper"]))
         self.assertEqual((self.src / "saved.pdf").read_bytes(), PDF)
         self.assertEqual((self.src / "saved.txt").read_bytes(), text.encode())  # form feeds kept, LF line ends
+        self.assertEqual((self.src / "saved.layout.txt").read_bytes(), text.encode())
 
     def test_local_text_files(self):
         for suffix in (".txt", ".md"):

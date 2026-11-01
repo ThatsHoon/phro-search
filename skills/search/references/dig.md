@@ -26,19 +26,19 @@ Pick leads with a strong scent: named again and again, surveys and textbooks, ci
 | Move | Papers | Personal posts | Tools |
 |---|---|---|---|
 | backward | references | links in the post, "based on X's article" | `chain.py refs`, grep the downloaded text |
-| forward | citing works, most cited first | posts that cite or introduce it | `chain.py cites`, a searcher |
+| forward | citing works, most cited first | posts that cite or introduce it | `chain.py cites` (`--sort recent` for the newest), a searcher |
 | author | the author's other papers | the author's archive, post list, channel | `chain.py author`, a searcher |
 | venue | the core conference or journal | tags, forums, curated lists | a searcher |
 | neighbors | same issue, same list | related posts, same tag, same playlist | a searcher |
 | re-search | new terms from the map | the same, slang and abbreviations too | a searcher |
 
 - In fields without papers the knowledge sits in practitioners' own records: do not restrict the dig to authoritative venues.
-- Papers go by DOI: a DOI or id lookup costs nothing, while a title or name search costs 10 of the 1,000 daily credits OpenAlex gives an IP address. Check `chain.py find` title candidates by year and title before using one; a title can match a commentary or another record.
+- Papers go by DOI: a DOI or id lookup costs nothing, while a title or name search costs 10 of the about 1,000 daily credits ($1.000 a day) OpenAlex gives without a key. Check `chain.py find` title candidates by year, title, type and venue before using one; a title can match a commentary or another record. A work flagged retracted never backs a required claim. For a preprint, quote the published version when the flags or `chain.py oa` show one.
 - OpenAlex lags: for a work under about a year old, 0 refs and 0 cites mean unknown, not none. Backward: grep the reference section of the downloaded text. Forward: a searcher looks for works citing the title.
 - Two plausible directions: two searchers on two hypotheses in one turn; compare when both return, then continue.
-- Download hits with `fetch.py <topic>/sources <name> <url>`. Only OK rows enter the sources table. Every FAIL goes to `log.md` with its reason and URL. Before reporting a canonical work as unreached, look for another legal copy: the author's or lab's page, a technical report, an institutional repository, a curated site. Never piracy sites.
+- Download hits with `fetch.py <topic>/sources <name> <url>`; for a paper pass its DOI, so the legal open-access copies are tried before the publisher. Only OK rows enter the sources table. Every FAIL goes to `log.md` with its reason and URL. Before reporting a canonical work as unreached, look for another legal copy: `chain.py oa <DOI>`, the author's or lab's page, a technical report, an institutional repository, a curated site. Never piracy sites.
 - A bot check (403, a browser check page) on a free page: ask the user to open it in their browser and save it, then run `fetch.py <topic>/sources <name> <saved file path>`. Never work around the check.
-- Locate: grep the downloaded text for each required claim's passage (`grep -n -i "<words>" <topic>/sources/<file>`, then read a few lines around it) and write `file:line` plus a short quote on the claim line in `map.md`. Location and quote only, no summary or conclusion. The quote matters: two-column PDFs mix columns on one line, so a line number alone is hard to find.
+- Locate: grep the downloaded text for each required claim's passage (`grep -n -i "<words>" <topic>/sources/<file>`, then read a few lines around it) and write `file:line` plus a short quote on the claim line in `map.md`. Location and quote only, no summary or conclusion. A PDF's `.txt` copy is in reading order; quote a table from its `.layout.txt` copy, which keeps the rows. The quote matters: a line number alone is hard to find.
 
 ## End of each round (the main session decides)
 

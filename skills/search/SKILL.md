@@ -57,8 +57,8 @@ Users rarely know exactly what they are looking for or which context matters. Pi
 
 Run them as `python -I ${CLAUDE_PLUGIN_ROOT}/scripts/<name>.py`, one call per command with literal paths (no `cd`, variables, loops or chains), so permission rules can match it. They print compact tab-separated lines and leave bodies on disk; read sources by grep with a few lines of context, never whole.
 
-- `fetch.py <sources_dir> <name> <url-or-path>`: download one original and check that it is real (PDF to text, HTML to Markdown, video captions as `[mm:ss]` lines). A local path ingests a file the user saved from a browser. `OK` lines go to the sources table; `FAIL` reasons go to log.md.
-- `chain.py find|refs|cites|author`: find a paper, walk its references and citing works, or an author's works (OpenAlex, no key).
+- `fetch.py <sources_dir> <name> <url-or-path>`: download one original and check that it is real (a PDF's text in reading order, with a layout copy for tables; HTML to Markdown; video captions as `[mm:ss]` lines). An arXiv link is read from its HTML version first; a DOI tries the open-access copies before the publisher. A local path ingests a file the user saved from a browser. `OK` lines go to the sources table; `FAIL` reasons go to log.md.
+- `chain.py find|refs|cites|author|oa`: find a paper, walk its references and citing works, an author's works, or list a paper's legal open-access copies (OpenAlex, no key needed). Rows carry the work's type, venue and flags (retracted, preprint, erratum, comment, accepted-copy).
 - `report.py <topic_dir> [--check]`: check every extract against its source line and every claims.json verdict against its votes, then build `report.html`.
 - `watch.py add|list|check`: venue feeds and what is new since the last check.
 - `pulse.py <topic_dir> --plan <file> [--days N] [--quick | --deep]`: community items of the last N days from keyless lanes, scored, merged and clustered into `pulse/<date>.json` and an evidence file.

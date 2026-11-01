@@ -14,7 +14,8 @@ INVISIBLE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\U0000061c\U0000200
 # Scripts run standalone, so they carry copies of shared code: (names, the original, scripts that must carry it).
 SHARED = ((("egress_terms", "_edge", "egress_hit"), "hooks/egress.py", {"chain.py", "fetch.py", "models.py", "pulse.py", "watch.py"}),
           (("_CTRL", "_QUOTES", "clean"), "scripts/chain.py", set()),
-          (("NAMES",), "scripts/pulse.py", {"check.py"}))
+          (("NAMES",), "scripts/pulse.py", {"check.py"}),
+          (("OA_RANKS", "oa_kind", "oa_order"), "scripts/chain.py", {"fetch.py"}))
 
 
 def read(path):

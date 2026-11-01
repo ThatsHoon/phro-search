@@ -4,16 +4,24 @@ Usage:
   fetch.py <sources_dir> <name> <url-or-path>
 
   name         file stem matching ^[a-z0-9][a-z0-9.-]*$, for example bates-1989-berrypicking
-  url-or-path  an http(s) URL, or a page or PDF saved from a browser (same checks)
+  url-or-path  an http(s) URL, a DOI (bare, doi: or a doi.org URL), or a page or PDF saved from a
+               browser (same checks)
 
 Judged by content, not extension or status: walls, error pages, short bodies and HTML posing
-as a PDF are refused. Readable copy: <name>.txt for PDF and plain text, <name>.md for HTML,
-Markdown and YouTube captions; a PDF is kept as <name>.pdf. Nothing is written on FAIL, and
-an existing <name>.* is never overwritten.
+as a PDF are refused. Readable copy: <name>.txt for a PDF (its text in reading order, so a
+column's sentences stay together) and for plain text, <name>.layout.txt for a PDF's text in page
+layout (table rows kept), <name>.md for HTML, Markdown, arXiv HTML and YouTube captions; a PDF is
+kept as <name>.pdf. An arXiv link is read from its HTML version first and from the PDF when that
+is missing, damaged or short. A DOI tries the open-access copies OpenAlex lists (published, then
+accepted, then submitted versions; repository copies first) before the publisher's page; the
+lookup costs no OpenAlex credits, and OPENALEX_API_KEY is sent when set. Nothing is written on
+FAIL, and an existing <name>.* is never overwritten.
 
 Output, one tab-separated line:
-  OK <name> <file> <chars> <first line> [ocr|auto-captions|arxiv-html]
+  OK <name> <file> <chars> <first line> [<marks>]
   FAIL <name> <reason>                                  exit code 1
+Marks, comma-separated: ocr, auto-captions, arxiv-html; published-copy, accepted-copy or
+submitted-copy for an open-access copy of a DOI; retracted when OpenAlex marks the work retracted.
 """
 import argparse, html.parser, http.client, json, os, re, shutil, socket, ssl, subprocess, sys, tempfile, time
 import unicodedata, urllib.error, urllib.parse, urllib.request
@@ -21,6 +29,8 @@ from pathlib import Path
 
 VERSION = "0.4.0"
 ARXIV = "https://arxiv.org"
+OPENALEX = "https://api.openalex.org"
+DOI = "https://doi.org"
 RAW = "https://raw.githubusercontent.com"
 UA = f"Mozilla/5.0 (compatible; phro-search/{VERSION}; +https://github.com/ThatsHoon/phro-search)"
 ACCEPT = "text/html,application/xhtml+xml,application/pdf,text/plain;q=0.8,*/*;q=0.5"
@@ -39,6 +49,8 @@ WALL_PHRASES = (
     "로그인이 필요", "로그인 후 이용", "페이지를 찾을 수 없", "접근이 거부", "권한이 없습니다",
     "ログインしてください", "ページが見つかりません", "アクセスが拒否", "お探しのページは見つかりませんでした",
 )
+# Phrases on an arXiv HTML page whose conversion failed or broke off; the PDF is used instead.
+ARXIV_NOTICES = ("conversion to html had a fatal error", "html is not available for the source", "no html for")
 HTTP_REASONS = {
     401: "http 401: login required",
     403: "http 403: open it in a browser and pass the saved file path",
@@ -345,13 +357,17 @@ def html_md(data, ctype, base):
 
 
 def pdf_text(work, data):
-    """Text layer of a PDF through pdftotext, form feeds between pages."""
+    """(reading-order text, layout text) of a PDF's text layer through pdftotext, form feeds between pages.
+    Reading order keeps each column's sentences together, so quotes and grep use it; the layout copy keeps table rows."""
     exe = shutil.which("pdftotext")
     if not exe:
         raise Fail("missing tool: pdftotext (poppler or Xpdf)")
     (work / "in.pdf").write_bytes(data)
-    run([exe, "-layout", "-enc", "UTF-8", str(work / "in.pdf"), str(work / "out.txt")])
-    return (work / "out.txt").read_text(encoding="utf-8", errors="replace") if (work / "out.txt").is_file() else ""
+    out = []
+    for flags, name in (([], "out.txt"), (["-layout"], "layout.txt")):
+        run([exe, *flags, "-enc", "UTF-8", str(work / "in.pdf"), str(work / name)])
+        out.append((work / name).read_text(encoding="utf-8", errors="replace") if (work / name).is_file() else "")
+    return tuple(out)
 
 
 def ocr(work):
@@ -369,16 +385,15 @@ def convert(work, data, ctype, base, paths, arxiv=None):
     """(files by suffix, readable text, mark) of downloaded bytes, after the checks."""
     mime = ctype.split(";")[0].strip().lower()
     if b"%PDF-" in data[:1024]:
-        text, mark = pdf_text(work, data), ""
+        text, layout = pdf_text(work, data)
         if len("".join(text.split())) < TEXT_LAYER:
-            if arxiv:
-                files, text, _ = convert(work, *get(f"{ARXIV}/html/{arxiv}"), [])
-                return {".pdf": data, **files}, text, "arxiv-html"
             if not (shutil.which("pdftoppm") and shutil.which("tesseract")):
                 raise Fail("no text layer, and OCR needs pdftoppm and tesseract")
-            text, mark = ocr(work), "ocr"
+            text = ocr(work)
+            check("", text)
+            return {".pdf": data, ".txt": text}, text, "ocr"
         check("", text)
-        return {".pdf": data, ".txt": text}, text, mark
+        return {".pdf": data, ".txt": text, ".layout.txt": layout}, text, ""
     if re.search(rb"<!doctype html|<(?:html|head|body)\b", data[:4096], re.I):
         title, text = html_md(data, ctype, base)
         if arxiv or "pdf" in mime or any(p.endswith(".pdf") for p in paths):
@@ -441,8 +456,84 @@ def captions(work, url):
     return {".md": text}, text, "auto-captions" if auto else ""
 
 
+def egress(text):
+    """Fail when text holds a forbidden term, or when the term sources cannot be read (fail closed)."""
+    try:
+        hit = egress_hit(text, egress_terms())
+    except Exception as e:  # a term source that cannot be read or parsed blocks the request
+        raise Fail(f"egress: cannot read the forbidden terms: {e}") from None
+    if hit:
+        raise Fail(f"egress: '{hit[0]}' is listed in {hit[1]}; use a generic problem statement")
+
+
+def doi_of(src):
+    """The DOI in a doi.org URL, a doi: name or a bare DOI, else None."""
+    m = re.fullmatch(r"(?:https?://(?:dx\.)?doi\.org/|doi:)?(10\.\d{4,9}/\S+)", src.strip(), re.I)
+    return m.group(1) if m else None
+
+
+OA_RANKS = {"publishedVersion": 0, "acceptedVersion": 1, "submittedVersion": 2}
+
+
+def oa_kind(loc):
+    """repository (arXiv included), publisher or other, for one OpenAlex location."""
+    src = loc.get("source") or {}
+    urls = f"{loc.get('pdf_url') or ''} {loc.get('landing_page_url') or ''}"
+    if src.get("type") == "repository" or re.search(r"//(?:[\w-]+\.)*arxiv\.org/", urls):
+        return "repository"
+    return "publisher" if src.get("type") in ("journal", "conference", "book series", "ebook platform") else "other"
+
+
+def oa_order(w):
+    """The open-access locations of an OpenAlex work, best first: published, accepted, submitted, then unknown
+    versions; within each, repository copies (arXiv included) before other hosts and publisher pages, which often bot-check."""
+    kinds = {"repository": 0, "other": 1, "publisher": 2}
+    locs = [loc for loc in w.get("locations") or [] if isinstance(loc, dict) and loc.get("is_oa")
+            and (loc.get("pdf_url") or loc.get("landing_page_url"))]
+    return sorted(locs, key=lambda loc: (OA_RANKS.get(loc.get("version"), 3), kinds[oa_kind(loc)]))
+
+
+def openalex_work(doi):
+    """A DOI's OpenAlex record (a lookup by id costs no credits), or {} when OpenAlex cannot give it."""
+    params = {"select": "id,type,is_retracted,locations"}
+    key = os.environ.get("OPENALEX_API_KEY", "").strip()
+    if key:
+        params["api_key"] = key
+    path = urllib.parse.quote("doi:" + doi, safe="/:")
+    try:
+        w = json.loads(get(f"{OPENALEX}/works/{path}?{urllib.parse.urlencode(params)}")[0])
+    except (Fail, ValueError):
+        return {}
+    return w if isinstance(w, dict) else {}
+
+
+def load_doi(work, doi):
+    """A DOI: its open-access copies first (published, accepted, then submitted versions), then the publisher's page."""
+    w = openalex_work(doi)
+    late = ["retracted"] * bool(w.get("is_retracted"))
+    names = {"publishedVersion": "published-copy", "acceptedVersion": "accepted-copy", "submittedVersion": "submitted-copy"}
+    failed = 0
+    for loc in oa_order(w):
+        try:
+            files, text, mark = load_url(work, loc.get("pdf_url") or loc.get("landing_page_url"))
+        except Fail:
+            failed += 1
+            continue
+        return files, text, ",".join([m for m in (mark,) if m] + [names.get(loc.get("version"), "copy")] + late)
+    try:
+        files, text, mark = load_url(work, f"{DOI}/{urllib.parse.quote(doi, safe='/:;()')}")
+    except Fail as e:
+        tried = f" ({failed} open-access cop{'y' if failed == 1 else 'ies'} failed too)" if failed else ""
+        raise Fail(f"{e}{tried}") from None
+    return files, text, ",".join([m for m in (mark,) if m] + late)
+
+
 def load(work, src):
-    """(files by suffix, readable text, mark) for a URL or a local file."""
+    """(files by suffix, readable text, marks) for a URL, a DOI or a local file."""
+    doi = doi_of(src)
+    if doi and (re.match(r"https?://", src, re.I) or not Path(src).expanduser().exists()):
+        egress(src)
+        return load_doi(work, doi)
     if not re.match(r"https?://", src, re.I):
         p = Path(src).expanduser()
         if not p.is_file():
@@ -451,12 +542,12 @@ def load(work, src):
             raise Fail("too large: over 40 MB")
         suffix = p.suffix.lower()
         return convert(work, p.read_bytes(), LOCAL_TYPES.get(suffix, f"local {suffix or 'file'}"), "", [suffix])
-    try:
-        hit = egress_hit(src, egress_terms())
-    except Exception as e:  # a term source that cannot be read or parsed blocks the request
-        raise Fail(f"egress: cannot read the forbidden terms: {e}") from None
-    if hit:
-        raise Fail(f"egress: '{hit[0]}' is listed in {hit[1]}; use a generic problem statement")
+    return load_url(work, src)
+
+
+def load_url(work, src):
+    """(files, text, marks) for one URL, after the egress and host checks."""
+    egress(src)
     if reason := refused(src):
         raise Fail(reason)
     u = urllib.parse.urlsplit(src)
@@ -467,20 +558,46 @@ def load(work, src):
     blob = re.fullmatch(r"/([^/]+)/([^/]+)/blob/(.+)", u.path)
     if host in ("github.com", "www.github.com") and blob:
         src = f"{RAW}/{blob[1]}/{blob[2]}/{blob[3]}"
-    abs_pdf = re.fullmatch(r"/(?:abs|pdf)/(.+?)(?:\.pdf)?/?", u.path)
-    arxiv = abs_pdf[1] if abs_pdf and (host == "arxiv.org" or host.endswith(".arxiv.org")) else None
-    if arxiv:
-        src = f"{ARXIV}/pdf/{arxiv}"
+    abs_pdf = re.fullmatch(r"/(?:abs|pdf|html)/(.+?)(?:\.pdf)?/?", u.path)
+    if abs_pdf and (host == "arxiv.org" or host.endswith(".arxiv.org")):
+        return load_arxiv(work, abs_pdf[1])
     data, ctype, final = get(src)
     paths = [urllib.parse.urlsplit(x).path.lower() for x in (src, final)]
-    return convert(work, data, ctype, final, paths, arxiv)
+    return convert(work, data, ctype, final, paths)
+
+
+def arxiv_html(work, arxiv):
+    """(files, text, mark) of a paper's arXiv HTML version, which keeps reading order and real tables."""
+    data, ctype, final = get(f"{ARXIV}/html/{arxiv}")
+    if not re.search(rb"<!doctype html|<(?:html|head|body)\b", data[:4096], re.I):
+        raise Fail("not an HTML page")
+    title, text = html_md(data, ctype, final)
+    head = " ".join(f"{title} {text[:WALL_SCAN]}".split()).casefold()
+    notice = next((n for n in ARXIV_NOTICES if n in head), None)
+    if notice:
+        raise Fail(f"conversion notice: {notice}")
+    check(title, text)
+    return {".md": text}, text, "arxiv-html"
+
+
+def load_arxiv(work, arxiv):
+    """An arXiv paper: the HTML version first, the PDF when the HTML version is missing, damaged or short."""
+    try:
+        return arxiv_html(work, arxiv)
+    except Fail as e:
+        html_why = e
+    try:
+        data, ctype, final = get(f"{ARXIV}/pdf/{arxiv}")
+        return convert(work, data, ctype, final, [urllib.parse.urlsplit(final).path.lower()], arxiv)
+    except Fail as e:
+        raise Fail(f"arXiv HTML: {html_why}; PDF: {e}") from None
 
 
 def fetch(sources, name, src):
     """The OK line for one source; raises Fail before anything is written to sources."""
     if not re.fullmatch(r"[a-z0-9][a-z0-9.-]*", name):
         raise Fail("bad name")
-    old = [p.name for p in sorted(sources.glob(f"{name}.*")) if p.stem.lower() == name]
+    old = [p.name for p in sorted(sources.glob(f"{name}.*")) if p.stem.lower() in (name, f"{name}.layout")]
     if old:
         raise Fail(f"exists: {old[0]}")
     sources.mkdir(parents=True, exist_ok=True)

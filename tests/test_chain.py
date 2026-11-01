@@ -20,7 +20,7 @@ m = load("scripts/chain.py")
 FIX = ROOT / "tests" / "fixtures" / "chain"
 BATES = "W1964729842"
 BATES_ROW = ("1989\t1761\tW1964729842\tThe design of browsing and berrypicking techniques for the online search "
-             "interface\t10.1108/eb024320\t-")
+             "interface\t10.1108/eb024320\t-\t-\t-\t-")
 BATES_WORK = "# work\tW1964729842\t1989\tThe design of browsing and berrypicking techniques for the online search interface"
 SPECIAL_DOI = "10.1002/(sici)1097-4571(1999)50:12<1043::aid-asi1>3.0.co;2-x"
 NOTE_EMPTY = ("# note: 0 results. OpenAlex often lacks citation links for works under about a year old, so this means "
@@ -164,13 +164,16 @@ class ChainTest(unittest.TestCase):
                          [w["id"].rsplit("/", 1)[-1] for w in fx("title_berrypicking.json")["results"]])
         self.assertEqual(len(lines), 5)
         self.assertEqual(lines[0], BATES_ROW)
-        self.assertEqual(lines[2].split("\t")[4:],
+        self.assertEqual(lines[2].split("\t")[4:6],
                          ["10.1002/meet.14504201241", "https://onlinelibrary.wiley.com/doi/pdfdirect/10.1002/meet.14504201241"])
 
-    def test_title_words_pass_as_given(self):
+    def test_title_is_cleaned_for_the_filter(self):
+        # Commas separate OpenAlex filters, | means OR, a leading ! negates and upper-case AND, OR, NOT are operators.
         code, lines, urls = self.call("find", "Exploratory", "search: from finding,", "to")
-        self.assertEqual(query(urls[0])["filter"], ["title.search:Exploratory search: from finding, to"])
+        self.assertEqual(query(urls[0])["filter"], ["title.search:Exploratory search: from finding to"])
         self.assertEqual((code, lines), (0, ["# note: no match; try the DOI, or a shorter title without the subtitle."]))
+        code, lines, urls = self.call("find", "!Search AND browse|scan, OR NOT")
+        self.assertEqual(query(urls[0])["filter"], ["title.search:Search and browse scan or not"])
 
     def test_doi_url_and_ids_resolve_the_same_work(self):
         cases = [("10.1108/eb024320", "/works/doi:10.1108/eb024320"),
@@ -211,7 +214,7 @@ class ChainTest(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(lines[0], BATES_WORK)
         self.assertEqual([int(l.split("\t")[1]) for l in lines[1:]], [931, 144, 55, 21, 20, 10])
-        self.assertEqual(lines[1], "1968\t931\tW1602667807\tAutomatic information organization and retrieval\t-\t-")
+        self.assertEqual(lines[1], "1968\t931\tW1602667807\tAutomatic information organization and retrieval\t-\t-\t-\t-\t-")
         self.assertEqual(len(urls), 2)
         q = query(urls[1])
         self.assertEqual(q["filter"], ["openalex:W195302104|W1570378841|W1602667807|W1964020902|W1974170312|W1979070506"])
@@ -232,7 +235,7 @@ class ChainTest(unittest.TestCase):
         self.assertEqual((q["filter"], q["sort"], q["per-page"]), (["cites:W1964729842"], ["cited_by_count:desc"], ["3"]))
         self.assertEqual([l.split("\t")[2] for l in lines[1:]], ["W2111335329", "W1570418772", "W2017022128"])
         self.assertEqual(lines[2], "2016\t1543\tW1570418772\tLooking for Information: A Survey of Research on Information "
-                                   "Seeking, Needs, and Behavior\t10.1108/s2055-53772016\t-")
+                                   "Seeking, Needs, and Behavior\t10.1108/s2055-53772016\t-\t-\t-\t-")
 
     def test_empty_refs_and_cites_give_the_note(self):
         def new_paper(p, q):
@@ -322,10 +325,10 @@ class ChainTest(unittest.TestCase):
                 "doi": "https://doi.org/10.1/abc\U0000202e\ndef", "best_oa_location": {"pdf_url": "https://x.example/a\tb.pdf"}}
         code, lines, _ = self.call("find", "W7", handler=lambda p, q: work)
         cols = lines[0].split("\t")
-        self.assertEqual((code, len(lines), len(cols)), (0, 1, 6))
+        self.assertEqual((code, len(lines), len(cols)), (0, 1, 9))
         self.assertTrue(cols[3].startswith("Introduction to \"quoted\" 'x' next line pad"), cols[3])
         self.assertLessEqual(len(cols[3]), 200)
-        self.assertEqual(cols[4:], ["10.1/abc def", "https://x.example/a b.pdf"])
+        self.assertEqual(cols[4:6], ["10.1/abc def", "https://x.example/a b.pdf"])
         self.assertTrue(all(c.isprintable() for c in cols))
 
     def test_author_lines_are_sanitized(self):
@@ -345,6 +348,69 @@ class ChainTest(unittest.TestCase):
                 cols = m.row({**base, **extra}).split("\t")
                 self.assertEqual((cols[1], cols[4], cols[5]), ("0", "-", want))
 
+    # columns, flags and open-access copies
+
+    def test_type_venue_and_flags(self):
+        base = {"id": "https://openalex.org/W5", "display_name": "T", "publication_year": 2020, "cited_by_count": 1}
+        accepted = {"is_oa": True, "version": "acceptedVersion", "pdf_url": "https://repo.example/a.pdf",
+                    "source": {"type": "repository", "display_name": "Repo"}}
+        cases = [({"type": "preprint", "is_retracted": True, "locations": [accepted],
+                   "primary_location": {"source": {"display_name": "arXiv (Cornell University)"}}},
+                  ["preprint", "arXiv (Cornell University)", "retracted,preprint,accepted-copy"]),
+                 ({"type": "erratum"}, ["erratum", "-", "erratum"]),
+                 ({"type": "retraction"}, ["retraction", "-", "erratum"]),
+                 ({"type": "editorial", "primary_location": {"source": None}}, ["editorial", "-", "comment"]),
+                 ({"type": "article", "locations": [dict(accepted, is_oa=False)]}, ["article", "-", "-"]),
+                 ({}, ["-", "-", "-"])]
+        for extra, want in cases:
+            with self.subTest(want=want):
+                self.assertEqual(m.row({**base, **extra}).split("\t")[6:], want)
+
+    def test_oa_lists_legal_copies_best_first(self):
+        def loc(version, kind, pdf=None, landing=None, name="Src", license=None, oa=True):
+            return {"is_oa": oa, "version": version, "pdf_url": pdf, "landing_page_url": landing, "license": license,
+                    "source": {"type": kind, "display_name": name}}
+        work = {"id": "https://openalex.org/W8", "display_name": "A paper", "publication_year": 2021, "type": "article",
+                "locations": [loc("publishedVersion", "journal", "https://pub.example/p.pdf", "https://pub.example/p",
+                                  "Journal", "cc-by"),
+                              loc("acceptedVersion", "repository", "https://repo.example/a.pdf", name="Uni repository"),
+                              loc("submittedVersion", "repository", "https://arxiv.org/pdf/2101.00001",
+                                  "https://arxiv.org/abs/2101.00001", "arXiv (Cornell University)"),
+                              loc("publishedVersion", "repository", None, "https://pmc.example/a", "PubMed Central"),
+                              loc("publishedVersion", "journal", "https://closed.example/x.pdf", oa=False),
+                              loc(None, None, None, "https://blog.example/post", "-")]}
+        code, lines, urls = self.call("oa", "W8", handler=lambda p, q: work)
+        self.assertEqual((code, [path(u) for u in urls]), (0, ["/works/W8"]))
+        self.assertEqual(lines, [
+            "# work\tW8\t2021\tA paper",
+            "published\trepository\t-\thttps://pmc.example/a\tPubMed Central\t-",
+            "published\tpublisher\thttps://pub.example/p.pdf\thttps://pub.example/p\tJournal\tcc-by",
+            "accepted\trepository\thttps://repo.example/a.pdf\t-\tUni repository\t-",
+            "submitted\trepository\thttps://arxiv.org/pdf/2101.00001\thttps://arxiv.org/abs/2101.00001"
+            "\tarXiv (Cornell University)\t-",
+            "-\tother\t-\thttps://blog.example/post\t-\t-"])
+
+    def test_oa_without_copies(self):
+        work = {"id": "https://openalex.org/W9", "display_name": "Closed", "publication_year": 2019, "locations": []}
+        code, lines, _ = self.call("oa", "10.1234/closed", handler=lambda p, q: work)
+        self.assertEqual((code, lines[0]), (0, "# work\tW9\t2019\tClosed"))
+        self.assertTrue(lines[1].startswith("# note: no open-access copy is listed"), lines)
+
+    def test_cites_sorted_by_recency_and_since_a_year(self):
+        code, lines, urls = self.call("cites", BATES, "--sort", "recent", "--since", "2020", "-n", "3")
+        q = query(urls[1])
+        self.assertEqual((code, q["filter"], q["sort"]),
+                         (0, ["cites:W1964729842,from_publication_date:2020-01-01"], ["publication_date:desc"]))
+
+    def test_api_key_comes_from_the_environment_only(self):
+        with mock.patch.dict(os.environ, {"OPENALEX_API_KEY": "k-secret-123"}):
+            code, lines, urls = self.call("find", BATES)
+            self.assertEqual((code, query(urls[0])["api_key"]), (0, ["k-secret-123"]))
+            code, lines, _ = self.call("find", BATES, handler=lambda p, q: http_error(500))
+            self.assertEqual((code, lines), (1, ["FAIL\thttp 500"]))
+        code, lines, urls = self.call("find", BATES)
+        self.assertNotIn("api_key", urls[0])
+
     # network behavior
 
     def sleeps(self):
@@ -363,7 +429,8 @@ class ChainTest(unittest.TestCase):
     def test_429_backoff_then_fail(self):
         code, lines, urls = self.call("find", BATES, handler=lambda p, q: http_error(429))
         self.assertEqual(code, 1)
-        self.assertEqual(lines, ["FAIL\trate limited: the OpenAlex free daily budget may be used up; try tomorrow"])
+        self.assertEqual(lines, [f"FAIL\t{m.RATE_LIMITED}"])
+        self.assertIn("1,000", m.RATE_LIMITED)
         self.assertEqual(len(urls), 4)
         self.assertEqual(self.sleeps(), [2, 4, 8])
 
@@ -399,7 +466,8 @@ class ChainTest(unittest.TestCase):
         self.assertTrue(callable(m._Redirect.http_error_308))
 
     def test_bad_usage_exits_2(self):
-        for argv in (["refs", "just a title"], ["cites", "W1", "-n", "0"], ["refs", "W1", "-n", "201"], ["find"], []):
+        for argv in (["refs", "just a title"], ["cites", "W1", "-n", "0"], ["refs", "W1", "-n", "201"], ["find"], [],
+                     ["cites", "W1", "--since", "20"], ["cites", "W1", "--sort", "newest"], ["oa", "a title"]):
             with self.subTest(argv=argv), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as cm:
                 m.main(argv)
             self.assertEqual(cm.exception.code, 2)
