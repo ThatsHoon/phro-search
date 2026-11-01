@@ -456,6 +456,33 @@ class PulseKindTest(unittest.TestCase):
         self.assertEqual(self.problems(BRIEF.replace("Hacker News: https://news.ycombinator.com/item?id=12", "Hacker News")),
                          [(9, "quote")])
 
+    def test_a_quote_from_an_archived_web_supplement(self):
+        head = "name\turl\tfinal\tfetched\tpublished\tmodified\textraction\tversion\tmarks\tfiles"
+        url, final = "https://www.example.go.kr/notice/123", "https://www.example.go.kr/notice/123?lang=ko"
+        quote = "\n\n> 위젯 엔진 표준은 2026년 12월에   시행된다\n\n기술표준원 공지: " + url + "\n"
+        with tempfile.TemporaryDirectory() as d:
+            topic = Path(d) / "widget-kr"
+            (topic / "pulse").mkdir(parents=True)
+            (topic / "sources").mkdir()
+            (topic / "sources" / "kats-notice.md").write_text("# 공지\n\n위젯 엔진 표준은 2026년 12월에 시행된다.\n", encoding="utf-8")
+            (topic / "sources" / "old.md").write_text("다른 글\n", encoding="utf-8")
+            rows = [f"kats-notice\t{url}\t-\t2026-10-01T00:00:00Z\t-\t-\thtml\t-\t-\told.md",  # replaced by the next row
+                    f"kats-notice\t{url}\t{final}\t2026-10-30T00:00:00Z\t-\t-\thtml\t-\t-\tkats-notice.md"]
+            (topic / "sources" / "index.tsv").write_text("\n".join([head] + rows) + "\n", encoding="utf-8")
+            (topic / "pulse" / "2026-10-30.json").write_text(json.dumps(RESULT), encoding="utf-8")
+            path = topic / "pulse" / "2026-10-30.md"
+
+            def check(text):
+                path.write_text(text, encoding="utf-8")
+                code, out, _ = run("--kind", "pulse", str(path))
+                return code, [line.split(":")[1] for line in out[:-1]]
+            self.assertEqual(check(BRIEF + quote), (0, []))
+            self.assertEqual(check(BRIEF + quote.replace(url + "\n", final + "\n")), (0, []))  # the URL read counts too
+            self.assertEqual(check(BRIEF + quote.replace("12월에", "11월에")), (1, ["quote"]))  # not in the archived copy
+            self.assertEqual(check(BRIEF + quote.replace("notice/123", "notice/999")), (1, ["quote"]))  # a URL never fetched
+            (topic / "sources" / "index.tsv").unlink()
+            self.assertEqual(check(BRIEF + quote), (1, ["quote"]))
+
     def test_a_result_with_clusters_needs_a_quote(self):
         no_quote = BRIEF.split("\n> ")[0]
         self.assertEqual(self.problems(no_quote), [(0, "quote")])

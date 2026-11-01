@@ -49,7 +49,7 @@ Exit 1 means no lane returned anything: say so, with each lane's reason, and sto
 
 ## 5. Web supplements
 
-2 or 3 standard web searches for what the lanes miss: release notes, official blogs, documentation changes, news in the window (not Reddit or X). Generic queries with the anchor. They give context and primary links, cited as links and never quoted: the brief quotes only what `pulse.py` collected.
+2 or 3 standard web searches for what the lanes miss: release notes, official blogs, documentation changes, news in the window (not Reddit or X). Generic queries with the anchor. They give context and primary links, cited as links; the brief quotes only what `pulse.py` collected, with one exception. In a Korea-specific topic (national standards, market, regulation), a Korean supplement may be quoted once `fetch.py <topic>/sources <name> <url>` has archived it: the quote is copied from that copy, and the line after it names the URL fetched, which `check.py` looks up in `sources/index.tsv`.
 
 ## 6. Judge
 

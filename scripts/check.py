@@ -23,13 +23,15 @@ space (U+00A0, U+202F) or a soft hyphen in a quote line is allowed, since a quot
        lanes: one line names every lane the run listed (Hacker News, Reddit, GitHub, arXiv, YouTube,
               Hugging Face);
        quote: every quote (> lines) is found verbatim in the result's titles, snippets or comments ("..." may
-              join pieces kept in order), with the quoted item's or comment's link on the line after it;
+              join pieces kept in order), with the quoted item's or comment's link on the line after it, or
+              found in a web supplement fetch.py archived: the link line names a URL that sources/index.tsv in the
+              topic folder (the brief sits at <topic>/pulse/<stem>.md) maps to a file, and the quote is in that file;
               a result with clusters needs at least one quote.
 --kind models also checks a model choice against the topic folder it sits in:
        location: every <path>:<line> or <path>:<first>-<last> (path under sources/ or models/) names a file
                  in the folder and a line that file has, counted as grep -n counts.
 """
-import argparse, itertools, json, re, sys
+import argparse, itertools, json, re, sys, urllib.parse
 from pathlib import Path
 
 VERSION = "0.4.0"
@@ -241,8 +243,43 @@ def in_order(pieces, text):
     return True
 
 
-def pulse_problems(raw, result):
-    """A pulse brief's structure as (line, rule, detail) tuples, against the pulse.py result beside it."""
+def url_key(u):
+    """A URL as compared with sources/index.tsv: no fragment or trailing slash, scheme and host in lowercase."""
+    p = urllib.parse.urlsplit(u.strip())
+    return urllib.parse.urlunsplit((p.scheme.lower(), p.netloc.lower(), p.path.rstrip("/"), p.query, ""))
+
+
+def archived(topic):
+    """{URL key: readable file} for the sources fetch.py archived in topic/sources, from its index.tsv (the URL asked
+    and the URL read, newest row per name); {} without the file."""
+    src = topic / "sources"
+    try:
+        lines = (src / "index.tsv").read_text(encoding="utf-8-sig", errors="replace").splitlines()
+    except OSError:
+        return {}
+    head = lines[0].split("\t") if lines else []
+    if not {"name", "url", "final", "files"} <= set(head):
+        return {}
+    rows = {}
+    for line in lines[1:]:
+        cells = line.split("\t")
+        if len(cells) == len(head):
+            row = dict(zip(head, cells))
+            rows[row["name"]] = row  # a name fetched again replaces its older rows
+    found = {}
+    for row in rows.values():
+        files = row["files"].split(",")
+        readable = next((src / f for f in files if f in (row["name"] + ".md", row["name"] + ".txt")), None)
+        if readable and readable.is_file():
+            for u in (row["url"], row["final"]):
+                if re.match(r"https?://", u):
+                    found[url_key(u)] = readable
+    return found
+
+
+def pulse_problems(raw, result, archive=None):
+    """A pulse brief's structure as (line, rule, detail) tuples, against the pulse.py result beside it; archive maps
+    URL keys to the archived web supplements a quote may also come from (see archived)."""
     lines = FENCE.sub(lambda m: "\n" * m.group().count("\n"), raw.replace("\r\n", "\n")).split("\n")
     found = []
     want = [NAMES.get(k, k) for k in result.get("lanes", {})]
@@ -256,6 +293,16 @@ def pulse_problems(raw, result):
         sources += [(t, urls) for t in (i.get("title"), i.get("snippet"))]
         sources += [(c.get("text"), urls | {c.get("url")}) for c in i.get("comments") or []]
     sources = [(" ".join(str(t or "").split()), u) for t, u in sources]
+    archive, texts = archive or {}, {}
+
+    def in_archive(pieces, links):
+        for u in links:
+            path = archive.get(url_key(u))
+            if path and path not in texts:
+                texts[path] = " ".join(path.read_text(encoding="utf-8", errors="replace").split())
+            if path and in_order(pieces, texts[path]):
+                return True
+        return False
     quotes, n = 0, 0
     while n < len(lines):
         if not QUOTE.match(lines[n]):
@@ -272,9 +319,12 @@ def pulse_problems(raw, result):
         hits = [u for t, u in sources if pieces and in_order(pieces, t)]
         after = next((t for t in lines[n:] if t.strip()), "")
         links = {u.rstrip(".,;:") for u in LINK.findall(after)}
+        if any(links & u for u in hits) or (pieces and in_archive(pieces, links)):
+            continue
         if not hits:
-            found.append((start + 1, "quote", f'not found verbatim in the pulse results: "{snippet(text, 0)}"'))
-        elif not any(links & u for u in hits):
+            found.append((start + 1, "quote", f'not found verbatim in the pulse results or in an archived source its link '
+                                              f'line names: "{snippet(text, 0)}"'))
+        else:
             found.append((start + 1, "quote", "put the quoted item's or comment's link on the line after the quote"))
     if result.get("clusters") and not quotes:
         found.append((0, "quote", "no quote; quote an item or comment of each cluster on a > line, with its link"))
@@ -353,7 +403,8 @@ def main(argv=None):
             return 1
         path = Path(args.file).with_suffix(".json")
         try:
-            problems += pulse_problems(raw, json.loads(path.read_text(encoding="utf-8-sig")))
+            problems += pulse_problems(raw, json.loads(path.read_text(encoding="utf-8-sig")),
+                                       archived(Path(args.file).resolve().parent.parent))
         except (OSError, ValueError, TypeError, AttributeError) as e:
             print(f"FAIL\tcannot read {path}: {e}")
             return 1
