@@ -16,7 +16,7 @@ surest key: map rows name works briefly ("Bates 1989, berrypicking"), so check M
 Searcher URLs are the Original URL cells of the map's Sources rows (--found keeps only rows whose Found in
 cell contains TEXT, case-insensitive). One counts as archived as the original when sources/index.tsv has a row
 with that URL as asked or as read, without the archived-copy mark (a dead page read from Wayback), and the map's
-label is not summary. A wall or a failed fetch leaves no index row. A topic without index.tsv (older topics)
+label is not summary (its first word, so "summary (survey)" counts as summary). A wall or a failed fetch leaves no index row. A topic without index.tsv (older topics)
 counts a row whose Files cell names a file.
 
 Output, tab-separated, per topic:
@@ -108,7 +108,7 @@ def map_rows(path):
             continue
         get = lambda *names: next((cells[i] for i, h in enumerate(head) if i < len(cells) and any(n in h for n in names)), "")
         url = URL.search(get("url"))
-        rows.append({"label": get("label").lower(), "work": get("work"), "files": get("files"), "url": url.group(0) if url else "",
+        rows.append({"label": (re.findall(r"[\w-]+", get("label").lower()) or [""])[0], "work": get("work"), "files": get("files"), "url": url.group(0) if url else "",
                      "found": " ".join(get("found").split()) or "-", "text": urllib.parse.unquote(line).lower()})
     return rows
 

@@ -47,7 +47,7 @@ Make 20 to 30 planted claims from T2.4's `claims.json` (overstated, outdated, co
 python3 -I dev/score_verifiers.py planted.tsv research/<topic>/claims.json
 ```
 
-It prints each claim with its votes and verdict, the false refutations of true claims and the false survivals of false claims (by vote and by verdict), and an `R6` line: above 10 percent false refutations of true claims, by vote, the vote rule switches to "refuted needs a stated reason from the check list; could not check is no vote".
+It prints each claim with its votes and verdict, the false refutations of true claims and the false survivals of false claims (by vote and by verdict), and an `R6` line: above 10 percent of true claims with a verdict ending refuted, the vote rule switches to "refuted needs a stated reason from the check list; could not check is no vote".
 
 ## New gold items
 

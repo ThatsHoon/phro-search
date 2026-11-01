@@ -49,7 +49,7 @@ class VerifierScoreTest(unittest.TestCase):
         self.assertIn("# c6: 1 of 3 votes", out)
         self.assertIn("TRUE\t3 claims\tvotes refuting 3/9 33.3%\tverdicts refuted 1/3 33.3%\tunverified 0", out)
         self.assertIn("FALSE\t3 claims\tvotes not refuting 2/7 28.6%\tverdicts survived 1/3 33.3%\tunverified 1", out)
-        self.assertEqual(out[-1], "R6\tfalse refutations of true claims 33.3% of votes\tthreshold 10%\tcrossed\t"
+        self.assertEqual(out[-1], "R6\tfalse refutations of true claims 1/3 33.3% of verdicts\tthreshold 10%\tcrossed\t"
                                   "switch to: refuted needs a stated reason from the check list; could not check is no vote")
 
     def test_verdict_from_votes_not_the_file(self):
@@ -65,7 +65,7 @@ class VerifierScoreTest(unittest.TestCase):
         self.claims.write_text(json.dumps(claims), encoding="utf-8")
         _, out = self.run_score()
         self.assertIn("TRUE\t2 claims\tvotes refuting 0/6 0.0%\tverdicts refuted 0/2 0.0%\tunverified 0", out)
-        self.assertEqual(out[-1], "R6\tfalse refutations of true claims 0.0% of votes\tthreshold 10%\tnot crossed\tkeep the vote rule")
+        self.assertEqual(out[-1], "R6\tfalse refutations of true claims 0/2 0.0% of verdicts\tthreshold 10%\tnot crossed\tkeep the vote rule")
 
     def test_bad_inputs(self):
         self.planted.write_text("c1\tmaybe\n", encoding="utf-8")

@@ -17,10 +17,10 @@ Output, tab-separated:
   MISSING <id> not in claims.json
   TRUE <n> claims votes refuting <r>/<v> <pct> verdicts refuted <k>/<n> <pct> unverified <u>
   FALSE <n> claims votes not refuting <r>/<v> <pct> verdicts survived <k>/<n> <pct> unverified <u>
-  R6 false refutations of true claims <pct> of votes threshold 10% <crossed|not crossed> <what follows>
+  R6 false refutations of true claims <k>/<n> <pct> of verdicts threshold 10% <crossed|not crossed> <what follows>
 R6's switch ("If you are unsure, the claim is refuted" becomes "refuted needs a stated reason from the check list;
-could not check is no vote") is judged on votes, since the rule governs each verifier's reply; the verdict rates
-are shown beside it. It only reads.
+could not check is no vote") is judged on verdicts: the share of true claims with a verdict that end refuted, since
+a true claim refuted is what the report loses. The vote rates are shown on the TRUE and FALSE lines. It only reads.
 """
 import argparse, json, sys
 from pathlib import Path
@@ -105,14 +105,14 @@ def main(argv=None):
     n, nv, r, _, survived = tally[False]
     print("\t".join(["FALSE", f"{n} claims", "votes not refuting " + pct(nv - r, nv), "verdicts survived " + pct(survived, n),
                      f"unverified {unverified[False]}"]))
-    _, nv, r, _, _ = tally[True]
-    if not nv:
-        print("R6\tno votes on true claims\tthreshold 10%\t-\tno decision")
+    n, _, _, refuted, _ = tally[True]
+    judged = n - unverified[True]
+    if not judged:
+        print("R6\tno verdicts on true claims\tthreshold 10%\t-\tno decision")
         return 0
-    rate = r / nv
     tail = (["crossed", "switch to: refuted needs a stated reason from the check list; could not check is no vote"]
-            if rate > THRESHOLD else ["not crossed", "keep the vote rule"])
-    print("\t".join(["R6", f"false refutations of true claims {100 * rate:.1f}% of votes", "threshold 10%"] + tail))
+            if refuted / judged > THRESHOLD else ["not crossed", "keep the vote rule"])
+    print("\t".join(["R6", f"false refutations of true claims {pct(refuted, judged)} of verdicts", "threshold 10%"] + tail))
     return 0
 
 

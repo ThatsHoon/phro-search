@@ -16,7 +16,7 @@ brief: mode=dig; object=information seeking models
 |---|---|---|---|---|
 | paper | Bates 1989, berrypicking | bates-1989-berrypicking.pdf, .txt | https://doi.org/10.1108/EB024320 | round 0, term search |
 | paper | Kuhlthau 1991, ISP model | kuhlthau-1991-isp.pdf | https://www.example.org/kuhlthau.pdf | round 0, surveys |
-| summary | Wikipedia, information seeking | wiki-information-seeking.md | https://en.wikipedia.org/wiki/Information_seeking | round 0, term search |
+| Summary (encyclopedia) | Wikipedia, information seeking | wiki-information-seeking.md | https://en.wikipedia.org/wiki/Information_seeking | round 0, term search |
 | paper | Leviathan 2023, speculative decoding | arxiv-2211.17192-speculative.md | https://arxiv.org/abs/2211.17192 | round 0, citation list |
 | first-hand | Old blog post | old-post.md | http://dead.example.com/post/ | round 0, surveys |
 | paper | Pirolli 1999, information foraging (unverified) | - | https://psycnet.apa.org/record/1999-11924-001 | round 0, surveys |
