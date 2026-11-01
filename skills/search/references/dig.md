@@ -9,13 +9,13 @@ Catch up on a field, from generic words down to its original sources. Two things
 ## Before round 0
 
 - The confirmed brief heads `map.md` with 3 to 6 required claims (`references/intake.md`, section 7). The question may change while digging: rewrite the claims, log the reason, count it as drift.
-- Plan line: "dig: up to 4 rounds, 2 searchers per round on a light model, at most 8 searcher calls".
+- Plan line: "dig: up to 4 rounds, 2 searchers per round, at most 8 searcher calls, 1 support reader".
 
 ## Round 0: map
 
 - Spawn 2 searchers with different methods in one turn (brief: `references/briefs.md`). Default split: English and the user's language. When one language covers the field: term search, and canonical surveys and textbooks.
 - Two different methods naming the same items is the sign the map is filling up: the overlap idea of capture-recapture, used here as a heuristic, not a tested stopping rule.
-- Wait for both. Add their terms, people, venues and sources to `map.md`, each line ending in (unverified); move their "not searched" items to Next leads. Log per searcher what was asked, what came back, and how many pages it opened. Searcher reports usually rest on result snippets: affiliations, "published" and numbers are often wrong until read in the original.
+- When both have reported, add their terms, people, venues and sources to `map.md`, each line ending in (unverified); move their "not searched" items to Next leads. Log per searcher what was asked, what came back, and how many pages it opened. Searcher reports usually rest on result snippets: affiliations, "published" and numbers are often wrong until read in the original.
 - Venues are found, not taken from a list: the brief asks where the field's experts write and where its canonical material is published. Log how many items each venue produced.
 - Checkpoint: show the map (terms, people, venues) and the two directions; confirm the direction and the required claims in one round. Skip it only when the brief was formalized and round 0 changed neither the directions nor the claims; log the skip and why.
 
@@ -42,10 +42,10 @@ Pick leads with a strong scent: named again and again, surveys and textbooks, ci
 
 ## End of each round (the main session decides)
 
-Wait until every searcher of the round has returned; stop any that is no longer waited for. Round 0 only builds the map. A round counts once leads were downloaded and at least one backward, forward or author move was made (in a field without papers, following a downloaded post's links backward counts). A round where the searchers came back empty-handed and the main session searched itself still counts, but its saturation is not counted. Empty-handed means none of the pages a searcher named turned out to be a hit once downloaded.
+Round 0 only builds the map. A round counts once leads were downloaded and at least one backward, forward or author move was made (in a field without papers, following a downloaded post's links backward counts). A round where the searchers came back empty-handed and the main session searched itself still counts, but its saturation is not counted. Empty-handed means none of the pages a searcher named turned out to be a hit once downloaded.
 
 Stop when one of these holds, and log which:
-1. Every required claim has a source location (file:line and a short quote).
+1. Every required claim has a source location (file:line and a short quote) that the support pass rated full. Run the support pass (`references/briefs.md`) once every claim is located; a claim rated below full keeps the dig going.
 2. Saturation: 70 percent or more of the people and sources the searchers named this round were already in `map.md`, and few new terms appeared. Log the numbers ("11 of 14 already known"). Count only searchers that searched the same question with different methods; hypothesis branches overlap little by design, so judge each branch by its own claims. "Known" includes what the main session found itself, and the searchers get the same known list.
 3. Four rounds done: list the claims not reached and why.
 4. Wall: the originals for the remaining claims are all behind logins or paywalls, with nothing left in front of the wall. A partial claim counts when its missing part is walled. Free pages blocked only by bot checks go to the user's browser first.
@@ -55,7 +55,7 @@ Never stop before round 1 is done, even when round 0 seems to cover every claim:
 
 ## Evidence page
 
-1. Write `extracts.json` (`references/formats.md`): one entry per required claim with excerpts copied verbatim from the sources, translations for quotes in other languages, marks, disagreements side by side, and what was not reached. The agent writes only headings, statuses, one-line notes and translations; a note says who did what, never which side is right.
+1. Write `extracts.json` (`references/formats.md`): one entry per required claim with excerpts copied verbatim from the sources, each with its support rating and qualifier, translations for quotes in other languages, marks, disagreements side by side, and what was not reached. The agent writes only headings, statuses, one-line notes and translations; a note says who did what, never which side is right.
 2. Run `report.py <topic_dir>`. Fix each MISMATCH by copying the source text exactly, never by editing the source or loosening the quote into a paraphrase. Auto-caption errors stay as they are.
 3. `report.py <topic_dir> --check` passes before delivery.
 

@@ -13,6 +13,10 @@ claude plugin marketplace add ThatsHoon/phro
 claude plugin install phro-search@phro
 ```
 
+## Waiting for subagents
+
+dig and report close a round only when every subagent of it has reported. In interactive sessions Claude Code runs subagents in the background by default, and their results arrive in later turns; the skill keeps the round open meanwhile. To let Claude wait for them instead, set `CLAUDE_CODE_FORK_SUBAGENT=0` in the `env` of your Claude Code settings. `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1` makes Claude always wait, which also stops the docs mode from answering while its agents read.
+
 ## Tests
 
 ```bash

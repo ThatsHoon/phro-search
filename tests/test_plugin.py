@@ -162,6 +162,25 @@ class PluginTest(unittest.TestCase):
                and not {".git", "__pycache__"} & set(p.relative_to(ROOT).parts) and INVISIBLE.search(read(p))]
         self.assertEqual(bad, [])
 
+    def test_agents_isolate_tools(self):
+        want = {"web-gatherer": {"WebSearch", "WebFetch", "ToolSearch"}, "verifier": {"WebSearch", "WebFetch", "ToolSearch"},
+                "local-reader": {"Read", "Grep", "Glob"}}
+        found = {}
+        for path in sorted((ROOT / "agents").glob("*.md")):
+            text = read(path)
+            front = dict(re.findall(r"^([A-Za-z]+): *(.*)$", text[4:text.index("\n---\n", 4)], re.M))
+            found[front["name"]] = front
+            with self.subTest(agent=path.name):
+                self.assertEqual(path.stem, front["name"])
+                self.assertEqual({x.strip() for x in front["tools"].split(",")}, want[front["name"]])
+                self.assertEqual((front["model"], front["omitClaudeMd"]), ("sonnet", "true"))
+                self.assertTrue(front["maxTurns"].isdecimal())
+                self.assertIn("Internal to the phro-search search skill", front["description"])
+        self.assertEqual(set(found), set(want))
+        self.assertEqual(found["verifier"].get("effort"), "high")
+        named = {n for _, text in docs() for n in re.findall(r"phro-search:([a-z][\w-]*)", text)}
+        self.assertEqual(named - set(found), {"search"} & named)  # phro-search:search is the skill itself
+
     def test_shared_code_copies_match(self):
         for names, original, needed in SHARED:
             want = shared(ROOT / original, names)

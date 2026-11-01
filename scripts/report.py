@@ -11,8 +11,10 @@ each verdict must follow from its votes (2 refutations: refuted; fewer than 2 vo
 unverified; else survived), at most 3 votes, and a vote's "checked" date written
 YYYY-MM-DD. The claims a view cites are checked too: every id is in claims.json, each
 central one has a quote in the view that is not marked retracted, and the view cites at
-most 10 central claims. In any view, a claim whose quotes are all marked retracted cannot
-be sourced. The page shows each source's dates from sources/index.tsv when there is one.
+most 10 central claims. In any view, a sourced claim needs a quote whose support (from the
+support pass) is full, and a claim whose quotes all come from retracted sources cannot be
+sourced or partial. A quote's qualifier, the sentence that limits it, is checked like a quote.
+The page shows each source's dates from sources/index.tsv when there is one.
 
 Lines count like grep -n. A quote matches when it appears within lines line-2 to
 end+2 of sources/<file>, both sides normalized the same way: on each line a leading
@@ -59,7 +61,10 @@ STATUS = {"sourced": "sourced", "partial": "partial", "none": "none",
 TOP = {"title": str, "question": str, "stopped": str, "claims": list, "disagreements?": list, "unreached?": list}
 CLAIM = {"claim": str, "status": str, "note?": str, "quotes": list, "id?": str}
 DISAGREEMENT = {"topic": str, "quotes": list}
-QUOTE = {"file": str, "line": int, "end?": int, "text": str, "translation?": str, "ja?": str, "mark?": str, "who?": str}
+QUOTE = {"file": str, "line": int, "end?": int, "text": str, "translation?": str, "ja?": str, "mark?": str, "who?": str,
+         "support?": str, "qualifier?": dict}
+QUALIFIER = {"file": str, "line": int, "end?": int, "text": str}  # the source's own sentence that limits the claim
+SUPPORT = ("full", "partial", "none", "contradicts")
 # claims.json (report mode) is a list of CLAIMED, each with its verifiers' votes.
 CLAIMED = {"id": str, "claim": str, "quote": str, "url": str, "label": str, "importance": str, "votes?": list, "verdict?": str}
 VOTE = {"refuted": bool, "confidence": str, "evidence": str, "counter_source?": str, "checked?": str}
@@ -93,6 +98,7 @@ blockquote{margin:0;padding-left:.8rem;border-left:3px solid var(--accent);white
 .tr{margin:.6rem 0 0}
 .tag{font-size:.75rem;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:0 .35em}
 .when{color:var(--muted)}
+.limit{margin:.6rem 0 0;font-size:.9rem}
 figcaption{font-size:.85rem;margin-top:.6rem}
 a{color:var(--accent)}
 summary{cursor:pointer;font-size:.85rem;margin-top:.5rem}
@@ -131,8 +137,14 @@ def load(path):
             if name == "claim" and item["status"] not in STATUS:
                 raise ValueError(f'claim {i}: unknown status "{clean(item["status"], 40)}"')
             for j, q in enumerate(item["quotes"], 1):
-                need(q, QUOTE, f"{name} {i} quote {j}")
-                quotes.append((f"{name} {i} quote {j}", q))
+                where = f"{name} {i} quote {j}"
+                need(q, QUOTE, where)
+                if "support" in q and q["support"] not in SUPPORT:
+                    raise ValueError(f"{where}: support must be {', '.join(SUPPORT[:-1])} or {SUPPORT[-1]}")
+                quotes.append((where, q))
+                if "qualifier" in q:
+                    need(q["qualifier"], QUALIFIER, f"{where} qualifier")
+                    quotes.append((f"{where} qualifier", q["qualifier"]))
     return data, quotes
 
 
@@ -191,9 +203,12 @@ def claim_problems(claims, data, flagged=frozenset()):
     retracted for each central one, and at most MAX_CENTRAL central ones."""
     def retracted(q):
         return q["file"] in flagged or bool(re.search(r"\bretracted\b", q.get("mark") or "", re.I))
-    out = [(f"claim {i}", "every quote comes from a retracted source; a retracted work backs no claim")
-           for i, c in enumerate(data["claims"], 1)
-           if STATUS[c["status"]] in ("sourced", "partial") and c["quotes"] and all(map(retracted, c["quotes"]))]
+    out = []
+    for i, c in enumerate(data["claims"], 1):
+        if STATUS[c["status"]] == "sourced" and not any(q.get("support") == "full" for q in c["quotes"]):
+            out.append((f"claim {i}", "sourced, but no quote gives full support; run the support pass"))
+        if STATUS[c["status"]] in ("sourced", "partial") and c["quotes"] and all(map(retracted, c["quotes"])):
+            out.append((f"claim {i}", "every quote comes from a retracted source; a retracted work backs no claim"))
     if claims is None:
         return out
     cited = {}
@@ -287,6 +302,7 @@ def quote_html(src, q, when=""):
     context = "\n".join(rows)
     loc = f"sources/{q['file']}:{first}" + (f"-{last}" if last != first else "")
     mark = f' <span class="tag">{esc(q["mark"])}</span>' if q.get("mark") else ""
+    mark += f' <span class="tag">support: {esc(q["support"])}</span>' if q.get("support") else ""
     tr = q.get("translation", q.get("ja"))
     out = ["<figure>"]
     if q.get("who"):
@@ -294,6 +310,9 @@ def quote_html(src, q, when=""):
     out.append(f"<blockquote>{esc(q['text'])}</blockquote>")
     if tr:
         out.append(f'<p class="tr"><span class="tag">translation</span> {esc(tr)}</p>')
+    lim = q.get("qualifier")
+    if lim:
+        out.append(f'<p class="limit"><span class="tag">limit</span> {esc(lim["text"])} (sources/{esc(lim["file"])}:{lim["line"]})</p>')
     when = f' <span class="when">{esc(when)}</span>' if when else ""
     out.append(f'<figcaption><a href="sources/{esc(urllib.parse.quote(q["file"]))}">{esc(loc)}</a>{mark}{when}</figcaption>')
     out.append(f"<details><summary>context</summary><pre>{context}</pre></details></figure>")

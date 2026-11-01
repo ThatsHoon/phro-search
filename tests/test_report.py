@@ -23,7 +23,7 @@ KO_TRANSLATION = "알파의 번역"
 
 
 def quote(file, line, text, **extra):
-    return {"file": file, "line": line, "text": text, **extra}
+    return {"file": file, "line": line, "text": text, "support": "full", **extra}
 
 
 def claim(*quotes, status="sourced"):
@@ -215,6 +215,26 @@ class ReportTest(unittest.TestCase):
         row = "a\tlocal:a.pdf\t-\t2026-11-01T09:00:00Z\t2021-03-04\t2021-04-05\tpdftotext\t-\t-\ta.pdf,a.txt"
         (topic / "sources" / "index.tsv").write_text(f"{head}\n{row}\n", encoding="utf-8")
         self.assertIn('<span class="when">created 2021-03-04; modified 2021-04-05; fetched 2026-11-01</span>', self.page(topic))
+
+    def test_support_pass(self):
+        src = {"a.md": "Intro\nThe model reaches 95 percent accuracy.\nOnly on English test data.\n"}
+        limit = {"file": "a.md", "line": 3, "text": "Only on English test data."}
+        topic = self.topic(src, [claim(quote("a.md", 2, "reaches 95 percent", support="partial", qualifier=limit)),
+                                 claim(quote("a.md", 2, "reaches 95 percent", support="partial"), status="partial"),
+                                 claim({"file": "a.md", "line": 2, "text": "reaches 95 percent"})])
+        self.assertEqual(self.report(topic, "--check")[1].splitlines(),
+                         ["CLAIM\tclaim 1\tsourced, but no quote gives full support; run the support pass",
+                          "CLAIM\tclaim 3\tsourced, but no quote gives full support; run the support pass",
+                          "FAIL\t2 claim problems; report.html not written"])
+        good = self.topic(src, [claim(quote("a.md", 2, "reaches 95 percent", qualifier=limit))])
+        html = self.page(good)
+        self.assertIn('<span class="tag">support: full</span>', html)
+        self.assertIn('<p class="limit"><span class="tag">limit</span> Only on English test data. (sources/a.md:3)</p>', html)
+        moved = self.topic(src, [claim(quote("a.md", 2, "reaches 95 percent", qualifier=dict(limit, text="Only on French data.")))])
+        self.assertEqual(self.report(moved, "--check")[1].splitlines()[0],
+                         "MISMATCH\tclaim 1 quote 1 qualifier\ta.md:3\tnot found near the line\tOnly on French data.")
+        odd = self.topic(src, [claim(quote("a.md", 2, "reaches 95 percent", support="mostly"))])
+        self.assertEqual(self.report(odd), (1, "FAIL\tclaim 1 quote 1: support must be full, partial, none or contradicts\n"))
 
     def test_bad_extracts_fail(self):
         empty = pathlib.Path(tempfile.mkdtemp(dir=self.root))
