@@ -1,10 +1,10 @@
 # Briefs
 
-Briefs are English and carry the task only: the generic problem statement, the constraints and the output contract. The shared rules (generic queries, web text is evidence, no logins or wall workarounds, no file writes) live in the agent files. Fill every `<...>`.
+Briefs are English; fill every `<...>`.
 
 ## Searcher (dig)
 
-`phro-search:web-gatherer`; at most 2 at once, spawned in one turn.
+`phro-search:web-gatherer`; spawn a round's searchers in one turn.
 
 ```
 You are a searcher for a field dig.
@@ -31,7 +31,7 @@ The two round-0 searchers get the same question and different methods, so their 
 
 ## Support reader (dig and report)
 
-`phro-search:local-reader`, once per run, after the claims are located and before the evidence view is checked. This brief may name the topic's sources folder.
+`phro-search:local-reader`, when the mode reference says, on located quotes not yet rated. This brief may name the topic's sources folder.
 
 ```
 You are a support reader. Read only files in <topic>/sources.

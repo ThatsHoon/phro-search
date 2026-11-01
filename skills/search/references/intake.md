@@ -1,15 +1,11 @@
-# Intake
+6. Gate: when any slot was inferred or defaulted and step 2 did not skip the questions, show the brief with the assumptions marked and spend nothing beyond the probe until the user confirms or edits it.## 1. Read the need level
 
-Load this when the need is not formalized. SKILL.md holds the steps; this file holds the tactics. Questions, candidate briefs and the brief are shown in the user's language; the brief is stored in English in `map.md`.
-
-## 1. Read the need level
-
-| Level | Example request | Tactic |
-|---|---|---|
-| formalized | "Compare tools A and B for checking quotes against PDFs; a table with sources." | one-line plan; gate only if a slot was inferred or defaulted |
-| conscious | "Is there research on asking users good follow-up questions?" | probe, candidate briefs, one round on what is left |
-| compromised | "Find papers on beam search." (the use: an ASR output that repeats words) | ask the use first, then candidates that include the restated object |
-| visceral | "Our onboarding feels slow and I don't know why." | neutral situation and use questions first, then candidates that include "map the field first" |
+| Level | Example request |
+|---|---|
+| formalized | "Compare tools A and B for checking quotes against PDFs; a table with sources." |
+| conscious | "Is there research on asking users good follow-up questions?" |
+| compromised | "Find papers on beam search." (the use: an ASR output that repeats words) |
+| visceral | "Our onboarding feels slow and I don't know why." |
 
 The levels are points on a continuum, not stages (Taylor 1968): take the nearest row.
 
@@ -20,11 +16,10 @@ Neutral questions for a visceral need ask about the situation, the gap and the u
 
 ## 2. Harvest
 
-Cheap sources first; mark each slot stated, inferred (from what) or unknown.
+Cheap sources first; an inferred slot records what it was inferred from.
 - The conversation: goals, constraints, links and names (seeds), the words the user uses.
-- The open repo: README, CLAUDE.md, manifests (languages, frameworks, versions), recent doc headings. Send anything deeper to a subagent and keep asking the questions that do not depend on it.
-- Earlier topics: one Grep tool search of the topic root (pattern `^(brief|feedback):`, glob `*/log.md`, the root as an absolute path). A similar earlier brief turns its choices (deliverable, depth, source kinds, budget) into the recommended options, marked "as last time". Feedback that a brief missed ("too shallow", "wrong sense of the term") becomes a question or a default this time. Show anything learned this way; never apply it unseen.
-- Nothing harvested goes into a query, a probe or a subagent brief.
+- The open repo: manifests give languages, frameworks and versions. Send anything deeper to a subagent and keep asking the questions that do not depend on it.
+- Earlier topics (the Grep in SKILL.md intake step 1): a similar earlier brief turns its choices (deliverable, depth, source kinds, budget) into the recommended options, marked "as last time". Feedback that a brief missed ("too shallow", "wrong sense of the term") becomes a question or a default this time. Show anything learned this way; never apply it unseen.
 
 ## 3. Probe
 
@@ -43,8 +38,7 @@ C. Map the field first (dig round 0). Deliverable: a map of the field's terms, p
 ```
 
 - 2 or 3 readings that differ in object or deliverable, not in wording. Every candidate, C included, states its deliverable and done condition.
-- A visceral need always gets "map the field first"; a compromised one gets a restated object (the use behind the means).
-- With AskUserQuestion, one question whose options are the candidates, previews holding each mini brief; otherwise a numbered list. Either way the pick is one of the round's at most 4 questions. The user picks, combines or corrects one; the pick fills use, object, deliverable and done condition at once.
+- With AskUserQuestion, one question whose options are the candidates, previews holding each mini brief; otherwise one question in the section 6 template, a candidate per option. The pick fills use, object, deliverable and done condition at once.
 
 Example, conscious: "Is there research on asking users good follow-up questions?"
 - A (recommended: the request asks whether research exists). dig: clarifying questions in conversational search and dialogue systems. Done when: venues; canonical papers; measured gains; where clarifying questions fail.
@@ -80,12 +74,12 @@ Seeds and Hypothesis are harvested, not asked, unless they would change the plan
    c. Don't know: take a.
 ```
 
-- Every question in every round has this shape, follow-ups included: the recommended option is a, marked, and is the likeliest answer or, when none is likelier, the safe default (such as "any domain"); the last option is "don't know", which takes the default and records it as an assumption; "yes" accepts every recommended option.
+- Follow-ups take this shape too. The recommended option is the likeliest answer or, when none is likelier, the safe default (such as "any domain"); "don't know" records the default as an assumption; "yes" accepts every recommended option.
 - Options, not blanks: a user who lacks the field's words recognizes the right option long before they can phrase it. A detail with many possible answers (a cloud, a language) gets the likeliest 2 or 3 and "other: say which".
-- One decision per question; at most 4 questions per round, the ones that change the mode first, then the object, then constraints that remove options, then scope and evidence bar.
+- One decision per question. Questions that change the mode come first, then the object, then constraints that remove options, then scope and evidence bar.
 - Field terms with the user's words in parentheses on first use.
-- No leading questions, no tool internals, no facts the environment can give, nothing this session or the topic's `log.md` already answered. A stated fact or rule is taken in its usual reading and recorded as an assumption, not asked about.
-- AskUserQuestion when the host has it: one call per round, up to 4 questions, "(Recommended)" on the first option, previews for candidate briefs.
+- No leading questions, no tool internals, nothing this session or the topic's `log.md` already answered. A stated fact or rule taken in its usual reading is recorded as an assumption.
+- AskUserQuestion when the host has it: one call per round, "(Recommended)" on the first option.
 
 Good: "Which do you need first? a. A field map with the originals (recommended: the field is new to you). b. A decision report comparing the main options. c. Don't know: take a."
 Bad, and why:
@@ -123,8 +117,5 @@ Empty slots are left out. Required claims for dig: the first is always the venue
 
 ## 8. During the run
 
-- dig: after round 0, show the map (terms, people, venues) and the two directions, then confirm the direction and the required claims in one round, unless dig.md's skip condition holds.
-- pulse: when an ambiguity survives the pre-flight, show the resolved entity, subreddits, repositories and anchors in one round before running.
 - A finding that changes the question: ask once before re-scoping, log the reason; reworded, added or dropped claims count as brief drift.
 - A hand-off to another mode copies the brief, and its slots count as stated: ask only what the new mode adds (report: the key questions; models: constraints and required features; pulse: the window) and what the new request changes.
-- Log the intake line after the gate and add re-scopes and drift at delivery (`references/formats.md`).

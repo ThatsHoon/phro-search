@@ -1,6 +1,6 @@
 # Style
 
-Output rules for the prose written for the user: chat answers, briefs, and the prose of a written report. Quotes are not prose: `report.html`, the quotes in `extracts.json` and `sources/` stay verbatim, are never checked, and are never cut or edited to pass a check. Read the rules before writing. `check.py` enforces most of them and prints the line and the phrase of each problem.
+Output rules for the prose written for the user: chat answers, briefs, and the prose of a written report. Quotes are not prose: the evidence pages (`report.html`, `evidence-<stem>.html`), the quotes in `extracts.json` and `extracts-<stem>.json`, and `sources/` stay verbatim, are never checked, and are never cut or edited to pass a check. Read the rules before writing. `check.py` enforces most of them and prints the line and the phrase of each problem.
 
 ## Voice
 
@@ -25,6 +25,4 @@ Output rules for the prose written for the user: chat answers, briefs, and the p
 
 ## Check
 
-Before delivering, run `python -I ${CLAUDE_PLUGIN_ROOT}/scripts/check.py <file>` (use `-` to read standard input). Each problem prints as `<line>:<rule>: <detail>`. A count over its limit prints a line 0 summary, then each hit with its line.
-
-Rewrite only the flagged spots, then run it again until it prints `OK`. Quote lines, fenced code, inline code and URLs are not checked, except for invisible characters.
+`check.py` prints each problem as `<line>:<rule>: <detail>`. A count over its limit prints a line 0 summary, then each hit with its line. Rewrite only the flagged spots, then run it again until it prints `OK`. Quote lines, fenced code, inline code and URLs are not checked, except for invisible characters.

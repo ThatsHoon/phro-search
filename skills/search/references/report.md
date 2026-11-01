@@ -48,19 +48,19 @@ One gap round at most: 1 or 2 researchers, only for a key question left without 
 
 ## Archive and locate
 
-1. Collect the URLs of the finding lines; one per host and path. Fetch at most 25 with `fetch.py <topic>/sources <name> <url>`, passing a paper's DOI so its legal open-access copies come first: first the pages behind findings the answer would rest on, then by label (paper, official, first-hand before summary). Reuse what `sources/` already holds (the map's Sources table names each file's URL; `fetch.py` reuses a source already fetched from the same URL, DOI or arXiv id, mark reused, for files fetched since `sources/index.tsv` exists); never download again. Every FAIL goes to `log.md`; a walled page behind a likely central finding goes to the user's browser, as in dig.
+1. Collect the URLs of the finding lines; one per host and path. Fetch at most 25 with `fetch.py <topic>/sources <name> <url>`, passing a paper's DOI so its legal open-access copies come first: first the pages behind findings the answer would rest on, then by label (paper, official, first-hand before summary). Reuse what `sources/` already holds; never download again. Every FAIL goes to `log.md`; a walled page behind a likely central finding goes to the user's browser, as in dig.
 2. Locate each finding: grep a distinctive phrase of its quote in the fetched copy (`grep -n -F -e "<phrase>" -e "<phrase>" <topic>/sources/<file>` for several at once), read a few lines around a hit, and take the text exactly as the copy has it. Not found (the page changed, the researcher paraphrased, the fetch failed): the finding stays URL-only.
 3. Write `claims.json` (`references/formats.md`): one entry per finding the report may use, ids c1, c2 and on. Importance:
    - central: the answer would change if it were false; at most 10, each located; a URL-only finding is never central, nor is one whose source is retracted;
    - supporting: backs a section;
    - tangential: context.
-4. Write the report's view, `extracts-<stem>.json` (the stem of `report-<stem>.md`: the date, then -2 and on), with one claim per located finding, carrying its id, its claim text in the user's language and its located quotes; conflicting findings go side by side under `disagreements`, unfetched pages under `unreached`. Run `report.py <topic> <stem> --check` and fix each MISMATCH by copying the source text exactly.
+4. Write the report's view, `extracts-<stem>.json` (the stem of `report-<stem>.md`: the date, then -2 and on), with one claim per located finding, carrying its id, its claim text in the user's language, its located quotes and status `partial` (`sourced` once the support pass in Verify rates a quote full); conflicting findings go side by side under `disagreements`, unfetched pages under `unreached`. Run `report.py <topic> <stem> --check` and fix each MISMATCH by copying the source text exactly.
 
 ## Verify
 
 Before any vote, run the support pass (`references/briefs.md`) on the central claims' located quotes and write each `support` and `qualifier` into the view. A central claim with no full rating is reworded to what its source says, or lowered to supporting, before it is sent.
 
-Three verifiers per central claim, one per starting point: counter-evidence; source standing and date; benchmark and marketing. Several claims may share a turn, at most 12 verifiers at once; record a verdict only when all three votes of its claim are in.
+Three verifiers per central claim, one per starting point: counter-evidence; source standing and date; benchmark and marketing. Several claims may share a turn, at most 12 verifiers at once; record a claim's verdict only when each of its three verifiers has replied or been stopped.
 
 ```
 You are a verifier. Try to refute one claim.
@@ -98,12 +98,9 @@ Write the report in this session, where the claims, votes and extracts already a
 
 ## Deliver
 
-First stop every researcher or verifier still running and log what was stopped. Then:
 1. `report.py <topic> <stem>` builds `evidence-<stem>.html` with the votes beside each claim; it must print OK.
-2. In the user's language, with no lead-in: the report's BLUF paragraph as it stands in the file; the report path, then `evidence-<stem>.html`; the tally (central claims survived, refuted, unverified); key questions left as gaps; important walled pages with URL and why they matter; process problems (failed fetches, missing votes, agents that overstepped their brief).
-3. The feedback question; log the answer verbatim.
-
-Run `check.py` on the exact reply after its last edit and send that text unchanged.
+2. With no lead-in: the report's BLUF paragraph as it stands in the file; the report path, then `evidence-<stem>.html`; the tally (central claims survived, refuted, unverified); key questions left as gaps; important walled pages with URL and why they matter; process problems (failed fetches, missing votes, agents that overstepped their brief).
+3. The feedback question.
 
 ## Again on the same topic
 

@@ -5,7 +5,7 @@ New posts from the venues a topic already knows (monitoring, Ellis 1987). Feeds,
 ## 1. Is there a map?
 
 When `~/research/<topic>/map.md` is missing (for example "what is new in <framework>"):
-- In a hurry, the default: add the obvious venues directly (the official blog or release feed, the main tags, well-known personal blogs) and write a minimal map (Brief, Venues, People) to grow later. In one trial, two round-0 searchers took about 2 minutes and found about the same venues as adding the obvious ones.
+- In a hurry, the default: add the obvious venues directly (the official blog or release feed, the main tags, well-known personal blogs) and write a minimal map (Brief, Venues, People) to grow later.
 - No idea where the field posts: run dig round 0 only to find the venues (`references/dig.md`), then watch.
 
 ## 2. Add feeds

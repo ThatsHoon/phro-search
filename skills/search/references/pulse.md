@@ -29,7 +29,7 @@ Check the topic for keyword traps before the first request. Reframe it, or ask o
 | a product or company | hn, reddit, youtube |
 | a practice or workflow | hn, reddit, youtube, github |
 
-Each subquery names its lanes; a lane that no subquery names does not run. TikTok, Instagram and X have no keyless access: when a topic lives there (consumer products, creators), say so in the gaps instead of guessing.
+A lane runs when a subquery names it; reddit, github and youtube also run when the plan names dedicated subreddits, repositories or YouTube queries. TikTok, Instagram and X have no keyless access: when a topic lives there (consumer products, creators), say so in the gaps instead of guessing.
 
 ## 4. Plan and run
 
@@ -39,7 +39,7 @@ Write `<topic>/pulse/plan.json` (format in `references/formats.md`; each result 
 
 Plan line: "pulse: <lanes>, <N> days, up to 90 s, 2 or 3 web supplements".
 
-Run `python -I ${CLAUDE_PLUGIN_ROOT}/scripts/pulse.py <topic_dir> --plan <topic_dir>/pulse/plan.json`. `--days N` overrides the plan's window; `--quick` and `--deep` cluster 15 or 60 items instead of 40. It prints a LANE line per lane, the clusters over the floor with their best items, the weak signals, then the result and evidence paths. Lane statuses:
+Run `pulse.py <topic_dir> --plan <topic_dir>/pulse/plan.json`. `--days N` overrides the plan's window; `--quick` and `--deep` cluster 15 or 60 items instead of 40. It prints a LANE line per lane, the clusters over the floor with their best items, the weak signals, then the result and evidence paths. Lane statuses:
 - `ok`; `no-results` (fetched, none on topic); `partial` (some requests failed);
 - `rate-limited` (GitHub allows 10 searches a minute without `GH_TOKEN`); `timeout` (cut at the deadline, what came in is kept);
 - `failed: <reason>`; `skipped` (no subreddits named, or yt-dlp missing).
@@ -89,7 +89,7 @@ Write `<topic>/pulse/<stem>.md` (the stem of the result, such as `2026-10-30`) i
 
 ## 8. Deliver
 
-In the user's language, with no lead-in: the takeaway, each cluster's heading with its strength in a few words, the coverage line, the web supplements' links, the brief path and the feedback question. Write that whole reply, run `check.py -` on it and send exactly the text that printed OK; a change after the check needs a new check. Log the run and the answer verbatim (`references/formats.md`).
+In the user's language, with no lead-in: the takeaway, each cluster's heading with its strength in a few words, the coverage line, the web supplements' links, the brief path and the feedback question. Log the run (`references/formats.md`).
 
 ## Drill and hand-off
 

@@ -1,7 +1,5 @@
 # Formats
 
-Working files are English. Claim text, translations and deliverables are in the user's language; quotes stay verbatim in their own language.
-
 ## map.md
 
 ```

@@ -5,13 +5,15 @@ Answer a technical question the open code depends on (an API's behavior, a spec 
 ## Before the agents
 
 - Settle the library and its version from the repo: lockfiles and manifests first (`uv.lock`, `poetry.lock`, `requirements*.txt`, `package-lock.json`, `go.sum`, `Cargo.lock`), then the installed copy (`pip show <package>`, `node_modules/<package>/package.json`). Ask which library or version only when the repo does not settle it, with the candidates found as options.
-- Find where the repo keeps notes: a folder of research or decision notes (`docs/notes/`, `docs/research/`, `docs/adr/`, `notes/`), its file naming and its language. With none, the path `docs/research/<slug>.md` is a defaulted slot: show it at the gate and write nothing before the user confirms or changes it.
-- Plan line: "docs: local reader and web gatherer (sonnet), note at <path>"; with no installed copy, the web gatherer alone.
-- What goes to the web gatherer is generic: library names, versions and public APIs are fine; project names, private code and local paths stay on the machine. Only the local reader's brief names local files.
+- Find where the repo keeps notes: a folder of research or decision notes (`docs/notes/`, `docs/research/`, `docs/adr/`, `notes/`), its file naming and its language. Catch up on a field, from generic words down to its original sources. Two things carry the mode: originals are archived, never summarized, and the stop is set by evidence, not by confidence.
+
+- No summaries: notes taken before a focus forms may bring premature closure (Kuhlthau 1991), and an agent's summary also closes on the agent's view and drops the details the user judges by. The user reads the originals; the agent points at them.
+- Plan line: "docs: local reader and web gatherer, note at <path>"; with no installed copy, the web gatherer alone.
+- The web gatherer's brief may name the library, its version and public APIs.
 
 ## Agents
 
-Spawn both in one turn, in the background. Each replies with text and writes no file.
+Spawn both in one turn, in the background.
 
 Local reader (`phro-search:local-reader`), when the package is installed:
 
@@ -59,6 +61,6 @@ Question: <question>. Use: <use>. Version: <name> <version>. Date: <YYYY-MM-DD>.
 ```
 
 - Every line under Evidence cites code (`<path>:<line>` with the version) or the version's documentation (URL and section); a claim resting on a blog or Q&A answer goes under Caveats as unconfirmed. Where the code and the docs disagree, the installed code wins for this version, and the disagreement goes under Caveats.
-- Run `python -I ${CLAUDE_PLUGIN_ROOT}/scripts/check.py <path>` and rewrite only the flagged spots until it prints OK.
+- Run `check.py <path>` and rewrite only the flagged spots until it prints OK.
 - Reply in the user's language with the note path and the answer in at most 3 lines. "Not found in primary sources", with what was checked, is a valid answer.
 - Ask the feedback question in one line; docs keeps no log and no topic folder.
