@@ -11,6 +11,7 @@ When `~/research/<topic>/map.md` is missing (for example "what is new in <framew
 ## 2. Add feeds
 
 Pick venues from the map's Venues and People and add each with `watch.py add <topic_dir> <url> [name]`. It finds the feed and checks that it parses: Qiita tags and users, Zenn topics and users, note users, subreddits (through the arctic-shift API; reddit.com itself is never fetched), YouTube channels and playlists, GitHub releases, blogs with RSS or Atom, and arXiv API queries such as `http://export.arxiv.org/api/query?search_query=all:%22clarifying%20questions%22&sortBy=submittedDate&sortOrder=descending`.
+- A journal or proceedings without a feed: `watch.py add <topic_dir> openalex:<source name or S id>` resolves its OpenAlex source; a name that matches several sources fails and lists their S ids, so add the right one by its S id. `check` then lists the works published since the last check, newest first, with the DOI (else the landing page) and the abstract's first sentence as the first line.
 - X and pixiv publish no feeds: say in the reply that they cannot be watched.
 - Whether a venue has a feed is decided by `watch.py add`, not by a searcher's word: searchers guess feed URLs and have called a working feed missing. A searcher's "no longer updated" is checked against the latest item that `check` prints.
 

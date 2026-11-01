@@ -2,6 +2,9 @@
 
 usage:
   watch.py add <topic_dir> <url> [name]            find the venue's feed, verify it, append it to watch.tsv
+  watch.py add <topic_dir> openalex:<source> [name]
+                                                   a journal or proceedings without a feed, by its OpenAlex source
+                                                   name or S id; check lists its works published since the last check
   watch.py list <topic_dir>                        print the feeds in watch.tsv
   watch.py check <topic_dir> [--days N] [--fresh]  print what is new, write watch/<UTC time>.md
 
@@ -9,7 +12,9 @@ output, one tab-separated line per result:
   ADDED   kind  name  feed  <n> items, latest <YYYY-MM-DD or ->
   EXISTS  name  feed
   kind    name  feed  source                    (list)
-  NEW     date  name  title  url  first line    (check, newest first; the original's first line, no summary)
+  NEW     date  name  title  url  first line    (check, newest first; the original's first line, no summary; for an
+                                                openalex source the DOI, else the landing page, and the abstract's
+                                                first sentence rebuilt from OpenAlex's abstract_inverted_index)
   LATEST  date  name  title  url                (check, the latest item of a feed with nothing new)
   FAIL    url or name  reason
   # note
@@ -18,7 +23,7 @@ exit codes: add and list exit 1 on a FAIL line, else 0. check: exit 0 when every
 exit 0 when some feeds failed and others answered or were quiet (their FAIL lines name them); exit 1 when every feed
 failed, or for a bad state file.
 
-egress: add refuses a venue URL that holds a forbidden term, and check checks each stored feed URL against the terms,
+egress: add refuses a venue URL or an openalex:<source> that holds a forbidden term, and check checks each stored feed URL against the terms,
 read again before its request; a term list that cannot be read blocks the request (a FAIL line).
 
 requests: 1 s apart per host (export.arxiv.org 3 s). A 429, a 5xx or a timeout is retried after 2, 4 and 8 s (after
@@ -34,6 +39,8 @@ from pathlib import Path
 VERSION = "0.4.0"
 
 ARCTIC = "https://arctic-shift.photon-reddit.com"
+OPENALEX = "https://api.openalex.org"  # OPENALEX_API_KEY from the environment is sent when set, never stored or printed
+WORKS_SELECT = "id,doi,display_name,publication_date,primary_location,abstract_inverted_index"
 YOUTUBE = "https://www.youtube.com/feeds/videos.xml"
 UA = f"Mozilla/5.0 (compatible; phro-search/{VERSION}; +https://github.com/ThatsHoon/phro-search)"
 CAP, KEEP = 10 * 1024 * 1024, 500  # bytes per response; seen item URLs kept per feed
@@ -226,10 +233,104 @@ def _posts(body):
         raise Fail("not an arctic-shift response") from None
 
 
+def abstract(index):
+    """The text of an OpenAlex abstract_inverted_index (word: [positions]); "" when there is none."""
+    at = {}
+    for word, spots in index.items() if isinstance(index, dict) else ():
+        for k in spots if isinstance(spots, list) else ():
+            if isinstance(k, int) and not isinstance(k, bool) and 0 <= k < 100000:
+                at[k] = str(word)
+    return " ".join(at[k] for k in sorted(at))
+
+
+def first_sentence(text):
+    """Text up to its first . ! or ? that is followed by the end or by a word that does not start in lowercase."""
+    text = clean(text, 2000)
+    m = re.search(r"[.!?](?=$|\s+[^\sa-z])", text)
+    return clean(text[:m.end()] if m else text, 200)
+
+
+def _works(body):
+    """Items of an OpenAlex works response, {"results": [work, ...]}: the DOI, else the landing page, else the work's
+    OpenAlex URL, with the abstract's first sentence."""
+    try:
+        rows = json.loads(body)["results"]
+        if not isinstance(rows, list):
+            raise TypeError
+    except (ValueError, KeyError, TypeError):
+        raise Fail("not an OpenAlex works response") from None
+    items = []
+    for w in (w for w in rows if isinstance(w, dict)):
+        loc = w.get("primary_location") if isinstance(w.get("primary_location"), dict) else {}
+        url = next((u for u in (w.get("doi"), loc.get("landing_page_url"), w.get("id"))
+                    if isinstance(u, str) and re.match(r"https?://\S+$", u)), None)
+        if url:
+            items.append({"title": str(w.get("display_name") or w.get("title") or ""), "url": url,
+                          "date": to_utc(str(w.get("publication_date") or "")),
+                          "first": first_sentence(abstract(w.get("abstract_inverted_index")))})
+    return items
+
+
+def with_key(url):
+    """An OpenAlex URL with OPENALEX_API_KEY added when it is set."""
+    key = os.environ.get("OPENALEX_API_KEY", "").strip()
+    return url + ("&" if "?" in url else "?") + urllib.parse.urlencode({"api_key": key}) if key else url
+
+
+def works_feed(sid):
+    """The URL stored in watch.tsv for an OpenAlex source: its works, newest publication date first."""
+    return f"{OPENALEX}/works?filter=primary_location.source.id:{sid}&sort=publication_date:desc&per-page=100&select={WORKS_SELECT}"
+
+
+def request_url(kind, feed, now):
+    """The URL asked for a stored feed: for an openalex source, nothing published after today, and the key when set."""
+    if kind != "openalex":
+        return feed
+    u = urllib.parse.urlsplit(feed)
+    params = [(k, v + f",to_publication_date:{now:%Y-%m-%d}" if k == "filter" else v)
+              for k, v in urllib.parse.parse_qsl(u.query, keep_blank_values=True)]
+    return with_key(urllib.parse.urlunsplit(u._replace(query=urllib.parse.urlencode(params, safe=":,"))))
+
+
+def openalex_source(spec):
+    """(S id, display name) of the OpenAlex source an S id (or its openalex.org URL) or a name names; raises Fail
+    when no source or more than one matches a name."""
+    m = re.fullmatch(r"(?i)(?:https?://(?:api\.)?openalex\.org/(?:sources/)?)?(s\d+)", spec.strip())
+    if m:
+        try:
+            d = json.loads(fetch(with_key(f"{OPENALEX}/sources/{m[1].upper()}?select=id,display_name")))
+            rows = [d] if isinstance(d, dict) else []
+        except ValueError:
+            rows = []
+    else:
+        try:
+            d = json.loads(fetch(with_key(f"{OPENALEX}/sources?search={urllib.parse.quote_plus(spec.strip())}"
+                                          "&per-page=10&select=id,display_name")))
+            rows = d.get("results") if isinstance(d, dict) and isinstance(d.get("results"), list) else None
+        except ValueError:
+            rows = None
+        if rows is None:
+            raise Fail("not an OpenAlex sources response")
+    found = [(re.search(r"S\d+$", str(r.get("id")))[0], clean(r.get("display_name"), 120)) for r in rows
+             if isinstance(r, dict) and re.search(r"S\d+$", str(r.get("id"))) and r.get("display_name")]
+    if m:
+        if not found:
+            raise Fail(f"no OpenAlex source {m[1].upper()}")
+        return found[0]
+    exact = [f for f in found if f[1].casefold() == clean(spec).casefold()]
+    if len(exact) == 1 or len(found) == 1:
+        return (exact or found)[0]
+    if not found:
+        raise Fail(f"no OpenAlex source matches {clean(spec, 80)}")
+    raise Fail("ambiguous: " + "; ".join(f"{sid} {name}" for sid, name in found[:5]) + "; add it by its S id")
+
+
 def parse(body, kind=None):
     """(format, feed title, items) of a feed body; an item has title, url, date (UTC or None) and first."""
     if kind == "reddit":
         return "reddit", "", _posts(body)
+    if kind == "openalex":
+        return "openalex", "", _works(body)
     if re.search(rb"<!(?:doctype|entity)", body.replace(b"\0", b""), re.I):  # NULs dropped: UTF-16 cannot hide it
         raise Fail("refused: DOCTYPE or ENTITY in feed")
     try:
@@ -343,8 +444,9 @@ def fail(what, reason):
 
 def cmd_add(a):
     top, url = Path(a.topic_dir).expanduser(), a.url.strip()
-    if not re.fullmatch(r"https?://\S+", url, re.I):
-        return fail(url, "not an http(s) URL")
+    oa = url[:9].lower() == "openalex:"
+    if not oa and not re.fullmatch(r"https?://\S+", url, re.I):
+        return fail(url, "not an http(s) URL or openalex:<source>")
     try:
         hit = egress_hit(url, egress_terms())
     except Exception as e:  # fail closed: a term list that cannot be read blocks the request
@@ -352,22 +454,26 @@ def cmd_add(a):
     if hit:
         return fail(url, f"egress: '{hit[0]}' is listed in {hit[1]}; use a generic problem statement")
     try:
-        kind, feed, body = locate(url)
+        if oa:
+            sid, title = openalex_source(url[9:])
+            kind, feed, body, source = "openalex", works_feed(sid), None, f"https://openalex.org/{sid}"
+        else:
+            (kind, feed, body), source, title = locate(url), url, ""
         feed = urllib.parse.quote(feed, safe=string.punctuation)  # one ASCII field in watch.tsv
         known = {f["feed"]: f["name"] for f in read_feeds(top)}
         if feed in known:
             print(f"EXISTS\t{clean(known[feed])}\t{clean(feed)}")
             return 0
-        fmt, title, items = parse(fetch(feed) if body is None else body, kind)
+        fmt, own, items = parse(fetch(request_url(kind, feed, datetime.now(timezone.utc))) if body is None else body, kind)
     except Fail as e:
         return fail(url, str(e))
     kind, u = kind or fmt, urllib.parse.urlsplit(url)
     derived = re.sub(r"^(www|m|old|new)\.", "", u.netloc.lower()) + u.path.rstrip("/")
-    name = clean(a.name or "", 60) or clean(title, 60) or clean(derived, 60)
+    name = clean(a.name or "", 60) or clean(title or own, 60) or clean(derived, 60)
     top.mkdir(parents=True, exist_ok=True)
     p = top / "watch.tsv"
     text = p.read_text(encoding="utf-8") if p.is_file() else "kind\tname\tfeed\tsource\n"
-    text += ("" if text.endswith("\n") else "\n") + "\t".join((kind, name, feed, url)) + "\n"
+    text += ("" if text.endswith("\n") else "\n") + "\t".join((kind, name, feed, source)) + "\n"
     p.write_text(text, encoding="utf-8")
     dated = [i["date"] for i in items if i["date"]]
     print(f"ADDED\t{kind}\t{name}\t{clean(feed)}\t{len(items)} items, latest {_day(max(dated) if dated else None)}")
@@ -407,16 +513,17 @@ def cmd_check(a):
             failed.append((f["name"], f"egress: '{hit[0]}' is listed in {hit[1]}; use a generic problem statement"))
             continue
         try:
-            items = parse(fetch(f["feed"]), f["kind"])[2]
+            items = parse(fetch(request_url(f["kind"], f["feed"], now)), f["kind"])[2]
         except Fail as e:
             failed.append((f["name"], str(e)))
             continue
         old = state.get(f["feed"])
         if old is None or a.fresh:
             picked = [i for i in items if i["date"] and i["date"] >= now - timedelta(days=a.days)]
-        else:
+        else:  # an openalex source lists only works published since the last check, not older ones indexed late
             seen = set(old.get("seen", []))
-            picked = [i for i in items if i["url"] not in seen]
+            since = to_utc(str(old.get("checked", ""))[:10]) if f["kind"] == "openalex" else None
+            picked = [i for i in items if i["url"] not in seen and (since is None or (i["date"] and i["date"] >= since))]
         if picked:
             busy += 1
             new += [(i, f["name"]) for i in picked]
@@ -462,7 +569,8 @@ def main(argv=None):
     sub = p.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("add", help="find a venue's feed, verify that it parses, append it to watch.tsv")
     s.add_argument("topic_dir", help="topic folder, such as ~/research/<topic>")
-    s.add_argument("url", help="venue URL: tag, user, channel, playlist, blog, repository, arXiv API query or subreddit")
+    s.add_argument("url", help="venue URL (tag, user, channel, playlist, blog, repository, arXiv API query or subreddit), "
+                               "or openalex:<source name or S id> for a journal or proceedings without a feed")
     s.add_argument("name", nargs="?", help="feed name (default: the feed's title)")
     s.set_defaults(func=cmd_add)
     s = sub.add_parser("list", help="print the feeds in watch.tsv")

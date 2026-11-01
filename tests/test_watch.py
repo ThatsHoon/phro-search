@@ -1,4 +1,4 @@
-import contextlib, io, json, shutil, tempfile, unittest, urllib.error
+import contextlib, io, json, os, shutil, tempfile, unittest, urllib.error
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest import mock
@@ -10,6 +10,24 @@ FIX = Path(__file__).resolve().parent / "fixtures" / "watch"
 NOW = datetime(2026, 10, 30, 12, 0, tzinfo=timezone.utc)
 RSS = "https://blog.example.com/feed.xml"
 ATOM = "https://atom.example.com/feed"
+OA = "https://api.openalex.org"
+OA_FEED = (f"{OA}/works?filter=primary_location.source.id:S123&sort=publication_date:desc&per-page=100"
+           "&select=id,doi,display_name,publication_date,primary_location,abstract_inverted_index")
+OA_NOW = OA_FEED.replace("S123&", "S123,to_publication_date:2026-10-30&")  # the request: nothing dated after today
+
+
+def work(n, title, day, doi=True, abstract=None):
+    """One work of an OpenAlex /works list; abstract is plain text, sent as abstract_inverted_index."""
+    index = {}
+    for k, w in enumerate((abstract or "").split()):
+        index.setdefault(w, []).append(k)
+    return {"id": f"https://openalex.org/W{n}", "doi": f"https://doi.org/10.1/w{n}" if doi else None, "display_name": title,
+            "publication_date": day, "abstract_inverted_index": index or None,
+            "primary_location": {"landing_page_url": f"https://journal.example.com/article/{n}"}}
+
+
+def works(*rows):
+    return json.dumps({"meta": {"count": len(rows)}, "results": list(rows)}).encode()
 
 
 def fixture(name):
@@ -54,6 +72,7 @@ class WatchTest(unittest.TestCase):
         self.sleep = mock.patch("time.sleep").start()
         mock.patch.object(m, "datetime", FixedClock).start()
         mock.patch.object(m, "egress_terms", lambda cwd=None: []).start()
+        mock.patch.dict(os.environ, {"OPENALEX_API_KEY": ""}).start()
         self.addCleanup(mock.patch.stopall)
 
     def run_watch(self, routes, cmd, *args):
@@ -281,6 +300,69 @@ class WatchTest(unittest.TestCase):
             code, out, urls = self.run_watch({RSS: fixture("rss.xml")}, "check")
         self.assertEqual((code, urls), (1, []))
         self.assertIn("FAIL\tblog\tegress: cannot read the term list: bad list", out)
+
+    # openalex: journals and proceedings without a feed
+
+    def test_openalex_source_by_id_is_added_and_checked(self):
+        source = json.dumps({"id": "https://openalex.org/S123", "display_name": "Journal of Widgets"}).encode()
+        listing = works(work(2, "Widget engines at scale", "2026-10-28", abstract="We scale widget engines. Then we stop."),
+                        work(1, "Old widget study", "2026-08-01", doi=False))
+        routes = {f"{OA}/sources/S123?select=id,display_name": source, OA_NOW: listing}
+        code, out, urls = self.run_watch(routes, "add", "openalex:S123")
+        self.assertEqual((code, out), (0, [f"ADDED\topenalex\tJournal of Widgets\t{OA_FEED}\t2 items, latest 2026-10-28"]))
+        self.assertEqual(urls, [f"{OA}/sources/S123?select=id,display_name", OA_NOW])
+        self.assertIn(f"openalex\tJournal of Widgets\t{OA_FEED}\thttps://openalex.org/S123\n",
+                      (self.top / "watch.tsv").read_text(encoding="utf-8"))
+        self.assertEqual(self.run_watch(routes, "add", "openalex:https://openalex.org/S123")[1],
+                         [f"EXISTS\tJournal of Widgets\t{OA_FEED}"])
+        code, out, urls = self.run_watch(routes, "check")
+        self.assertEqual(out[0], "NEW\t2026-10-28\tJournal of Widgets\tWidget engines at scale\thttps://doi.org/10.1/w2"
+                                 "\tWe scale widget engines.")
+        self.assertEqual((code, urls), (0, [OA_NOW]))
+        # a later check lists the works published since the last one; an older work indexed late is not new
+        later = works(work(3, "Widget engines, again", "2026-10-30"), work(4, "Late-indexed widget paper", "2026-10-02", doi=False),
+                      work(2, "Widget engines at scale", "2026-10-28"))
+        code, out, _ = self.run_watch({OA_NOW: later}, "check")
+        self.assertEqual([ln.split("\t")[3:5] for ln in out if ln.startswith("NEW")],
+                         [["Widget engines, again", "https://doi.org/10.1/w3"]])
+        code, out, _ = self.run_watch({OA_NOW: later}, "check", "--fresh", "--days", "60")
+        self.assertIn(["Late-indexed widget paper", "https://journal.example.com/article/4"],
+                      [ln.split("\t")[3:5] for ln in out if ln.startswith("NEW")])
+
+    def test_openalex_source_by_name(self):
+        def search(*names):
+            return json.dumps({"results": [{"id": f"https://openalex.org/S{n}", "display_name": d} for n, d in names]}).encode()
+        url = f"{OA}/sources?search=widget+systems&per-page=10&select=id,display_name"
+        exact = search((7, "Widget Systems Letters"), (8, "Widget Systems"))
+        code, out, urls = self.run_watch({url.replace("widget", "Widget"): exact, OA_NOW.replace("S123", "S8"): works()}, "add",
+                                         "openalex:Widget systems")
+        self.assertEqual((code, out[0].split("\t")[:3]), (0, ["ADDED", "openalex", "Widget Systems"]))
+        code, out, _ = self.run_watch({url: search((7, "Widget Systems Letters"), (9, "Widget Systems Review"))}, "add",
+                                      "openalex:widget systems")
+        self.assertEqual((code, out), (1, ["FAIL\topenalex:widget systems\tambiguous: S7 Widget Systems Letters; "
+                                           "S9 Widget Systems Review; add it by its S id"]))
+        code, out, _ = self.run_watch({url: search()}, "add", "openalex:widget systems")
+        self.assertEqual((code, out), (1, ["FAIL\topenalex:widget systems\tno OpenAlex source matches widget systems"]))
+
+    def test_openalex_egress_shape_and_key(self):
+        with mock.patch.object(m, "egress_terms", lambda cwd=None: [("acme-secret", "forbidden.txt")]):
+            self.assertEqual(self.run_watch({}, "add", "openalex:Acme-Secret Journal"), (1, [
+                "FAIL\topenalex:Acme-Secret Journal\tegress: 'acme-secret' is listed in forbidden.txt; use a generic problem statement"], []))
+        self.feeds(("openalex", "Journal of Widgets", OA_FEED))
+        code, out, _ = self.run_watch({OA_NOW: b'{"error": "moved"}'}, "check")
+        self.assertEqual((code, out[0]), (1, "FAIL\tJournal of Widgets\tnot an OpenAlex works response"))
+        with mock.patch.dict(os.environ, {"OPENALEX_API_KEY": "k3y"}):
+            code, out, urls = self.run_watch({OA_NOW + "&api_key=k3y": works()}, "check")
+        self.assertEqual((code, urls), (0, [OA_NOW + "&api_key=k3y"]))
+        self.assertNotIn("k3y", "\n".join(out) + (self.top / "watch.tsv").read_text(encoding="utf-8"))
+
+    def test_openalex_abstract_first_sentence(self):
+        index = {"Widgets": [0], "matter.": [1], "We": [2], "show": [3], "why,": [4], "e.g.": [5], "in": [6], "labs.": [7]}
+        self.assertEqual(m.abstract(index), "Widgets matter. We show why, e.g. in labs.")
+        self.assertEqual(m.first_sentence(m.abstract(index)), "Widgets matter.")
+        self.assertEqual(m.first_sentence("No full stop here"), "No full stop here")
+        self.assertEqual(m.abstract({"x": ["0", True, -1]}), "")
+        self.assertEqual(m.abstract(None), "")
 
 
 if __name__ == "__main__":
