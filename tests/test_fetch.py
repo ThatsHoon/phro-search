@@ -5,8 +5,12 @@ import os
 import re
 import subprocess
 import tempfile
+import socket
+import ssl
 import threading
 import unittest
+import urllib.error
+import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest import mock
@@ -76,6 +80,8 @@ class FetchTest(unittest.TestCase):
         self.patch(m, "egress_terms", lambda: [])
         self.patch(m, "SPACING", 0)
         self.patch(m, "BACKOFF", (0, 0, 0))
+        self.patch(m, "WAYBACK", "http://127.0.0.1:9")  # never the live Wayback Machine: a closed port
+        self.patch(m, "ARCHIVE", "http://127.0.0.1:9")
         self.patch(m.shutil, "which", lambda name: None)
         self.patch(m.subprocess, "run", mock.Mock(side_effect=AssertionError("unexpected tool run")))
 
@@ -521,9 +527,10 @@ class FetchTest(unittest.TestCase):
 
     def test_http_errors_and_rate_limits(self):
         s = self.serve({"/401": (401, {}, b""), "/403": (403, {}, b""), "/451": (451, {}, b""), "/500": (500, {}, b""),
-                        "/jammed": (429, {}, b""),
+                        "/jammed": (429, {}, b""), "/wayback/available": (200, {}, b'{"archived_snapshots": {}}'),
                         "/busy": [(429, {}, b""), (200, HTML, page("<article>" + LONG + "</article>"))]})
-        for path, reason in (("/404", "http 404"), ("/401", "http 401: login required"),
+        self.patch(m, "WAYBACK", s.url)
+        for path, reason in (("/404", "http 404; no archived copy"), ("/401", "http 401: login required"),
                              ("/403", "http 403: open it in a browser and pass the saved file path"),
                              ("/451", "http 451: unavailable for legal reasons"), ("/500", "http 500"),
                              ("/jammed", "http 429: still rate limited after 3 retries")):
@@ -661,6 +668,103 @@ class FetchTest(unittest.TestCase):
         self.assertEqual((code, f[2], f[5]), (0, "scan.txt", "ocr"))
         self.assertEqual([p.split()[2] for p in self.read("scan.txt").split("\f")], ["page-01", "page-02", "page-10"])
 
+
+    # Wayback copies of dead public pages
+
+    def archive(self, routes, snapshot=None, ts="20200304050607"):
+        """A loopback server for the page, the availability API and the snapshots; fetch.py pointed at it.
+        snapshot, when given, is the reply for the closest snapshot of <server>/gone."""
+        table = dict(routes)
+        s = self.serve(table)
+        closest = {"status": "200", "available": True, "timestamp": ts, "url": f"http://web.archive.org/web/{ts}/x"}
+        table.setdefault("/wayback/available", (200, {"Content-Type": "application/json"},
+                                                json.dumps({"archived_snapshots": {"closest": closest}}).encode()))
+        if snapshot is not None:
+            table[f"/web/{ts}id_/{s.url}/gone"] = snapshot
+        self.patch(m, "WAYBACK", s.url)
+        self.patch(m, "ARCHIVE", s.url)
+        return s
+
+    def test_dead_page_comes_from_its_closest_snapshot(self):
+        head = '<meta name="citation_publication_date" content="2019-05-01">'
+        body = f"<!doctype html><html><head><title>Old</title>{head}</head><body><article><h1>Kept</h1>{LONG}</article></body></html>"
+        s = self.archive({"/gone": (404, {}, b"")}, snapshot=(200, HTML, body.encode()))
+        code, f = self.fetch("old", s.url + "/gone")
+        self.assertEqual((code, f[2], f[4], f[5]), (0, "old.md", "# Kept", "archived-copy"))
+        ts = "20200304050607"
+        self.assertEqual(s.seen, ["/gone", "/wayback/available?" + urllib.parse.urlencode({"url": s.url + "/gone"}),
+                                  f"/web/{ts}id_/{s.url}/gone"])
+        row = self.index()[0]
+        self.assertEqual((row["url"], row["final"], row["published"], row["marks"]),
+                         (s.url + "/gone", f"{s.url}/web/{ts}id_/{s.url}/gone", "2019-05-01, archived 2020-03-04", "archived-copy"))
+        self.assertEqual(self.fetch("again", s.url + "/gone")[1][5], "archived-copy,reused")
+
+    def test_snapshot_date_follows_a_redirect_and_stands_alone(self):
+        s = self.archive({"/gone": (410, {}, b""),
+                          "/web/20200305000000id_/X": (200, HTML, page("<article>" + LONG + "</article>"))},
+                         snapshot=(302, {"Location": "/web/20200305000000id_/X"}, b""))
+        self.assertEqual(self.fetch("moved", s.url + "/gone")[0], 0)
+        self.assertEqual(self.index()[0]["published"], "archived 2020-03-05")
+
+    def test_unreachable_hosts_are_looked_up_too(self):
+        s = self.archive({})
+        real = m.OPENER.open
+        errors = iter([urllib.error.URLError(socket.gaierror(-2, "Name or service not known")),
+                       urllib.error.URLError(ssl.SSLError("certificate verify failed"))] + [TimeoutError("timed out")] * 4)
+
+        def opener(req, timeout=None):
+            if urllib.parse.urlsplit(req.full_url).hostname == "dead.example":
+                raise next(errors)
+            return real(req, timeout=timeout)
+        self.patch(m.OPENER, "open", opener)
+        for why in ("dns", "tls", "timeout"):
+            url = f"https://dead.example/{why}"
+            self.assertEqual(self.fetch("d", url), (1, ["FAIL", "d", f"{why}; archived copy: http 404"]))
+            self.assertIn("/wayback/available?" + urllib.parse.urlencode({"url": url}), s.seen)
+
+    def test_no_snapshot_for_walls_or_refusals(self):
+        wall = page("<p>Checking</p>", title="Just a moment...")
+        s = self.archive({"/401": (401, {}, b""), "/403": (403, {}, b""), "/451": (451, {}, b""), "/500": (500, {}, b""),
+                          "/bot": (503, {"cf-mitigated": "challenge"}, b""), "/wall": (200, HTML, wall)})
+        for path in ("/401", "/403", "/451", "/500", "/bot", "/wall"):
+            self.assertEqual(self.fetch("w", s.url + path)[0], 1)
+        self.assertFalse([p for p in s.seen if p.startswith(("/wayback", "/web/"))])
+
+    def test_failed_lookups_name_both_reasons(self):
+        s = self.archive({"/gone": (404, {}, b"")}, snapshot=(200, HTML, page("<p>Checking</p>", title="Just a moment...")))
+        self.assertEqual(self.fetch("a", s.url + "/gone"), (1, ["FAIL", "a", "http 404; archived copy: wall: just a moment"]))
+        for reply, reason in (((200, {}, b'{"archived_snapshots": {}}'), "no archived copy"),
+                              ((200, {}, b'{"archived_snapshots": {"closest": {"status": "302", "available": true, '
+                                         b'"timestamp": "20200304050607"}}}'), "no archived copy"),
+                              ((200, {}, b"<html>busy</html>"), "Wayback: not a JSON reply"),
+                              ((200, {}, b'["x"]'), "Wayback: not a JSON reply"),
+                              ((403, {}, b""), "Wayback: http 403: open it in a browser and pass the saved file path")):
+            with self.subTest(reason=reason):
+                s = self.archive({"/gone": (404, {}, b""), "/wayback/available": reply})
+                s.seen.clear()
+                self.assertEqual(self.fetch("b", s.url + "/gone"), (1, ["FAIL", "b", f"http 404; {reason}"]))
+        self.assertFalse(self.src.exists() and self.saved())
+
+    def test_doi_copies_and_publisher_are_never_looked_up(self):
+        work = {"id": "W9", "locations": [
+            {"is_oa": True, "version": "publishedVersion", "pdf_url": "{u}/gone.pdf", "source": {"type": "repository"}}]}
+        s = self.doi_server(work)
+        self.patch(m, "WAYBACK", s.url)
+        self.assertEqual(self.fetch("p", "10.1234/abc"), (1, ["FAIL", "p", "http 404 (1 open-access copy failed too)"]))
+        self.assertFalse([p for p in s.seen if p.startswith("/wayback")])
+
+    def test_every_wayback_url_is_egress_checked(self):
+        s = self.archive({"/gone": (404, {}, b""), "/web/20200304050607id_/projectx": (200, HTML, page(LONG))},
+                         snapshot=(302, {"Location": "/web/20200304050607id_/projectx"}, b""))
+        self.patch(m, "egress_terms", lambda: [("projectx", "forbidden.txt")])
+        self.assertEqual(self.fetch("e", s.url + "/gone"), (1, ["FAIL", "e", "http 404; archived copy: egress: 'projectx' "
+                                                                       "is listed in forbidden.txt; use a generic problem statement"]))
+        self.assertNotIn("/web/20200304050607id_/projectx", s.seen)
+        calls = []
+        self.patch(m, "egress", lambda text: calls.append(text))
+        self.fetch("f", s.url + "/gone")
+        self.assertTrue(any(c.startswith(s.url + "/wayback/available?") for c in calls), calls)
+        self.assertIn(f"{s.url}/web/20200304050607id_/{s.url}/gone", calls)
 
 if __name__ == "__main__":
     unittest.main()

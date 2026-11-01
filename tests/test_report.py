@@ -216,6 +216,16 @@ class ReportTest(unittest.TestCase):
         (topic / "sources" / "index.tsv").write_text(f"{head}\n{row}\n", encoding="utf-8")
         self.assertIn('<span class="when">created 2021-03-04; modified 2021-04-05; fetched 2026-11-01</span>', self.page(topic))
 
+    def test_archived_copy_dates(self):
+        topic = self.topic({"a.md": "alpha\n", "b.md": "beta\n"}, [claim(quote("a.md", 1, "alpha"), quote("b.md", 1, "beta"))])
+        head = "name\turl\tfinal\tfetched\tpublished\tmodified\textraction\tversion\tmarks\tfiles"
+        rows = ["a\thttps://example.org/a\t-\t2026-11-01T09:00:00Z\t2019-05-01, archived 2020-03-04\t2019-05-01\thtml\t-\tarchived-copy\ta.md",
+                "b\thttps://example.org/b\t-\t2026-11-01T09:00:00Z\tarchived 2020-03-05\t-\thtml\t-\tarchived-copy\tb.md"]
+        (topic / "sources" / "index.tsv").write_text("\n".join([head] + rows) + "\n", encoding="utf-8")
+        html = self.page(topic)
+        self.assertIn('<span class="when">published 2019-05-01; fetched 2026-11-01; archived copy of 2020-03-04</span>', html)
+        self.assertIn('<span class="when">fetched 2026-11-01; archived copy of 2020-03-05</span>', html)
+
     def test_support_pass(self):
         src = {"a.md": "Intro\nThe model reaches 95 percent accuracy.\nOnly on English test data.\n"}
         limit = {"file": "a.md", "line": 3, "text": "Only on English test data."}

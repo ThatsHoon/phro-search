@@ -14,7 +14,8 @@ central one has a quote in the view that is not marked retracted, and the view c
 most 10 central claims. In any view, a sourced claim needs a quote whose support (from the
 support pass) is full, and a claim whose quotes all come from retracted sources cannot be
 sourced or partial. A quote's qualifier, the sentence that limits it, is checked like a quote.
-The page shows each source's dates from sources/index.tsv when there is one.
+The page shows each source's dates from sources/index.tsv when there is one, with the snapshot date of an
+archived copy.
 
 Lines count like grep -n. A quote matches when it appears within lines line-2 to
 end+2 of sources/<file>, both sides normalized the same way: on each line a leading
@@ -278,14 +279,18 @@ def check(src, q):
 
 
 def source_dates(src):
-    """{file in sources/: "published ...; modified ...; fetched ...; version ...; retracted"} from sources/index.tsv.
-    A PDF's dates are the file's own, so they read "created"; a later row for a name wins; {} without the index."""
+    """{file in sources/: "published ...; modified ...; fetched ...; archived copy of ...; version ...; retracted"} from
+    sources/index.tsv. A PDF's dates are the file's own, so they read "created"; an archived copy's published cell ends
+    with "archived <snapshot date>"; a later row for a name wins; {} without the index."""
     out = {}
     for row in index_rows(src):
         made = "created" if row["extraction"] in ("pdftotext", "ocr") else "published"
-        parts = [f"{made} {row['published']}"] * (row["published"] != "-")
-        parts += [f"modified {row['modified']}"] * (row["modified"] not in ("-", row["published"]))
-        parts += [f"fetched {row['fetched'][:10]}"] + [f"version {row['version']}"] * (row["version"] != "-")
+        stated, _, archived = row["published"].partition("archived ")
+        stated = stated.strip(" ,") or "-"
+        parts = [f"{made} {stated}"] * (stated != "-")
+        parts += [f"modified {row['modified']}"] * (row["modified"] not in ("-", stated))
+        parts += [f"fetched {row['fetched'][:10]}"] + [f"archived copy of {archived.strip()}"] * bool(archived.strip())
+        parts += [f"version {row['version']}"] * (row["version"] != "-")
         parts += ["retracted"] * ("retracted" in row["marks"].split(","))
         out.update({f: "; ".join(parts) for f in row["files"].split(",")})
     return out

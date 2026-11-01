@@ -17,6 +17,12 @@ landing pages; then published, accepted, submitted; repository copies first) bef
 lookup costs no OpenAlex credits, and OPENALEX_API_KEY is sent when set. Nothing is written on
 FAIL, and an existing <name>.* is never overwritten.
 
+A dead public page (http 404 or 410, a DNS or TLS failure, a timeout after its retries) is taken from the
+Wayback Machine: its availability API names the closest snapshot, which is read with the id_ flag, so the
+original bytes come back and get the same checks. Never for 401, 403, 451, a bot check or a wall page, nor for
+a DOI's copies or publisher page. Every URL asked, the API's and the snapshot's included, and every redirect is
+checked against the forbidden terms.
+
 Requests: a 429, a 5xx or a timeout is retried after 2, 4 and 8 s (after Retry-After when it asks 60 s or less);
 any other status is not, nor a 403 or 503 from a bot check, which is a wall. All requests of one run share a
 deadline of 100 s: no request starts and no retry waits past it.
@@ -24,16 +30,18 @@ deadline of 100 s: no request starts and no retry waits past it.
 Every OK that downloads adds a row to <sources_dir>/index.tsv: name, url, final, fetched, published, modified,
 extraction, version, marks, files. A source already fetched from the same URL, DOI or arXiv id is
 reused: nothing is downloaded, and the OK line names the earlier file with the mark reused. A
-taken name whose row holds another URL fails and names that URL.
+taken name whose row holds another URL fails and names that URL. For an archived copy, final is the snapshot's
+URL and published reads "archived <YYYY-MM-DD>", the snapshot's date, after the page's own date when it states one
+("2019-05-01, archived 2020-03-04"): the copy shows the page as it stood on that day.
 
 Output, one tab-separated line:
   OK <name> <file> <chars> <first line> [<marks>]
   FAIL <name> <reason>                                  exit code 1
 Marks, comma-separated: ocr, auto-captions, arxiv-html; published-copy, accepted-copy, submitted-copy
 or copy (no version stated) for an open-access copy of a DOI, with landing-page when it came from a
-landing page rather than a PDF link; retracted when OpenAlex marks the work retracted; unchecked when
-OpenAlex could not be asked, so neither copies nor a retraction were checked; reused for a source
-fetched before (a reuse adds no index row).
+landing page rather than a PDF link; archived-copy for a dead page read from its Wayback snapshot;
+retracted when OpenAlex marks the work retracted; unchecked when OpenAlex could not be asked, so neither
+copies nor a retraction were checked; reused for a source fetched before (a reuse adds no index row).
 """
 import argparse, datetime, html.parser, http.client, json, os, re, shutil, socket, ssl, subprocess, sys, tempfile, time
 import unicodedata, urllib.error, urllib.parse, urllib.request
@@ -43,6 +51,8 @@ VERSION = "0.4.0"
 ARXIV = "https://arxiv.org"
 OPENALEX = "https://api.openalex.org"
 DOI = "https://doi.org"
+WAYBACK = "https://archive.org"  # the Wayback Machine's availability API
+ARCHIVE = "https://web.archive.org"  # its snapshots
 RAW = "https://raw.githubusercontent.com"
 UA = f"Mozilla/5.0 (compatible; phro-search/{VERSION}; +https://github.com/ThatsHoon/phro-search)"
 ACCEPT = "text/html,application/xhtml+xml,application/pdf,text/plain;q=0.8,*/*;q=0.5"
@@ -142,6 +152,10 @@ class Fail(Exception):
     """The reason on a FAIL line."""
 
 
+class Dead(Fail):
+    """A public page that is gone or out of reach (http 404 or 410, DNS, TLS, timeout): the Wayback Machine may hold it."""
+
+
 def refused(url):
     """The FAIL reason for a host that is never fetched, else None."""
     host = (urllib.parse.urlsplit(url).hostname or "").rstrip(".")
@@ -169,6 +183,7 @@ class Handler(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         if reason := refused(newurl):
             raise Fail(reason)
+        egress(newurl)
         return super().redirect_request(req, fp, 307 if code == 308 else code, msg, headers, newurl)
 
 
@@ -229,14 +244,14 @@ def get(url):
             if bot_check(e):
                 raise Fail(f"http {e.code}: bot check; open it in a browser and pass the saved file path") from None
             if not (e.code == 429 or 500 <= e.code < 600) or backoff is None:
-                raise Fail(HTTP_REASONS.get(e.code, f"http {e.code}")) from None
+                raise (Dead if e.code in (404, 410) else Fail)(HTTP_REASONS.get(e.code, f"http {e.code}")) from None
             short, wait = f"http {e.code}", retry_wait(e, backoff)
         except (OSError, http.client.HTTPException) as e:
             why = e.reason if isinstance(e, urllib.error.URLError) else e
             short = ("dns" if isinstance(why, socket.gaierror) else "tls" if isinstance(why, ssl.SSLError)
                      else "timeout" if isinstance(why, TimeoutError) else f"network: {why}")
             if short != "timeout" or backoff is None:
-                raise Fail(short) from None
+                raise (Dead if short in ("dns", "tls", "timeout") else Fail)(short) from None
             wait = backoff
         if wait > left():
             raise Fail(f"{short}; run deadline reached")
@@ -675,12 +690,14 @@ def load(work, src):
             raise Fail("too large: over 40 MB")
         suffix = p.suffix.lower()
         return convert(work, p.read_bytes(), LOCAL_TYPES.get(suffix, f"local {suffix or 'file'}"), "", [suffix])
-    return load_url(work, src)
+    return load_url(work, src, archive=True)
 
 
-def load_url(work, src, want_pdf=False):
-    """What one URL gives, after the egress and host checks; want_pdf refuses an HTML answer."""
+def load_url(work, src, want_pdf=False, archive=False):
+    """What one URL gives, after the egress and host checks; want_pdf refuses an HTML answer; archive takes a dead
+    page from the Wayback Machine."""
     egress(src)
+    asked = src
     if not re.match(r"https?://[^/?#\s]", src, re.I):
         raise Fail("not an http(s) URL")
     if reason := refused(src):
@@ -696,9 +713,42 @@ def load_url(work, src, want_pdf=False):
     abs_pdf = re.fullmatch(r"/(?:abs|pdf|html)/(.+?)(?:\.pdf)?/?", u.path)
     if abs_pdf and (host == "arxiv.org" or host.endswith(".arxiv.org")):
         return load_arxiv(work, abs_pdf[1])
-    data, ctype, final = get(src)
+    try:
+        data, ctype, final = get(src)
+    except Dead as e:
+        if not archive:
+            raise
+        return wayback(work, asked, str(e), want_pdf)
     paths = [urllib.parse.urlsplit(x).path.lower() for x in (src, final)]
     return convert(work, data, ctype, final, paths, want_pdf)
+
+
+def wayback(work, url, why, want_pdf=False):
+    """What the Wayback Machine's closest snapshot of a dead public page gives: the original bytes (the id_ flag),
+    the same checks, the mark archived-copy, and "archived <snapshot date>" added to the published date."""
+    ask = f"{WAYBACK}/wayback/available?{urllib.parse.urlencode({'url': url})}"
+    try:
+        egress(ask)
+        snap = json.loads(get(ask)[0])["archived_snapshots"].get("closest")
+    except Fail as e:
+        raise Fail(f"{why}; Wayback: {e}") from None
+    except (ValueError, TypeError, KeyError, AttributeError):
+        raise Fail(f"{why}; Wayback: not a JSON reply") from None
+    ts = str(snap.get("timestamp") or "") if isinstance(snap, dict) else ""
+    if not (re.fullmatch(r"\d{14}", ts) and snap.get("available") is True and str(snap.get("status")) == "200"):
+        raise Fail(f"{why}; no archived copy")
+    try:
+        snapshot = f"{ARCHIVE}/web/{ts}id_/{url}"
+        egress(snapshot)
+        data, ctype, final = get(snapshot)
+        paths = [urllib.parse.urlsplit(x).path.lower() for x in (url, final)]
+        r = convert(work, data, ctype, final, paths, want_pdf)
+    except Fail as e:
+        raise Fail(f"{why}; archived copy: {e}") from None
+    taken = re.search(r"/web/(\d{4})(\d\d)(\d\d)\d*id_/", final) or re.match(r"(\d{4})(\d\d)(\d\d)", ts)
+    r["marks"].append("archived-copy")
+    r["published"] = ", ".join(d for d in (r["published"], "archived " + "-".join(taken.groups())) if d != "-")
+    return r
 
 
 def arxiv_version(url):
