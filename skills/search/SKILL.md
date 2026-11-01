@@ -24,7 +24,7 @@ Out of scope, answer directly instead: a single fact, a search of local files, a
 
 Users rarely know exactly what they are looking for or which context matters. Pin the need down before the first search beyond a probe.
 
-1. Harvest context silently: the conversation so far; the open repo (README, CLAUDE.md, manifests, recent doc headings); earlier topics in the topic root (the Grep tool: pattern `^(brief|feedback):`, glob `*/log.md`, the root as an absolute path; not for docs, which keeps no topic). Mark each brief slot stated, inferred or unknown. Nothing harvested leaves the machine.
+1. Harvest context silently: the conversation so far; the open repo (README, CLAUDE.md, manifests, recent doc headings); related earlier topics in the topic root (`~/research` as an absolute path, or the one a caller or the user passes; not for docs, which keeps no topic): find them with the Grep tool (case-insensitive, the request's main terms, glob `*/map.md`), then read only those topics' `brief:` and `feedback:` lines (pattern `^(brief|feedback):` in each one's `log.md`). Mark each brief slot stated, inferred or unknown. Nothing harvested leaves the machine.
 2. Set the depth from the need level:
 
 | Need level | Signs | First move | Rounds before research |
@@ -45,7 +45,7 @@ Users rarely know exactly what they are looking for or which context matters. Pi
 
 1. An explicit mode word or a trigger phrase wins.
 2. Otherwise the brief's deliverable picks the mode from the Modes table. A deliverable still open after the candidate briefs becomes a question whose options are the two closest modes.
-3. Before any search (docs excepted), look for the topic with the Grep tool (case-insensitive `<term>`, glob `*/map.md`) in the root: `~/research` as an absolute path, or the one a caller or the user passes. If it exists, say so and continue there unless the user wants a fresh run (then `<topic>-2`).
+3. Before any search (docs excepted), look for the topic itself among the maps in the topic root (intake step 1's Grep, with the topic's own terms). If it exists, say so and continue there unless the user wants a fresh run (then `<topic>-2`).
 4. Send the plan line as text before the first search, fetch, script or agent call beyond the probe, even when no one will answer it: mode, rounds or agents, and the agent ceiling (the mode reference gives the wording when it has one).
 5. Load exactly one mode reference, and `references/formats.md` when writing a shared working file.
 

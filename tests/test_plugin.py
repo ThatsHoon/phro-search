@@ -182,6 +182,17 @@ class PluginTest(unittest.TestCase):
         self.assertEqual([name for name, text in texts if re.search(r"(?i)flagged spot|flagged span|spans it flags|until it prints|exact reply", text)],
                          ["SKILL.md"])  # one home for the loop
 
+    def test_intake_reads_related_topics_only(self):
+        step = re.search(r"^1\. Harvest context silently:(.*)$", read(SKILL), re.M).group(1)
+        self.assertIn("`*/map.md`", step)
+        self.assertIn("`^(brief|feedback):`", step)
+        self.assertNotIn("`*/log.md`", step)  # not every topic's log
+        self.assertRegex(step, r"related")
+        self.assertEqual([n for n, t in docs() if "^(brief|feedback):" in t], ["SKILL.md"])
+        self.assertRegex(read(REFS / "intake.md"), r"^# Intake\n")
+        for p in sorted(REFS.glob("*.md")):
+            self.assertTrue(read(p).startswith("# "), p.name)
+
     def test_doc_command_parser(self):
         sample = ("Run `python -I ${CLAUDE_PLUGIN_ROOT}/scripts/models.py snapshot <topic> --board asr`.\n"
                   "| `chain.py find\\|refs` | `fetch.py` alone |\n"

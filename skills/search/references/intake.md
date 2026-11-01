@@ -1,4 +1,8 @@
-6. Gate: when any slot was inferred or defaulted and step 2 did not skip the questions, show the brief with the assumptions marked and spend nothing beyond the probe until the user confirms or edits it.## 1. Read the need level
+# Intake
+
+SKILL.md holds the intake steps; this file holds their tactics.
+
+## 1. Read the need level
 
 | Level | Example request |
 |---|---|
@@ -19,7 +23,7 @@ Neutral questions for a visceral need ask about the situation, the gap and the u
 Cheap sources first; an inferred slot records what it was inferred from.
 - The conversation: goals, constraints, links and names (seeds), the words the user uses.
 - The open repo: manifests give languages, frameworks and versions. Send anything deeper to a subagent and keep asking the questions that do not depend on it.
-- Earlier topics (the Grep in SKILL.md intake step 1): a similar earlier brief turns its choices (deliverable, depth, source kinds, budget) into the recommended options, marked "as last time". Feedback that a brief missed ("too shallow", "wrong sense of the term") becomes a question or a default this time. Show anything learned this way; never apply it unseen.
+- Related earlier topics (the Grep in SKILL.md intake step 1): a similar earlier brief turns its choices (deliverable, depth, source kinds, budget) into the recommended options, marked "as last time". Feedback that a brief missed ("too shallow", "wrong sense of the term") becomes a question or a default this time. Show anything learned this way; never apply it unseen.
 
 ## 3. Probe
 
