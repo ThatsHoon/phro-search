@@ -1,6 +1,6 @@
 # phro-search structure review
 
-Date: 2026-11-01. Base: commit d233fd6 (main). The owner confirmed the decisions in section 3 on 2026-11-01, over three grilling rounds; text marked "consequence" follows directly from them. Section 4 lists the reviewer's proposals that were not confirmed, and section 7 lists what is still open. This review changed no plugin code.
+Date: 2026-11-01. Base: commit d233fd6 (main). The owner confirmed the decisions in section 3 and the backlog list in section 5 on 2026-11-01, over two rounds of questions and a final confirmation of the summary, after sending a first round back for rethinking; text marked "consequence" follows directly from them. Section 4 lists the reviewer's proposals that were not confirmed, and section 7 lists what is still open. This review changed no plugin code.
 
 Method: a full read of the manifest, skill, references, hook, scripts, tests, evals and plan; script audits with the unit tests run (216 pass); an adversarial check of each finding against the code; checks of Claude Code platform behavior in the official docs (appendix A); then grilling over a design tree, one round per frontier, until no decision was open; then a citation check of this document.
 
@@ -12,7 +12,7 @@ Sound today:
 - One router skill that loads one mode reference per run, and stdlib scripts for the mechanical work (SKILL.md:10-21, 56-66).
 - Strong evidence discipline: archived originals, quotes checked against their lines (report.py:202-221), three adversarial votes per central claim, and unverified kept apart from refuted (report.md:76; report.py:158-160).
 - Tests keep the docs and the code in sync (tests/test_plugin.py), and 216 unit tests pass on a fake network.
-- Honest coverage: failed lanes are named with their reason, never passed off as silence, and walled items go to the user with their URL (pulse.md:86; dig.md:65, 69).
+- Honest coverage: failed lanes are named with their reason, never passed off as silence, and walled items go to the user with their URL (pulse.md:86; dig.md:69).
 
 Largest problems, all verified:
 1. Rounds assume blocking waits, but interactive sessions do not wait for subagents by default, and the interactive path for dig and report is untested (F1).
@@ -26,7 +26,7 @@ Largest problems, all verified:
 9. Pulse has no Hugging Face lane, though model topics are a core class of the owner's research (F22).
 10. Subagents get every tool, Bash included, and every CLAUDE.md (F43, F33).
 
-Highest-value changes: measure outcomes first (R1), make rounds survive background subagents (R2), fix PDF text and OpenAlex use (R9), add the support pass (R5), isolate subagent tools (R3).
+Highest-value changes: measure outcomes first (R1), make rounds survive background subagents (R2), fix PDF text and OpenAlex use (R9), keep one evidence base with a view per deliverable (R10), add the support pass (R5), isolate subagent tools (R3).
 
 ## 2. Findings by lens
 
@@ -108,7 +108,7 @@ Confirmed by the owner. "Rejected" lists the options considered and turned down,
 
 Build three eval sets, and change a default only on their numbers:
 - Verifier set: 20 to 30 planted claims made from T2.4's claims.json (overstated, outdated, contradicted and true variants), 3 votes each. Score false refutations and false survivals.
-- Round-0 recall: the owner marks the canonical works in 2 or 3 closed topics. Run round 0 only and compare haiku against sonnet searchers (3 repeats, R4), and two web searchers against one web searcher plus the citation list (R8). Score gold recall, the share of searcher URLs that fetch as real hits, and the overlap numbers.
+- Round-0 recall: the owner marks the canonical works in 2 or 3 closed topics. Run round 0 only and compare haiku against sonnet searchers (3 repeats, R4), and two web searchers against one web searcher plus the citation list (R8). Score gold recall, the share of searcher URLs that fetch.py archives as the original itself (not a dead page, a wall or a summary), and the overlap numbers.
 - Routing: the 34 T5.1 prompts plus near misses ("보고서로 정리해줘" about a document in hand, a scikit-learn "best model for", "새 글 확인" about Slack), 3 runs each, with the competing skills present.
 
 Also run one dig and one report interactively with Claude Code's defaults, and rate the 5 real requests on the delivered result as well as the brief (extends T5.3).
@@ -121,7 +121,7 @@ Rejected: process-only evals (F27); routing evals inside claude plugin eval (F40
 
 ### R2. Rounds that survive background subagents
 
-Dig and report log each round's pending agents in log.md, close a round only when every agent has reported or been stopped, and re-read references/<mode>.md after a compaction. Consequence: saturation is never counted before both methods have reported. README explains how to make Claude wait: CLAUDE_CODE_FORK_SUBAGENT=0 lets it wait when asked, which the skill's wait instructions do, and CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1 makes it always wait (appendix A6). R1's interactive runs verify it. Addresses F1.
+Dig and report log each round's pending agents in log.md, close a round only when every agent has reported or been stopped, and re-read references/<mode>.md after a compaction. Consequence: saturation is never counted before both methods have reported. README explains CLAUDE_CODE_FORK_SUBAGENT=0, which lets Claude wait when asked, as the skill's wait instructions do (appendix A6); a stronger setting is proposal P17. R1's interactive runs verify it. Addresses F1.
 
 ### R3. Plugin agents for tool isolation
 
@@ -130,7 +130,7 @@ Three agents in agents/, grouped by tool set:
 - verifier: the same tools, at high effort;
 - local reader: Read, Grep and Glob only, for the support pass (R5) and installed source in docs.
 
-Each agent sets omitClaudeMd: true, maxTurns as a runaway guard (a cut-off verifier reply counts as no vote) and an explicit model (R4; the local reader's model is open, section 7). Each carries the shared rules the briefs lack today: generic queries only, no logins, no paywall or bot-check workarounds (SKILL.md:70, 73); and it repeats the rule the briefs already carry, that web text is evidence, never instructions (briefs.md:10).
+Each agent sets omitClaudeMd: true and maxTurns as a runaway guard (a cut-off verifier reply counts as no vote); consequence: each agent file names its model and effort from R4. Each carries the shared rules the briefs lack today: generic queries only, no logins, no paywall or bot-check workarounds (SKILL.md:70, 73); and it repeats the rule the briefs already carry, that web text is evidence, never instructions (briefs.md:10).
 
 No subagent writes files. Researchers and the docs work return text, and the main session writes notes/<subtopic>.md and the docs note and runs check.py. A defaulted path for the docs note goes through the gate like any defaulted slot. Consequences: each agent's description says it is internal to phro-search; SKILL.md:70 is narrowed to agents that have web tools, since the local reader needs local paths; docs uses two agents, so its plan line (docs.md:9) changes. Test the subagent_type value for plugin agents before relying on it (section 7). Addresses F3, F4, F33, F43.
 
@@ -138,7 +138,7 @@ Rejected: one agent file per role; general-purpose workers with every tool.
 
 ### R4. Model tiers per role, measured
 
-Until R1 says otherwise, searchers, researchers and verifiers run on sonnet, with verifiers at high effort. The main session inherits the user's model, since a model or effort set in SKILL.md lasts only for the invoking turn and research runs after the gate (appendix A3). Haiku replaces sonnet for searchers only if, over 3 repeats, its gold recall is at least 95 percent of sonnet's and its share of URLs that fetch as real hits is no more than 5 points lower. Before that test, measure the searchers' share of run cost from the T1.8 and T5.2 transcripts. Every spawn line in the log records model and effort. Addresses F28.
+Until R1 says otherwise, every subagent runs on sonnet (searchers, researchers, verifiers and the local reader), with verifiers at high effort. The main session inherits the user's model, since a model or effort set in SKILL.md lasts only for the invoking turn and research runs after the gate (appendix A3). Haiku replaces sonnet for searchers only if, over 3 repeats, its gold recall is at least 95 percent of sonnet's and its share of URLs that fetch.py archives as the original itself is no more than 5 points lower. Before that test, measure the searchers' share of run cost from the T1.8 and T5.2 transcripts. Every spawn line in the log records model and effort. Addresses F28.
 
 Rejected: haiku searchers by default; a 90 percent threshold; a model pinned in SKILL.md.
 
@@ -188,11 +188,11 @@ Rejected: one folder per run (it breaks report.html's relative sources/ links an
 
 ### R11. Standards
 
-Families: robotics and mapping (OGC, ISO/TC 211 and TC 204, ASAM OpenDRIVE and OpenSCENARIO, ROS REPs), plus IETF and W3C. The reference names each family's own index (RFC obsoleted-by and errata, W3C status, ISO edition and withdrawal), and edition and status are taken from it before quoting. A superseded or draft text never backs a central claim about current requirements. Assumption, the owner's default: no institutional access to ISO, IEC or IEEE full texts, so their catalog pages are cited for edition and status, and full texts go to the user's browser path. Addresses F21.
+Families: robotics and mapping (OGC, ISO/TC 211 and TC 204, ASAM OpenDRIVE and OpenSCENARIO, ROS REPs), plus IETF and W3C. The reference names each family's own index (RFC obsoleted-by, W3C status, ISO edition and withdrawal), and edition and status are taken from it before quoting. A superseded or draft text never backs a central claim about current requirements. The owner has no institutional access to ISO, IEC or IEEE full texts (confirmed), so their catalog pages are cited for edition and status, and full texts go to the user's browser path. Addresses F21.
 
 ### R12. Korean sources
 
-Korean community and academic sources are secondary and are used only for Korea-specific topics (national standards, market, regulation). Consequence, since the plugin cannot tell its owner from other users: intake.md:65's default scope becomes English, with the user's language added for topics specific to that language's region. No Korean-specific adapters; watch already finds feeds through typed alternate links (watch.py:207-225). For a Korea-specific pulse topic, a web supplement may be quoted once fetch.py has archived it and the quote is located in that copy; pulse.md:51 and check.py:16-18 change to allow it. Addresses F23.
+Korean community and academic sources are secondary and are used only for Korea-specific topics (national standards, market, regulation). How intake.md:65's default scope encodes this is proposal P18. No Korean-specific adapters; watch already finds feeds through typed alternate links (watch.py:207-225). For a Korea-specific pulse topic, a web supplement may be quoted once fetch.py has archived it and the quote is located in that copy; pulse.md:51 and check.py:16-18 change to allow it. Addresses F23.
 
 Rejected: adapters for GeekNews, velog, Naver blog, KCI or RISS.
 
@@ -249,21 +249,22 @@ The reviewer's proposals. None was confirmed one by one; each needs the owner's 
 - P4. cites --since; an OpenAlex source kind in watch for journals and proceedings that have no feed, which T5.2's baseline reached and the skill could only list (R9; plan:623).
 - P5. A retracted work never backs a required or central claim; a preprint is marked, and the published version is quoted when one exists (R9).
 - P6. A reused central vote older than the brief's recency need is verified again (report.md:76 still forbids reruns to rescue a claim); a report's BLUF names its as-of date (R9).
-- P7. Each standards quote is marked normative or informative (R11).
+- P7. Each standards quote is marked normative or informative, and RFC errata are checked along with obsoleted-by (R11).
 - P8. "What would change this answer" lists 1 to 3 claims; a landscape or standards report gets a table of entities by key questions (R14).
 - P9. Trigger candidates for R1's routing set: English triggers per mode and situational phrasing in when_to_use; a docs trigger; narrowing "one-fact lookups" to facts that need no check against a primary source; separating "보고서로 정리해줘" from summarizing a document in hand; embedding phrasing once MTEB exists (R13, R15).
 - P10. egress.py enforces its own deadline under the hook's 10 s timeout and exits 2 when it expires, so a slow start blocks instead of passing where a list exists (R17).
-- P11. One run deadline across each script's requests; Retry-After capped at 60 s, as fetch.py, chain.py and watch.py do today; a bot-check 503 treated as a wall like a bot-check 403 (R18).
+- P11. One run deadline across each script's requests (all five helpers already honor Retry-After only up to 60 s); a bot-check 503 treated as a wall like a bot-check 403 (R18).
 - P12. A per-OS install hint inside each "missing tool" FAIL line, in addition to the README (R18).
 - P13. Shared script code, if it is ever wanted: load it by path with importlib as tests/_load.py does, keep the egress guard standalone (an import failure exits 1, which does not block), and do it after the research fixes (F35).
 - P14. Watch prints its numbered index above about 20 new items, the threshold watch.md:26 already uses; the Korean report prompt is rerun 3 times after the plan-line change (section 5, item 14).
 - P15. Each backlog item lands with a failing test first.
 - P16. Eval sizes: about 12 near misses in the routing set; 3 repeats per arm also for the two-web-searchers comparison (R1).
-- P17. The local reader runs on sonnet (R3, R4).
+- P17. README also names CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1, which makes Claude always wait for subagents (appendix A6). It would also make Claude wait for docs mode's background agent, against docs.md:3 and docs.md:44, so README must say so (R2).
+- P18. intake.md:65 encodes R12 as a general rule: the user's language joins the default scope only for topics specific to that language's region, for every user and not only Korean ones (R12).
 
 ## 5. Backlog
 
-Ordered by effect on research outcomes. Bug labels from the review: B1 quoted ~ paths, B2 PDFs without pdftotext, B3 watch check egress, B4 commas in chain find titles, B5 models.py deadline and tracebacks, B6 non-atomic writes, B7 pulse lane errors without messages, B8 fetch name reuse, B9 watch exit codes.
+Ordered by effect on research outcomes. The owner confirmed this list in the second round; items without an R in section 3 rest on that confirmation, and only the parts listed in section 4 are proposals. Bug labels from the review: B1 quoted ~ paths, B2 PDFs without pdftotext, B3 watch check egress, B4 commas in chain find titles, B5 models.py deadline and tracebacks, B6 non-atomic writes, B7 pulse lane errors without messages, B8 fetch name reuse, B9 watch exit codes.
 
 1. PDF reading-order text, layout copy, arXiv HTML first; closes B2 (R9; F9, F16).
 2. OpenAlex: title normalization (B4), fields and flags, chain.py oa, DOI to open-access copies, recent cites, optional key (R9; F8, F15).
@@ -279,7 +280,7 @@ Ordered by effect on research outcomes. Bug labels from the review: B1 quoted ~ 
 12. Standards section (R11; F21); Wayback for dead public pages (R9).
 13. Safety: egress in watch check (B3, F42); the hook change (R17, F41), once its shell is settled (section 7); ~ expansion at every entry point (B1, F37); quote lines normalize no-break spaces and soft hyphens instead of failing (F44).
 14. Tokens: watch prints a numbered index, with the full lines in watch/<stamp>.md (F29); formats.md blocks for single modes move into their mode references (F30); the check loop works on a saved file and edits only the flagged spans (F31); the intake grep reads related topics only (F26); the plan line becomes a literal, language-neutral first line at the spawn step (F5).
-15. The normalized feedback line, with missing items fed into the eval sets (R16; F25); quoting archived supplements in Korea-specific pulse topics and the intake's default scope (R12; F23).
+15. The normalized feedback line, with missing items fed into the eval sets (R16; F25); quoting archived supplements in Korea-specific pulse topics, and the intake scope rule once P18 is decided (R12; F23).
 16. Triggers (R15; F32), once the routing set exists.
 17. Atomic writes in models.py (B6, F11); watch exit codes documented (B9, F13).
 18. README, python3 and the references' scripts path (R18; F6, F38, F39).
@@ -296,12 +297,17 @@ Confirmed:
 
 Consequential, following from the confirmed decisions:
 - plan:253 (principle 4) and plan:527 (B.12 item 6): subagents no longer write files; the main session writes the notes (R3).
+- plan:272 (the docs row of B.2): docs uses the web gatherer and the local reader instead of one background agent (R3).
+- plan:386 (the extracts.json format): support and qualifier fields, and per-report extracts-<stem>.json (R5, R10).
+- plan:396: python3 outside Windows (R18).
+- plan:400 (the fetch.py row): reading-order text and a layout copy, arXiv HTML first, DOIs to open-access copies, sources/index.tsv and URL reuse (R9).
+- plan:410 (the pulse lanes in v1): the hf lane (R13).
 - plan:358: the description rule follows B.12 item 2 (R15).
 - plan:297 and plan:332: the intake grep reads related topics only; "No new file" stays (R16).
 - plan:370-371 and plan:402: per-report views, and report.py <topic> [<stem>] (R10).
 - plan:401: chain.py gains topic and oa (R8, R9).
 - plan:485: the report template gains the decision table and its two sections (R14).
-- plan:415 and plan:541: retry 429, 5xx and timeouts, not only 429 (R18).
+- plan:400, plan:415 and plan:541: retry 429, 5xx and timeouts, not only 429 (R18).
 - plan:495: the hook fails closed only where a term list exists (R17); the term check in watch check restores this line's existing rule.
 - T5.3 (plan:626): rate the 5 real requests on the delivered result as well as the brief, and add interactive dig and report runs (R1).
 - T5.6 (plan:646): README requirements and the note on waits before publishing (R2, R18).
@@ -311,8 +317,6 @@ Consequential, following from the confirmed decisions:
 - Re-confirm where the evals run (R1). The reason given during the grilling was wrong (F40). The reviewer now recommends running both sets headless with claude -p in the owner's Windows environment, as T5.1 and T5.2 did, with script graders, and using WSL only for sets written as claude plugin eval cases.
 - Settle the hook's shell (R17, F41): require Git Bash in the README, or make the hook run without a POSIX shell (for example an exec-form command). Test the exec form on a machine without Git Bash first, since the docs state the blocking rule for shell-form hooks.
 - Close the hook's timeout path (R17): proposal P10.
-- The local reader's model is not set (R3; proposal P17).
-- Assumed: no institutional access to ISO, IEC or IEEE full texts (R11).
 - The subagent_type value for plugin agents is not documented; test it before R3 relies on it.
 - Substitution of ${CLAUDE_PLUGIN_ROOT} in files read with Read is not documented (F6); backlog item 18 removes the dependence.
 - report.md:80 says Claude Code refuses a subagent's write; this is unconfirmed, and R3 makes it moot.
@@ -327,7 +331,7 @@ Checked in the official Claude Code docs on 2026-11-01.
 
 - A1. Hooks: a PreToolUse exit 2 blocks the call. Any other non-zero exit, and a timeout, let it through unless the hook sets "onFailure": "block" (Claude Code 2.1.295 or later), with two exceptions: on Windows without Git Bash, a shell-form command hook runs through PowerShell, and its failure blocks the call; and valid JSON on standard output can still decide. A plugin hook applies in every session where the plugin is enabled, unless managed settings restrict hooks, and fires for subagent tool calls too. https://code.claude.com/docs/en/hooks, https://code.claude.com/docs/en/plugins-reference
 - A2. Skill listing: description plus when_to_use is truncated at 1,536 characters. https://code.claude.com/docs/en/skills
-- A3. Skills: ${CLAUDE_PLUGIN_ROOT}, ${CLAUDE_SKILL_DIR} and ${CLAUDE_PLUGIN_DATA} are substituted in skill content and in allowed-tools rules; ${CLAUDE_PLUGIN_ROOT} and ${CLAUDE_PLUGIN_DATA} are not present in the environment of Bash tool commands. Whether a file a skill loads with Read is substituted is not documented. allowed-tools, model and effort last only for the current turn. Hooks declared in a skill stay registered for the rest of the session. https://code.claude.com/docs/en/skills, https://code.claude.com/docs/en/plugins-reference
+- A3. Skills: ${CLAUDE_PLUGIN_ROOT}, ${CLAUDE_SKILL_DIR} and ${CLAUDE_PLUGIN_DATA} are substituted in skill, command and agent content and in allowed-tools rules; ${CLAUDE_PLUGIN_ROOT} and ${CLAUDE_PLUGIN_DATA} are not present in the environment of Bash tool commands. Whether a file a skill loads with Read is substituted is not documented. allowed-tools, model and effort last only for the current turn. Hooks declared in a skill stay registered for the rest of the session. https://code.claude.com/docs/en/skills, https://code.claude.com/docs/en/plugins-reference, https://code.claude.com/docs/en/plugins/components
 - A4. Plugin agents: tools is an enforced allowlist; model is a default that a model alias passed per call overrides; permissionMode, hooks and mcpServers are ignored; omitClaudeMd and maxTurns are supported. https://code.claude.com/docs/en/sub-agents, https://code.claude.com/docs/en/plugins/components
 - A5. Background subagents keep Write, Bash, WebSearch and WebFetch, and their permission prompts surface in the main session. https://code.claude.com/docs/en/sub-agents
 - A6. Fork mode is on by default (from 2.1.302, and in an interactive terminal session from 2.1.232). In interactive sessions subagents then run in the background, Claude does not block on them, and their results arrive as notifications in a later turn; in claude -p and the Agent SDK, Claude can wait. CLAUDE_CODE_FORK_SUBAGENT=0 lets Claude wait when asked, and CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1 makes it wait for subagents before it continues. A plugin cannot set either: plugin settings accept only agent and subagentStatusLine. https://code.claude.com/docs/en/sub-agents, https://code.claude.com/docs/en/env-vars, https://code.claude.com/docs/en/plugins-reference
