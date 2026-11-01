@@ -43,7 +43,7 @@ No board measures the task or the language (a classifier to fine-tune, a languag
 
 ## 3. Run
 
-Plan line: "models: <board> <table>, snapshot, shortlist, follow up to 5, about 3 minutes".
+Plan line: "PLAN: models; <board> <table>, snapshot, shortlist, follow up to 5, about 3 minutes; ceiling 0 agent calls".
 
 1. Snapshot: `models.py snapshot <topic_dir> --board asr --table multilingual`. Speech synthesis adds `--lang Korean --clone` or `--table streaming --hardware CPU`. One snapshot per board and day (`KEPT`); `--refresh` takes another. It prints `SNAPSHOT` (rows, rows linked off the Hub, the board's revision), `NEW` and `GONE` since the topic's last snapshot, then `OK`. `FAIL schema-drift` (exit 2) means the board changed shape: report it, never guess its columns, and use another board.
 2. Shortlist: `models.py shortlist <topic_dir> --board asr --lang German --max-gb 1 --license permissive`, plus `--since YYYY-MM-DD`, `--metric <column>` (default the table's first metric), `--off-hub`, `--top N` (at most 15). The same `--lang`, `--clone`, `--hardware` and `--table` pick the snapshot. It looks up at most 40 models on the Hub, 1 s apart: give the call a 5-minute timeout. Filters on the board's own columns (size, license, date) act before any lookup.

@@ -127,7 +127,7 @@ class PluginTest(unittest.TestCase):
         self.assertIn("find criticism, failed or partial replications, negative results, errata and corrections of "
                       "<work or claim>", method)
         dig = read(REFS / "dig.md")
-        self.assertIn("at most 10 searcher calls", dig)
+        self.assertIn("ceiling 10 searcher calls", dig)
         self.assertRegex(dig, r"(?i)disconfirm searcher")
 
     def test_standards_section(self):
@@ -149,7 +149,7 @@ class PluginTest(unittest.TestCase):
         self.assertNotIn("measurements) when the question is contested", before)  # every choice, not only contested ones
         self.assertRegex(before, r"choice between options[^\n]*independent viewpoint")
         self.assertRegex(before, r"\| a choice between options on criteria \| 4 or 5")
-        self.assertIn('"report: 5 researchers, 1 support reader, up to 30 verifier calls: at most 38 agent calls"', before)
+        self.assertIn('"PLAN: report; 5 researchers, 1 support reader, up to 30 verifier calls; ceiling 38 agent calls"', before)
         write = re.search(r"^## Write\n(.*?)(?=^## Deliver)", report, re.M | re.S).group(1)
         for words in ("decision table", "When another option wins", "What would change this answer", "1 to 3",
                       "unknown", "unverified", "entities", "key questions", "landscape", "standards"):
@@ -192,6 +192,18 @@ class PluginTest(unittest.TestCase):
         self.assertRegex(read(REFS / "intake.md"), r"^# Intake\n")
         for p in sorted(REFS.glob("*.md")):
             self.assertTrue(read(p).startswith("# "), p.name)
+
+    def test_plan_line_is_literal(self):
+        step = re.search(r"^4\. (.*)$", read(SKILL).split("## Routing", 1)[1], re.M).group(1)
+        self.assertIn("`PLAN: <mode>; <rounds, agents or steps>; ceiling <n> <calls>", step)
+        self.assertRegex(step, r"English whatever the user's language")
+        self.assertRegex(step, r"first line")
+        lines = [(name, line) for name, text in docs() for line in text.splitlines() if "Plan line" in line]
+        self.assertEqual(sorted(name for name, _ in lines), ["dig.md", "docs.md", "models.md", "pulse.md", "report.md"])
+        for name, line in lines:
+            with self.subTest(ref=name):
+                mode = name[:-3]
+                self.assertRegex(line, rf'Plan line: "PLAN: {mode}; [^";]+; ceiling \d+ [a-z ]+calls"')
 
     def test_doc_command_parser(self):
         sample = ("Run `python -I ${CLAUDE_PLUGIN_ROOT}/scripts/models.py snapshot <topic> --board asr`.\n"

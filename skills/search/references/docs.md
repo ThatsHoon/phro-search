@@ -8,7 +8,7 @@ Answer a technical question the open code depends on (an API's behavior, a spec 
 - Find where the repo keeps notes: a folder of research or decision notes (`docs/notes/`, `docs/research/`, `docs/adr/`, `notes/`), its file naming and its language. Catch up on a field, from generic words down to its original sources. Two things carry the mode: originals are archived, never summarized, and the stop is set by evidence, not by confidence.
 
 - No summaries: notes taken before a focus forms may bring premature closure (Kuhlthau 1991), and an agent's summary also closes on the agent's view and drops the details the user judges by. The user reads the originals; the agent points at them.
-- Plan line: "docs: local reader and web gatherer, note at <path>"; with no installed copy, the web gatherer alone.
+- Plan line: "PLAN: docs; local reader and web gatherer, note at <path>; ceiling 2 agent calls"; with no installed copy, the web gatherer alone (ceiling 1).
 - The web gatherer's brief may name the library, its version and public APIs.
 
 ## Agents

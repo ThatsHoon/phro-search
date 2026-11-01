@@ -48,7 +48,7 @@ Write `<topic>/pulse/plan.json` (each result keeps a copy, so a rerun may overwr
 - 1 to 4 subqueries, the first one the topic itself. `search_query` is keywords, with no dates and no meta words ("news", "update", "latest"). `ranking_query` says in words what an on-topic item is about. `weight`: 1.0 for the primary subquery, 0.6 to 0.8 secondary, 0.3 to 0.5 peripheral.
 - `freshness`: `strict` for breaking news, `balanced` by default, `evergreen` for slow fields where a month-old post still matters.
 
-Plan line: "pulse: <lanes>, <N> days, up to 90 s, 2 or 3 web supplements".
+Plan line: "PLAN: pulse; <lanes>, <N> days, up to 90 s, 2 or 3 web supplements; ceiling 0 agent calls".
 
 Run `pulse.py <topic_dir> --plan <topic_dir>/pulse/plan.json`. `--days N` overrides the plan's window; `--quick` and `--deep` cluster 15 or 60 items instead of 40. It prints a LANE line per lane, the clusters over the floor with their best items, the weak signals, then the result and evidence paths. Lane statuses:
 - `ok`; `no-results` (fetched, none on topic); `partial` (some requests failed);

@@ -29,7 +29,7 @@ Users rarely know exactly what they are looking for or which context matters. Pi
 
 | Need level | Signs | First move | Rounds before research |
 |---|---|---|---|
-| formalized | object, deliverable and done condition are stated | the one-line plan; the gate only if a slot was inferred or defaulted | 0 or 1 |
+| formalized | object, deliverable and done condition are stated | the plan line; the gate only if a slot was inferred or defaulted | 0 or 1 |
 | conscious | the object is known; the field's words or the deliverable are not | probe, then candidate briefs | at most 2 |
 | compromised | asks for a means ("papers on X") when the use is something else ("fix Y") | the use question, then candidate briefs including a restated one | at most 2 |
 | visceral | a situation or unease without an object | situation and use questions, then candidate briefs including "map the field first" | at most 3 |
@@ -38,7 +38,7 @@ Users rarely know exactly what they are looking for or which context matters. Pi
 3. Need not formalized (a deliverable or done condition that is only inferred is not stated): read `references/intake.md` now; steps 3 to 6 follow it, and every question round uses its template. Probe when the need is conscious, a term is ambiguous, or the field is new to the user: 1 to 3 generic web searches (intake.md section 3). The probe names terms, sub-areas and works and never answers the request.
 4. Need not formalized: offer 2 or 3 candidate briefs (intake.md section 4), the recommended one first. The user picks, combines or corrects one.
 5. Ask only what is still open, in rounds of at most 4 questions ordered by how much the answer changes the plan; the candidate pick is one of them, and so is any question elsewhere in the reply. Every question has lettered options, the recommended one first and marked with its reason, and a last "don't know" option that takes the default. Never ask for a fact the environment can give or the user or the repo already stated; look it up, or take it in its usual reading.
-6. Gate: when any slot was inferred or defaulted, show the brief with the assumptions marked and spend nothing beyond the probe until the user confirms or edits it; when step 2 skipped the questions, the plan line names the assumptions and the run starts. When every slot was stated or picked by the user, state the one-line plan and start.
+6. Gate: when any slot was inferred or defaulted, show the brief with the assumptions marked and spend nothing beyond the probe until the user confirms or edits it; when step 2 skipped the questions, the plan line names the assumptions and the run starts. When every slot was stated or picked by the user, send the plan line and start.
 7. Log the brief, the answers and the intake metrics (`references/formats.md`).
 
 ## Routing
@@ -46,7 +46,7 @@ Users rarely know exactly what they are looking for or which context matters. Pi
 1. An explicit mode word or a trigger phrase wins.
 2. Otherwise the brief's deliverable picks the mode from the Modes table. A deliverable still open after the candidate briefs becomes a question whose options are the two closest modes.
 3. Before any search (docs excepted), look for the topic itself among the maps in the topic root (intake step 1's Grep, with the topic's own terms). If it exists, say so and continue there unless the user wants a fresh run (then `<topic>-2`).
-4. Send the plan line as text before the first search, fetch, script or agent call beyond the probe, even when no one will answer it: mode, rounds or agents, and the agent ceiling (the mode reference gives the wording when it has one).
+4. The plan line: before the first search, fetch, script or agent call beyond the probe, send it as text, as the first line of that turn's message, even when no one will answer it. It is literal and in English whatever the user's language: `PLAN: <mode>; <rounds, agents or steps>; ceiling <n> <calls>; assumed <slot>=<value>, ...` (the last part only when slots were defaulted). The mode reference gives the middle part and the ceiling.
 5. Load exactly one mode reference, and `references/formats.md` when writing a shared working file.
 
 ## Topic folder

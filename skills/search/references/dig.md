@@ -7,7 +7,7 @@ With none, the path `docs/research/<slug>.md` is a defaulted slot.
 ## Before round 0
 
 - The confirmed brief heads `map.md` with 3 to 6 required claims (`references/intake.md`, section 7). Ask the open ones in this order, in the question form of SKILL.md intake step 5.
-- Plan line: "dig: up to 4 rounds, 2 searchers per round, at most 10 searcher calls, a support reader per support pass".
+- Plan line: "PLAN: dig; up to 4 rounds, 2 searchers per round, a support reader per support pass; ceiling 10 searcher calls".
 
 ## Round 0: map
 
