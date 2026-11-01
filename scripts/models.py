@@ -25,7 +25,7 @@ output, tab-separated:
   # <note>
   OK       <file>
   FAIL     <what>  <reason>
-exit 0; 1 when the board or a model could not be read; 2 for bad arguments, an egress hit or a changed board
+exit 0; 1 when the board or a model could not be read (also a reply of an unexpected shape); 2 for bad arguments, an egress hit or a changed board
 (schema-drift: nothing is guessed).
 """
 import argparse, hashlib, html, json, math, os, re, socket, ssl, sys, time, unicodedata
@@ -283,6 +283,12 @@ def get(url, data=None):
         return json.loads(fetch(url, data))
     except ValueError:
         raise Fail("unreadable response") from None
+
+
+def odd(e, where):
+    """The FAIL reason for a reply of an unexpected shape, which raised e."""
+    msg = clean(e, 120)
+    return f"unexpected reply from the {where}: {type(e).__name__}" + (f": {msg}" if msg else "")
 
 
 def label(h):
@@ -957,6 +963,10 @@ def follow(args, topic):
             print(f"FAIL\t{repo}\t{e}")
             code = 1
             continue
+        except (AttributeError, KeyError, TypeError, IndexError) as e:
+            print(f"FAIL\t{repo}\t{odd(e, 'Hub')}")
+            code = 1
+            continue
         path = save_facts(topic, f)
         files.append(path)
         print(f"FACTS\t{repo}\t{files[0].as_posix() if len(files) > 1 else 'card gated' if gated else 'no card'}\t"
@@ -1033,6 +1043,9 @@ def main(argv=None):
         return 1
     except ValueError as e:
         print(f"FAIL\t{getattr(args, 'board', 'hub')}\t{clean(e, 120)}")
+        return 1
+    except Exception as e:  # a reply of an unexpected shape: a FAIL line, never a traceback
+        print(f"FAIL\t{getattr(args, 'board', 'hub')}\t{odd(e, 'board' if args.cmd == 'snapshot' else 'Hub')}")
         return 1
     finally:
         _end = None

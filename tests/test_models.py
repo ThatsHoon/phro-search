@@ -615,6 +615,18 @@ class FollowTest(Base):
         self.assertFalse(list((self.topic / "sources").glob("hf-acme--gated-*")))
         self.assertIn("FACTS\tacme/tts-a\t", out)
 
+    def test_an_odd_reply_is_a_fail_line_not_a_traceback(self):
+        routes = [(api("acme/odd"), [503, js([1])]), *self.routes()]  # a transient 503, then a list for a model
+        code, out = self.run_main(routes, "follow", "acme/odd", "acme/tts-a", "--task", "tts")
+        lines = out.splitlines()
+        self.assertEqual(code, 1, out)
+        self.assertTrue(lines[0].startswith("FAIL\tacme/odd\tunexpected reply from the Hub: AttributeError"), lines[0])
+        self.assertIn("FACTS\tacme/tts-a\t", out)  # the next model is still followed
+        code, out = self.run_main([(("api/leaderboard/formatted",), [503, js([{"model": [1], "evaluations": {}}])])], "snapshot", "--board", "llm")
+        self.assertEqual(code, 1, out)
+        self.assertEqual(len(out.splitlines()), 1, out)
+        self.assertTrue(out.startswith("FAIL\tllm\tunexpected reply from the board: "), out)
+
     def line_of(self, needle):
         lines = (self.topic / "models" / "hub" / "acme--tts-a.json").read_text(encoding="utf-8").split("\n")
         return next((n, l.strip()) for n, l in enumerate(lines, 1) if needle in l)
