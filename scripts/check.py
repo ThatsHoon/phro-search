@@ -5,7 +5,8 @@ output, one line per problem:  <line>:<rule>: <detail>   (line 0 for whole-docum
 then  FAIL<TAB><n> problems  and exit 1, or  OK  and exit 0.
 rules: phrase, symbol, dash, invisible: one hit fails.
        density, per-doc, opener, bold: fail over a limit; a line 0 summary, then each hit with a snippet.
-Fenced code, quote lines (">"), inline code and URLs are not checked, except for invisible characters.
+Fenced code, quote lines (">"), inline code and URLs are not checked, except for invisible characters; a no-break
+space (U+00A0, U+202F) or a soft hyphen in a quote line is allowed, since a quote keeps its source's characters.
 --kind report also checks a report's structure against the claims.json and the evidence view beside it
        (extracts-<stem>.json for report-<stem>.md, else extracts.json):
        bluf: the title is followed by one paragraph, it cites a claim as [c1] or [c1, c2], and it names its
@@ -48,6 +49,7 @@ DASHES = {"\U00002014": "em dash", "\U00002013": "en dash", "\U00002015": "horiz
 INVISIBLE = {0x200B: "zero-width space", 0x200C: "zero-width non-joiner", 0x200D: "zero-width joiner",
              0x2060: "word joiner", 0xFEFF: "byte-order mark", 0x00AD: "soft hyphen", 0x00A0: "no-break space",
              0x202F: "narrow no-break space"}  # hidden marks and copy traces
+QUOTE_OK = {0x00A0, 0x202F, 0x00AD}  # allowed inside a quote line, which keeps its source's characters
 HINT = "use a comma, a colon or parentheses"
 # Natural words that read machine-made only when they pile up.
 DENSITY = {  # name: (phrases, max per 1,000 body characters)
@@ -114,7 +116,11 @@ def check(raw):
         add(text, m.start(), "symbol", f"{codes}, remove it or {HINT}")
     for m in re.finditer("[" + "".join(DASHES) + "]", text):
         add(text, m.start(), "dash", f"U+{ord(m.group()):04X} {DASHES[m.group()]}, {HINT}")
+    unfenced = FENCE.sub(lambda m: re.sub(r"[^\n]", " ", m.group()), raw)  # fences blanked, positions kept
+    quoted = [(q.start(), q.end()) for q in QUOTE.finditer(unfenced)]
     for m in re.finditer("[" + "".join(map(chr, INVISIBLE)) + "]", raw):
+        if ord(m.group()) in QUOTE_OK and any(a <= m.start() < b for a, b in quoted):
+            continue
         add(raw, m.start(), "invisible", f"U+{ord(m.group()):04X} {INVISIBLE[ord(m.group())]}")
     body = len(re.sub(r"\s", "", text))
     per = max(body / 1000, 1)

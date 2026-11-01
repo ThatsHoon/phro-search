@@ -19,7 +19,7 @@ Output rules for the prose written for the user: chat answers, briefs, and the p
 
 - No emoji and no decorative symbols (check marks, stars, geometric shapes, dingbats).
 - No em dash (U+2014), en dash (U+2013) or horizontal bar (U+2015). Use a comma, a colon or parentheses. Write ranges with "to" or a tilde.
-- No invisible characters: zero-width space, zero-width joiner and non-joiner, word joiner, byte-order mark, soft hyphen, and the no-break spaces U+00A0 and U+202F. They arrive with pasted web text, so retype pasted lines.
+- No invisible characters: zero-width space, zero-width joiner and non-joiner, word joiner, byte-order mark, soft hyphen, and the no-break spaces U+00A0 and U+202F. They arrive with pasted web text, so retype pasted lines outside quotes; a quote keeps a no-break space or soft hyphen of its source.
 - Bold sparingly: at most 3 bold spans per document, plus 1 per 1,500 characters of body text.
 - No AI attribution anywhere: no `Generated with ...`, no `Co-Authored-By`, no "written by" a model, no `as an AI`, and no copied machine-summary fields.
 

@@ -152,6 +152,15 @@ class ScopeTest(unittest.TestCase):
         text = "> 인용\U0000200B\n```\n코드\U000000A0\n```\n`인라인\U00002060`\n"
         self.assertEqual(rules(text), [(1, "invisible"), (3, "invisible"), (5, "invisible")])
 
+    def test_no_break_spaces_and_soft_hyphens_are_allowed_in_quotes(self):
+        # A quote keeps its source's characters; prose and code still fail.
+        for cp in (0x00A0, 0x202F, 0x00AD):
+            with self.subTest(cp=hex(cp)):
+                self.assertEqual(m.check(f"> Le mod{chr(cp)}ele atteint 95{chr(cp)}% en test.\n  > second{chr(cp)}line\n"), [])
+                self.assertEqual(rules(f"Prose{chr(cp)}line\n> quote{chr(cp)}line\n```\n> code{chr(cp)}line\n```\n"),
+                                 [(1, "invisible"), (4, "invisible")])
+        self.assertEqual(rules("> zero\U0000200bwidth and no\U000000a0break\n"), [(1, "invisible")])
+
     def test_hits_in_quotes_do_not_count(self):
         self.assertEqual(m.check("> 또한 인용이다.\n" * 5 + "**가** **나** **다**\n"), [])
 

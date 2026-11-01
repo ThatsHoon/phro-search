@@ -133,6 +133,13 @@ class ReportTest(unittest.TestCase):
         self.assertEqual(run.returncode, 1, run.stderr)
         self.assertIn(f"\tnot found near the line\t{KO_PARAPHRASE}\n", run.stdout)
 
+    def test_soft_hyphens_and_no_break_spaces_are_ignored(self):
+        shy, nbsp = "\U000000ad", "\U000000a0"
+        topic = self.topic({"a.md": f"The trans{shy}former reaches 95{nbsp}percent.\n"},
+                           [claim(quote("a.md", 1, "transformer reaches 95 percent")),
+                            claim(quote("a.md", 1, f"trans{shy}former reaches 95{nbsp}percent"))])
+        self.assertEqual(self.report(topic, "--check")[0], 0)
+
     def test_caption_timestamps_are_ignored(self):
         text = "[12:34] so the trick is\n[12:36] to warm the model up first\n[1:02:03] and then lower the rate\n"
         topic = self.topic({"talk.txt": text}, [claim(quote("talk.txt", 1, "so the trick is to warm the model", end=2),

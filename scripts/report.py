@@ -20,7 +20,7 @@ archived copy.
 Lines count like grep -n. A quote matches when it appears within lines line-2 to
 end+2 of sources/<file>, both sides normalized the same way: on each line a leading
 caption timestamp ([mm:ss], [h:mm:ss]) and list marker are dropped, then every
-whitespace character is removed. Pieces split by the ellipsis character (U+2026)
+whitespace character (no-break spaces too) and soft hyphen is removed. Pieces split by the ellipsis character (U+2026)
 must appear in that order. Any mismatch blocks the page and leaves an existing
 report.html as it is.
 
@@ -252,8 +252,9 @@ def read_lines(path):
 
 
 def norm(text):
-    """Text as compared: per line a leading timestamp and list marker dropped, then every whitespace character removed."""
-    return "".join("".join(_LEAD.sub("", line) for line in text.split("\n")).split())
+    """Text as compared: per line a leading timestamp and list marker dropped, then every whitespace character and
+    soft hyphen removed."""
+    return "".join("".join(_LEAD.sub("", line) for line in text.split("\n")).replace("\U000000ad", "").split())
 
 
 def check(src, q):
