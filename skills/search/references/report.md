@@ -48,7 +48,7 @@ One gap round at most: 1 or 2 researchers, only for a key question left without 
 
 ## Archive and locate
 
-1. Collect the URLs of the finding lines; one per host and path. Fetch at most 25 with `fetch.py <topic>/sources <name> <url>`, passing a paper's DOI so its legal open-access copies come first: first the pages behind findings the answer would rest on, then by label (paper, official, first-hand before summary). `fetch.py` reuses a source already fetched from the same URL, DOI or arXiv id (mark reused); never download again. Every FAIL goes to `log.md`; a walled page behind a likely central finding goes to the user's browser, as in dig.
+1. Collect the URLs of the finding lines; one per host and path. Fetch at most 25 with `fetch.py <topic>/sources <name> <url>`, passing a paper's DOI so its legal open-access copies come first: first the pages behind findings the answer would rest on, then by label (paper, official, first-hand before summary). Reuse what `sources/` already holds (the map's Sources table names each file's URL; `fetch.py` reuses a source already fetched from the same URL, DOI or arXiv id, mark reused, for files fetched since `sources/index.tsv` exists); never download again. Every FAIL goes to `log.md`; a walled page behind a likely central finding goes to the user's browser, as in dig.
 2. Locate each finding: grep a distinctive phrase of its quote in the fetched copy (`grep -n -F -e "<phrase>" -e "<phrase>" <topic>/sources/<file>` for several at once), read a few lines around a hit, and take the text exactly as the copy has it. Not found (the page changed, the researcher paraphrased, the fetch failed): the finding stays URL-only.
 3. Write `claims.json` (`references/formats.md`): one entry per finding the report may use, ids c1, c2 and on. Importance:
    - central: the answer would change if it were false; at most 10, each located; a URL-only finding is never central, nor is one whose source is retracted;
@@ -77,7 +77,7 @@ Vote rule: a reply that is missing, not that JSON object, or without a true or f
 
 ## Write
 
-Write the report in this session: Claude Code refuses a subagent's write of a report file, and the claims, votes and extracts are already here. Read the notes in full and `STYLE.md`, then write `<topic>/report-<YYYY-MM-DD>.md` in the user's language, quotes in their own language:
+Write the report in this session: Claude Code refuses a subagent's write of a report file, and the claims, votes and extracts are already here. Read the notes in full and `STYLE.md`, then write `<topic>/report-<stem>.md` in the user's language, quotes in their own language:
 
 ```
 # <title>
@@ -91,7 +91,7 @@ Write the report in this session: Claude Code refuses a subagent's write of a re
 - Cite claims inline as [c3] or [c3, c7]. Every fact cites a claim; add nothing that is not in claims.json.
 - The BLUF and the conclusion cite survived claims only. A refuted claim appears in a section only as refuted, with why.
 - Prose, not lists, outside the tables. Say what is unknown, give the strongest case for the other side, and take a position where the evidence allows one.
-- Run `check.py --kind report <topic>/report-<date>.md` and rewrite only the flagged spots until it prints OK.
+- Run `check.py --kind report <topic>/report-<stem>.md` and rewrite only the flagged spots until it prints OK.
 
 ## Deliver
 
@@ -104,4 +104,4 @@ Run `check.py` on the exact reply after its last edit and send that text unchang
 
 ## Again on the same topic
 
-A new report gets a new stem (`report-<date>-2.md` on the same day) and its own view and page; earlier reports are never overwritten. Reuse `sources/` and `claims.json`: new findings take the next ids, and claims already verified keep their votes. A central claim whose newest vote is older than the brief's recency need is verified again under a new id (its claim, quote and URL copied, fresh votes); the old claim keeps its votes. Gaps become required claims for a dig, and a dig archive feeds a report without downloading again.
+A new report gets a new stem (`report-<date>-2.md` on the same day) and its own view and page; earlier reports are never overwritten. Reuse `sources/` and `claims.json`: new findings take the next ids, and claims already verified keep their votes. A central claim whose newest vote is older than the brief's recency need, or has no `checked` date, is verified again under a new id (its claim, quote and URL copied, fresh votes); the old claim keeps its votes, and from then on reports cite the new id. Gaps become required claims for a dig, and a dig archive feeds a report without downloading again.

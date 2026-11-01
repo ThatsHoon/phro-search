@@ -21,7 +21,7 @@ FIX = ROOT / "tests" / "fixtures" / "chain"
 BATES = "W1964729842"
 BATES_ROW = ("1989\t1761\tW1964729842\tThe design of browsing and berrypicking techniques for the online search "
              "interface\t10.1108/eb024320\t-\t-\t-\t-")
-BATES_WORK = "# work\tW1964729842\t1989\tThe design of browsing and berrypicking techniques for the online search interface"
+BATES_WORK = "# work\tW1964729842\t1989\tThe design of browsing and berrypicking techniques for the online search interface\t-"
 SPECIAL_DOI = "10.1002/(sici)1097-4571(1999)50:12<1043::aid-asi1>3.0.co;2-x"
 NOTE_EMPTY = ("# note: 0 results. OpenAlex often lacks citation links for works under about a year old, so this means "
               "unknown, not none: grep the reference section of the downloaded text, or search for works citing the title.")
@@ -246,7 +246,7 @@ class ChainTest(unittest.TestCase):
         for cmd, requests in (("refs", 1), ("cites", 2)):  # a work without references needs no batch request
             with self.subTest(cmd=cmd):
                 code, lines, urls = self.call(cmd, "W9", handler=new_paper)
-                self.assertEqual((code, lines, len(urls)), (0, ["# work\tW9\t2026\tA new paper", NOTE_EMPTY], requests))
+                self.assertEqual((code, lines, len(urls)), (0, ["# work\tW9\t2026\tA new paper\t-", NOTE_EMPTY], requests))
 
     # author
 
@@ -382,18 +382,18 @@ class ChainTest(unittest.TestCase):
         code, lines, urls = self.call("oa", "W8", handler=lambda p, q: work)
         self.assertEqual((code, [path(u) for u in urls]), (0, ["/works/W8"]))
         self.assertEqual(lines, [
-            "# work\tW8\t2021\tA paper",
-            "published\trepository\t-\thttps://pmc.example/a\tPubMed Central\t-",
+            "# work\tW8\t2021\tA paper\taccepted-copy",
             "published\tpublisher\thttps://pub.example/p.pdf\thttps://pub.example/p\tJournal\tcc-by",
             "accepted\trepository\thttps://repo.example/a.pdf\t-\tUni repository\t-",
             "submitted\trepository\thttps://arxiv.org/pdf/2101.00001\thttps://arxiv.org/abs/2101.00001"
             "\tarXiv (Cornell University)\t-",
+            "published\trepository\t-\thttps://pmc.example/a\tPubMed Central\t-",
             "-\tother\t-\thttps://blog.example/post\t-\t-"])
 
     def test_oa_without_copies(self):
         work = {"id": "https://openalex.org/W9", "display_name": "Closed", "publication_year": 2019, "locations": []}
         code, lines, _ = self.call("oa", "10.1234/closed", handler=lambda p, q: work)
-        self.assertEqual((code, lines[0]), (0, "# work\tW9\t2019\tClosed"))
+        self.assertEqual((code, lines[0]), (0, "# work\tW9\t2019\tClosed\t-"))
         self.assertTrue(lines[1].startswith("# note: no open-access copy is listed"), lines)
 
     def test_cites_sorted_by_recency_and_since_a_year(self):
@@ -401,6 +401,15 @@ class ChainTest(unittest.TestCase):
         q = query(urls[1])
         self.assertEqual((code, q["filter"], q["sort"]),
                          (0, ["cites:W1964729842,from_publication_date:2020-01-01"], ["publication_date:desc"]))
+
+    def test_review_fixes(self):
+        self.forbid("acme secret")
+        code, lines, urls = self.call("find", "acme,secret", "battery")  # the comma becomes a space before sending
+        self.assertEqual((code, urls), (1, []))
+        retracted = {"id": "https://openalex.org/W3", "display_name": "Gone", "publication_year": 2018, "is_retracted": True}
+        self.assertEqual(self.call("oa", "W3", handler=lambda p, q: retracted)[1][0], "# work\tW3\t2018\tGone\tretracted")
+        code, lines, urls = self.call("find", "https://doi.org/10.1234/x%3Cy%3E", handler=lambda p, q: retracted)
+        self.assertEqual((code, path(urls[0])), (0, "/works/doi:10.1234/x<y>"))
 
     def test_api_key_comes_from_the_environment_only(self):
         with mock.patch.dict(os.environ, {"OPENALEX_API_KEY": "k-secret-123"}):

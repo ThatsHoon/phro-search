@@ -169,16 +169,31 @@ def verdict(votes):
     return "refuted" if sum(v["refuted"] for v in votes) >= 2 else "unverified" if len(votes) < 2 else "survived"
 
 
-def retracted(q):
-    return bool(re.search(r"\bretracted\b", q.get("mark") or "", re.I))
+def index_rows(src):
+    """The rows of sources/index.tsv as dicts; rows of the wrong width are skipped; [] without the file."""
+    try:
+        lines = (src / "index.tsv").read_text(encoding="utf-8-sig", errors="replace").splitlines()[1:]
+    except OSError:
+        return []
+    return [dict(zip(INDEX_HEAD, cells)) for cells in (line.split("\t") for line in lines) if len(cells) == len(INDEX_HEAD)]
 
 
-def claim_problems(claims, data):
-    """Where the claims break the rules, as (where, reason) pairs: in the view, a sourced claim on retracted quotes
-    only; with claims.json, every claim's votes and verdict, and for the claims the view cites a known id, a quote
-    not marked retracted for each central one, and at most MAX_CENTRAL central ones."""
-    out = [(f"claim {i}", "sourced, but every quote is marked retracted") for i, c in enumerate(data["claims"], 1)
-           if STATUS[c["status"]] == "sourced" and c["quotes"] and all(map(retracted, c["quotes"]))]
+def retracted_files(src):
+    """The files in sources/ whose index row carries fetch.py's retracted mark; a later row for a name wins."""
+    newest = {row["name"]: row for row in index_rows(src)}.values()
+    return {f for row in newest if "retracted" in row["marks"].split(",") for f in row["files"].split(",")}
+
+
+def claim_problems(claims, data, flagged=frozenset()):
+    """Where the claims break the rules, as (where, reason) pairs: in the view, a sourced or partial claim whose quotes
+    all come from retracted sources (marked so in the quote, or in sources/index.tsv: flagged); with claims.json, every
+    claim's votes and verdict, and for the claims the view cites a known id, a quote from a source that is not
+    retracted for each central one, and at most MAX_CENTRAL central ones."""
+    def retracted(q):
+        return q["file"] in flagged or bool(re.search(r"\bretracted\b", q.get("mark") or "", re.I))
+    out = [(f"claim {i}", "every quote comes from a retracted source; a retracted work backs no claim")
+           for i, c in enumerate(data["claims"], 1)
+           if STATUS[c["status"]] in ("sourced", "partial") and c["quotes"] and all(map(retracted, c["quotes"]))]
     if claims is None:
         return out
     cited = {}
@@ -197,7 +212,7 @@ def claim_problems(claims, data):
         if c["id"] in central and not cited[c["id"]]:
             out.append((where, "central, but this view gives it no quote"))
         elif c["id"] in central and all(map(retracted, cited[c["id"]])):
-            out.append((where, "central, but every quote in this view is marked retracted"))
+            out.append((where, "central, but every quote in this view comes from a retracted source"))
         if len(c["votes"]) > MAX_VOTES:
             out.append((where, f"{len(c['votes'])} votes (limit {MAX_VOTES})"))
         if (c["votes"] or "verdict" in c) and c.get("verdict") != verdict(c["votes"]):
@@ -248,15 +263,15 @@ def check(src, q):
 
 
 def source_dates(src):
-    """{file in sources/: "published ...; fetched ...; version ..."} from sources/index.tsv; {} without one."""
-    try:
-        lines = (src / "index.tsv").read_text(encoding="utf-8-sig", errors="replace").splitlines()[1:]
-    except OSError:
-        return {}
+    """{file in sources/: "published ...; modified ...; fetched ...; version ...; retracted"} from sources/index.tsv.
+    A PDF's dates are the file's own, so they read "created"; a later row for a name wins; {} without the index."""
     out = {}
-    for row in (dict(zip(INDEX_HEAD, cells)) for cells in (line.split("\t") for line in lines) if len(cells) == len(INDEX_HEAD)):
-        parts = [f"published {row['published']}"] * (row["published"] != "-") + [f"fetched {row['fetched'][:10]}"]
-        parts += [f"version {row['version']}"] * (row["version"] != "-")
+    for row in index_rows(src):
+        made = "created" if row["extraction"] in ("pdftotext", "ocr") else "published"
+        parts = [f"{made} {row['published']}"] * (row["published"] != "-")
+        parts += [f"modified {row['modified']}"] * (row["modified"] not in ("-", row["published"]))
+        parts += [f"fetched {row['fetched'][:10]}"] + [f"version {row['version']}"] * (row["version"] != "-")
+        parts += ["retracted"] * ("retracted" in row["marks"].split(","))
         out.update({f: "; ".join(parts) for f in row["files"].split(",")})
     return out
 
@@ -362,7 +377,7 @@ def main(argv=None):
         if reason:
             bad += 1
             print(f"MISMATCH\t{where}\t{clean(q['file'])}:{q['line']}\t{reason}\t{clean(q['text'], 60)}")
-    problems = claim_problems(claims, data)
+    problems = claim_problems(claims, data, retracted_files(src))
     for where, reason in problems:
         print(f"CLAIM\t{where}\t{reason}")
     if bad:
@@ -374,8 +389,9 @@ def main(argv=None):
     if not args.check:
         out.write_text(page(src, data, claims), encoding="utf-8")
     tally = ""
-    if claims is not None:
-        n = [sum(c.get("verdict") == v for c in claims.values()) for v in VERDICTS]
+    cited = {c["id"] for c in data["claims"] if claims and c.get("id") in claims}
+    if cited:
+        n = [sum(claims[i].get("verdict") == v for i in cited) for v in VERDICTS]
         tally = "; votes: {} survived, {} refuted, {} unverified".format(*n)
     print(f"OK\t{len(quotes)} quotes in {len(data['claims'])} claims match{tally}\t{'check only' if args.check else out}")
     return 0

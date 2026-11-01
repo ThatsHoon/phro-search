@@ -42,7 +42,7 @@ class MetricTest(unittest.TestCase):
     def test_counts(self):
         self.assertEqual(modes.hyphen_breaks("a split evalu-\nation here\nwell-known\nX-\nRay"), 1)
         self.assertEqual(modes.aligned_rows("a    b    c\nplain line\ncol one     col two"), 1)
-        self.assertEqual(modes.norm("[12:34] - first\n2) second line"), "firstsecondline")
+        self.assertEqual(modes.norm("[12:34] - first\n2) second line\n\U00002022 third"), "firstsecondlinethird")
 
 
 @unittest.skipUnless(shutil.which("pdftotext"), "pdftotext is not installed")
@@ -72,9 +72,11 @@ class TwoColumnTest(unittest.TestCase):
     def test_measure_counts_quotes_that_needed_the_ellipsis(self):
         topic = self.tmp / "topic"
         (topic / "sources").mkdir(parents=True)
-        shutil.copy(self.pdf, topic / "sources" / "paper.pdf")
-        quotes = [{"file": "paper.txt", "line": 1, "text": f"{LEFT[0]} {ELL} {LEFT[1]}"},
-                  {"file": "paper.txt", "line": 1, "text": LEFT[2]},
+        shutil.copy(self.pdf, topic / "sources" / "arxiv-2508.00001-x.pdf")  # a dot in the name, as arXiv names have
+        quotes = [{"file": "arxiv-2508.00001-x.txt", "line": 1, "text": f"{LEFT[0]} {ELL} {LEFT[1]}"},
+                  {"file": "arxiv-2508.00001-x.layout.txt", "line": 1, "text": LEFT[2]},
+                  {"file": "arxiv-2508.00001-x.txt", "line": 4, "text": "a split evalu-"},
+                  {"file": "arxiv-2508.00001-x.md", "line": 1, "text": f"a {ELL} b"},
                   {"file": "other.md", "line": 1, "text": f"a {ELL} b"}]
         data = {"title": "t", "question": "q", "stopped": "s", "claims": [{"claim": "c", "status": "sourced", "quotes": quotes}]}
         (topic / "extracts.json").write_text(json.dumps(data), encoding="utf-8")
@@ -82,9 +84,10 @@ class TwoColumnTest(unittest.TestCase):
         with contextlib.redirect_stdout(out):
             modes.main([str(topic)])
         lines = out.getvalue().splitlines()
-        self.assertEqual(lines[0].split("\t")[:2], ["PDF", "topic/paper.pdf"])
+        self.assertEqual(lines[0].split("\t")[:2], ["PDF", "topic/arxiv-2508.00001-x.pdf"])
         self.assertEqual(lines[0].split("\t")[2:5], ["hyphen-breaks", "1", "0"])
-        self.assertEqual(lines[-1], "TOTAL\t2 quotes on PDF text; 1 use the ellipsis; 1 of those read as one run in reading order")
+        self.assertEqual(lines[-1], "TOTAL\t3 quotes on PDF text; 1 use the ellipsis; 1 of those read as one run in reading "
+                                    "order; 1 without the ellipsis are not found in reading order")
 
 
 if __name__ == "__main__":

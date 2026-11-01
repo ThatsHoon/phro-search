@@ -271,6 +271,19 @@ class ReportKindTest(unittest.TestCase):
             code, out, _ = run("--kind", "report", str(path))
         return code, out
 
+    def test_review_fixes(self):
+        korean = REPORT.replace("Both held on 2026-10-30.", "2026-10-30에 확인했다.")
+        self.assertEqual(self.problems(korean), [])
+        with tempfile.TemporaryDirectory() as d:  # a report not named report-<stem>.md uses extracts.json
+            path = Path(d) / "report.md"
+            path.write_text(REPORT, encoding="utf-8")
+            (Path(d) / "claims.json").write_text(json.dumps(VERDICTS), encoding="utf-8")
+            self.assertEqual(run("--kind", "report", str(path))[:2], (1, ["0:view: no extracts.json beside the report; write the report's evidence view", "FAIL\t1 problems"]))
+            (Path(d) / "extracts.json").write_text(json.dumps({"claims": [{"id": "c1", "quotes": [{}]}]}), encoding="utf-8")
+            self.assertEqual(run("--kind", "report", str(path))[:2], (0, ["OK"]))
+        code, out = self.run_report(REPORT, located=(), view="extracts.json")  # dig's view, which cites no ids
+        self.assertEqual((code, out[0]), (1, "0:view: no extracts-2026-10-30.json beside the report; write the report's evidence view"))
+
     def test_bluf_names_its_date(self):
         self.assertEqual(m.report_problems(REPORT.replace(" Both held on 2026-10-30.", ""), {"c1": "survived", "c2": "survived", "c3": "refuted"}),
                          [(3, "bluf", "the BLUF names no as-of date; write it as YYYY-MM-DD")])

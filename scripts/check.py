@@ -164,7 +164,7 @@ def report_problems(raw, verdicts, unlocated=frozenset(), view="its evidence vie
     else:
         if not cites(bluf):
             found.append((bluf[0][0], "bluf", "the BLUF cites no claim; cite the claims it rests on as [c1]"))
-        if not re.search(r"\b\d{4}-\d\d-\d\d\b", " ".join(t for _, t in bluf)):
+        if not re.search(r"(?<!\d)\d{4}-\d\d-\d\d(?!\d)", " ".join(t for _, t in bluf)):  # a particle may follow it
             found.append((bluf[0][0], "bluf", "the BLUF names no as-of date; write it as YYYY-MM-DD"))
     sections = [p for p in parts if p[1] == 2]
     end = next((k for k, p in enumerate(sections)
@@ -287,18 +287,20 @@ def main(argv=None):
             print(f"FAIL\tcannot read {path}: {e}")
             return 1
         stem = re.fullmatch(r"report-(.+)\.md", Path(args.file).name, re.I)
-        views = [folder / f"extracts-{stem.group(1)}.json"] * bool(stem) + [folder / "extracts.json"]
-        view = next((v for v in views if v.is_file()), None)
-        located = set()
+        views = ([folder / f"extracts-{stem.group(1)}.json"] if stem else []) + [folder / "extracts.json"]
+        view, located = None, set()
+        for v in (v for v in views if v.is_file()):
+            try:
+                rows = json.loads(v.read_text(encoding="utf-8-sig"))["claims"]
+                ids = {str(c.get("id", "")).lower() for c in rows if c.get("quotes")}
+            except (OSError, ValueError, TypeError, KeyError, AttributeError) as e:
+                print(f"FAIL\tcannot read {v}: {e}")
+                return 1
+            if v == views[0] or any("id" in c for c in rows):  # dig's extracts.json cites no ids: not a report's view
+                view, located = v, ids
+                break
         if view is None:
             problems.append((0, "view", f"no {views[0].name} beside the report; write the report's evidence view"))
-        else:
-            try:
-                located = {str(c.get("id", "")).lower() for c in json.loads(view.read_text(encoding="utf-8-sig"))["claims"]
-                           if c.get("quotes")}
-            except (OSError, ValueError, TypeError, KeyError, AttributeError) as e:
-                print(f"FAIL\tcannot read {view}: {e}")
-                return 1
         problems += report_problems(raw, verdicts, central - located if view else frozenset(), view.name if view else "")
     if args.kind == "pulse":
         if args.file == "-":

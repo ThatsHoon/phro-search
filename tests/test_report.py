@@ -190,14 +190,31 @@ class ReportTest(unittest.TestCase):
         head = "name\turl\tfinal\tfetched\tpublished\tmodified\textraction\tversion\tmarks\tfiles"
         row = "a\thttps://example.org/a\t-\t2026-11-01T09:00:00Z\t2025-05-01\t-\thtml\taccepted\t-\ta.md"
         (topic / "sources" / "index.tsv").write_text(f"{head}\n{row}\nbroken row\n", encoding="utf-8")
-        self.assertIn('<span class="when">published 2025-05-01; fetched 2026-11-01; version accepted</span>', self.page(topic))
+        html = self.page(topic)
+        self.assertIn('<span class="when">published 2025-05-01; fetched 2026-11-01; version accepted</span>', html)
 
-    def test_retracted_quotes_cannot_make_a_claim_sourced(self):
+    def test_retracted_sources_back_no_claim(self):
         r = quote("a.md", 1, "alpha", mark="paper, retracted")
-        topic = self.topic({"a.md": "alpha\n"}, [claim(r), claim(r, status="partial"), claim(r, quote("a.md", 1, "alpha"))])
+        topic = self.topic({"a.md": "alpha\n", "b.md": "beta\n"},
+                           [claim(r), claim(r, status="partial"), claim(r, quote("b.md", 1, "beta")), claim(r, status="none")])
         self.assertEqual(self.report(topic, "--check")[1].splitlines(),
-                         ["CLAIM\tclaim 1\tsourced, but every quote is marked retracted",
-                          "FAIL\t1 claim problems; report.html not written"])
+                         ["CLAIM\tclaim 1\tevery quote comes from a retracted source; a retracted work backs no claim",
+                          "CLAIM\tclaim 2\tevery quote comes from a retracted source; a retracted work backs no claim",
+                          "FAIL\t2 claim problems; report.html not written"])
+        # fetch.py's retracted mark in sources/index.tsv counts too
+        topic = self.topic({"a.md": "alpha\n"}, [claim(quote("a.md", 1, "alpha"))])
+        head = "name\turl\tfinal\tfetched\tpublished\tmodified\textraction\tversion\tmarks\tfiles"
+        (topic / "sources" / "index.tsv").write_text(f"{head}\na\tdoi:x\t-\t2026-11-01T00:00:00Z\t-\t-\thtml\t-\tretracted\ta.md\n",
+                                                     encoding="utf-8")
+        self.assertEqual(self.report(topic, "--check")[1].splitlines()[0],
+                         "CLAIM\tclaim 1\tevery quote comes from a retracted source; a retracted work backs no claim")
+
+    def test_pdf_dates_read_as_created(self):
+        topic = self.topic({"a.txt": "alpha\n"}, [claim(quote("a.txt", 1, "alpha"))])
+        head = "name\turl\tfinal\tfetched\tpublished\tmodified\textraction\tversion\tmarks\tfiles"
+        row = "a\tlocal:a.pdf\t-\t2026-11-01T09:00:00Z\t2021-03-04\t2021-04-05\tpdftotext\t-\t-\ta.pdf,a.txt"
+        (topic / "sources" / "index.tsv").write_text(f"{head}\n{row}\n", encoding="utf-8")
+        self.assertIn('<span class="when">created 2021-03-04; modified 2021-04-05; fetched 2026-11-01</span>', self.page(topic))
 
     def test_bad_extracts_fail(self):
         empty = pathlib.Path(tempfile.mkdtemp(dir=self.root))
@@ -283,7 +300,10 @@ class ClaimsTest(unittest.TestCase):
     def test_dig_view_beside_a_report_claims_file(self):
         # A dig's extracts.json cites no claim ids, so a report's claims.json beside it no longer blocks its page.
         topic = self.topic([claimed("c1", votes=[vote(False)] * 2, verdict="survived")], ids=())
-        self.assertEqual(self.report(topic), (0, f"OK\t0 quotes in 0 claims match; votes: 1 survived, 0 refuted, 0 unverified\t{topic / 'report.html'}\n"))
+        self.assertEqual(self.report(topic), (0, f"OK\t0 quotes in 0 claims match\t{topic / 'report.html'}\n"))
+        both = self.topic([claimed("c1", votes=[vote(False)] * 2, verdict="survived"),
+                           claimed("c2", votes=[vote(True)] * 2, verdict="refuted")], ids=("c1",))
+        self.assertIn("votes: 1 survived, 0 refuted, 0 unverified", self.report(both)[1])  # only the claims this view cites
 
     def test_vote_check_dates(self):
         dated = vote(False, checked="2026-11-01")
@@ -299,7 +319,9 @@ class ClaimsTest(unittest.TestCase):
         data["claims"][0]["quotes"][0]["mark"] = "retracted"
         (topic / "extracts.json").write_text(json.dumps(data), encoding="utf-8")
         self.assertEqual(self.report(topic, "--check")[1].splitlines()[0],
-                         "CLAIM\tclaims.json c1\tcentral, but every quote in this view is marked retracted")
+                         "CLAIM\tclaim 1\tevery quote comes from a retracted source; a retracted work backs no claim")
+        self.assertIn("CLAIM\tclaims.json c1\tcentral, but every quote in this view comes from a retracted source",
+                      self.report(topic, "--check")[1])
 
     def test_bad_claims_json_fails(self):
         cases = (({"c1": {}}, "claims.json must be a list"),

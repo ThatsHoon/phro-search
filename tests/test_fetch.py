@@ -373,6 +373,95 @@ class FetchTest(unittest.TestCase):
         self.assertEqual((row["url"], row["version"], row["marks"]), ("https://doi.org/10.1234/ABC", "accepted", "accepted-copy"))
         self.assertEqual(self.fetch("d2", "https://doi.org/10.1234/abc")[1][1], "d")  # DOIs match without regard to case
 
+    # review fixes
+
+    def test_percent_encoded_doi_url_is_read_once(self):
+        table = {"/works/doi:10.1234/x%3Cy%3E": (200, {"Content-Type": "application/json"}, b'{"id": "W7", "locations": []}'),
+                 "/10.1234/x%3Cy%3E": (200, HTML, page("<article>" + LONG + "</article>"))}
+        s = self.serve(table)
+        self.patch(m, "OPENALEX", s.url)
+        self.patch(m, "DOI", s.url)
+        self.assertEqual(self.fetch("p", "https://doi.org/10.1234/x%3Cy%3E")[0], 0)
+        self.assertEqual(self.paths(s), ["/works/doi:10.1234/x%3Cy%3E", "/10.1234/x%3Cy%3E"])
+        self.assertEqual(self.fetch("q", "10.1234/x<y>")[1][5], "reused")  # the same DOI, given bare
+
+    def test_reuse_ignores_rows_whose_name_was_fetched_again(self):
+        s = self.serve({"/a": (200, HTML, page("<article><h1>Page A</h1>" + LONG + "</article>")),
+                        "/b": (200, HTML, page("<article><h1>Page B</h1>" + LONG + "</article>"))})
+        self.fetch("x", s.url + "/a")
+        (self.src / "x.md").unlink()
+        self.fetch("x", s.url + "/b")
+        code, f = self.fetch("y", s.url + "/a")
+        self.assertEqual((code, f[1], f[4]), (0, "y", "# Page A"))
+
+    def test_an_index_that_cannot_be_written_leaves_no_file(self):
+        s = self.serve({"/p": (200, HTML, page("<article>" + LONG + "</article>"))})
+        (self.src / "index.tsv").mkdir(parents=True)  # stands in for an index another program holds open
+        self.assertEqual(self.fetch("p", s.url + "/p")[0], 1)
+        self.assertEqual(self.saved(), [])
+
+    def test_doi_marks_an_unchecked_retraction_when_openalex_fails(self):
+        self.doi_server(None, **{"/works/doi:10.1234/abc": (503, {}, b""),
+                                 "/10.1234/abc": (200, HTML, page("<article>" + LONG + "</article>"))})
+        self.assertEqual(self.fetch("u", "10.1234/abc")[1][5], "unchecked")
+        self.assertEqual(self.index()[0]["marks"], "unchecked")
+
+    def test_doi_copy_rules(self):
+        work = {"id": "W8", "locations": [
+            {"is_oa": True, "version": "publishedVersion", "landing_page_url": "{u}/handle/1", "source": {"type": "repository"}},
+            {"is_oa": True, "version": "publishedVersion", "pdf_url": "{u}/record", "source": {"type": "repository"}},
+            {"is_oa": True, "version": "publishedVersion", "pdf_url": "file:///etc/hosts", "source": {"type": "repository"}},
+            {"is_oa": True, "version": "publishedVersion", "pdf_url": "repo.example/x.pdf", "source": {"type": "repository"}},
+            {"is_oa": True, "version": "acceptedVersion", "pdf_url": "{u}/files/M\u00fcller.pdf", "source": {"type": "repository"}}]}
+        record = page("<article><p>Embargoed until 2030.</p>" + LONG + "</article>")
+        s = self.doi_server(work, **{"/record": (200, HTML, record), "/handle/1": (200, HTML, record),
+                                     "/files/M%C3%BCller.pdf": (200, {"Content-Type": "application/pdf"}, PDF)})
+        self.tools(pdftotext=lambda cmd: Path(cmd[-1]).write_text("Accepted\n" + "word " * 400, encoding="utf-8"))
+        code, f = self.fetch("p", "10.1234/abc")
+        # A PDF link that serves a record page is no copy, bad URLs are skipped, and every PDF link comes before a
+        # landing page; the accepted PDF with a non-ASCII name is fetched, and the published landing page never is.
+        self.assertEqual((code, f[2], f[5]), (0, "p.txt", "accepted-copy"))
+        self.assertEqual(self.paths(s), ["/works/doi:10.1234/abc", "/record", "/files/M%C3%BCller.pdf"])
+
+    def test_arxiv_title_that_reads_like_a_wall(self):
+        s = self.serve({"/html/2508.00004": (200, HTML, page("<article><h1>Access denied: a study</h1>" + LONG * 6 + "</article>",
+                                                             title="Access Denied: A Study of Refusals"))})
+        self.patch(m, "ARXIV", s.url)
+        self.assertEqual(self.fetch("a", "https://arxiv.org/abs/2508.00004")[0], 0)
+
+    def test_reuse_edges(self):
+        long_url = "/p?" + "q=" + "x" * 600
+        s = self.serve({"/p": (200, HTML, page("<article>" + LONG + "</article>"))})
+        self.fetch("long", s.url + long_url)
+        self.assertEqual(self.fetch("long2", s.url + long_url)[1][5], "reused")  # long URLs stay whole in the index
+        self.tools(pdftotext=lambda cmd: Path(cmd[-1]).write_text("Paper\n" + "word " * 400, encoding="utf-8"))
+        self.serve({})
+        (self.src / "long.md").rename(self.src / "keep.md")  # a missing readable file means no reuse
+        self.assertEqual(self.fetch("long3", s.url + long_url)[1][1], "long3")
+        (self.src / "map.layout.md").write_text("another source\n", encoding="utf-8")
+        self.assertEqual(self.fetch("map", s.url + "/p")[0], 0)  # map.layout.md belongs to the name map.layout
+
+    def test_reuse_survives_a_missing_layout_copy(self):
+        self.tools(pdftotext=lambda cmd: Path(cmd[-1]).write_text("Paper\n" + "word " * 400, encoding="utf-8"))
+        s = self.serve({"/paper.pdf": (200, {"Content-Type": "application/pdf"}, PDF)})
+        self.fetch("paper", s.url + "/paper.pdf")
+        (self.src / "paper.layout.txt").unlink()
+        self.assertEqual(self.fetch("again", s.url + "/paper.pdf")[1][1:3], ["paper", "paper.txt"])
+
+    def test_stale_tool_output_is_never_read(self):
+        work = self.tmp / "work"
+        work.mkdir()
+        (work / "out.txt").write_text("text of an earlier copy", encoding="utf-8")
+        (work / "page-1.png").write_bytes(b"old page")
+        self.tools(pdftotext=lambda cmd: None)
+        self.assertEqual(m.pdf_text(work, PDF), ("", ""))
+
+    def test_dates_and_versions_edge_cases(self):
+        self.assertEqual(m.pdf_dates(b"/CreationDate (D:20100101) trailer /CreationDate (D:20240115) /ModDate (D:20240116)"),
+                         ("2024-01-15", "2024-01-16"))  # an incremental update appends the current info last
+        self.assertEqual(m.arxiv_version("https://arxiv.org/abs/hep-th/9901001v2"), "arXiv v2")
+        self.assertEqual(m.arxiv_version("https://arxiv.org/abs/hep-th/9901001"), "arXiv")
+
     def test_refused_hosts_make_no_request(self):
         opener = mock.Mock(side_effect=AssertionError("a request was made"))
         self.patch(m.OPENER, "open", opener)

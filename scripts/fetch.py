@@ -10,14 +10,14 @@ Usage:
 Judged by content, not extension or status: walls, error pages, short bodies and HTML posing
 as a PDF are refused. Readable copy: <name>.txt for a PDF (its text in reading order, so a
 column's sentences stay together) and for plain text, <name>.layout.txt for a PDF's text in page
-layout (table rows kept), <name>.md for HTML, Markdown, arXiv HTML and YouTube captions; a PDF is
+layout (table rows kept; none after OCR), <name>.md for HTML, Markdown, arXiv HTML and YouTube captions; a PDF is
 kept as <name>.pdf. An arXiv link is read from its HTML version first and from the PDF when that
-is missing, damaged or short. A DOI tries the open-access copies OpenAlex lists (published, then
-accepted, then submitted versions; repository copies first) before the publisher's page; the
+is missing, damaged or short. A DOI tries the open-access copies OpenAlex lists (PDF links before
+landing pages; then published, accepted, submitted; repository copies first) before the publisher's page; the
 lookup costs no OpenAlex credits, and OPENALEX_API_KEY is sent when set. Nothing is written on
 FAIL, and an existing <name>.* is never overwritten.
 
-Every OK adds a row to <sources_dir>/index.tsv: name, url, final, fetched, published, modified,
+Every OK that downloads adds a row to <sources_dir>/index.tsv: name, url, final, fetched, published, modified,
 extraction, version, marks, files. A source already fetched from the same URL, DOI or arXiv id is
 reused: nothing is downloaded, and the OK line names the earlier file with the mark reused. A
 taken name whose row holds another URL fails and names that URL.
@@ -25,9 +25,11 @@ taken name whose row holds another URL fails and names that URL.
 Output, one tab-separated line:
   OK <name> <file> <chars> <first line> [<marks>]
   FAIL <name> <reason>                                  exit code 1
-Marks, comma-separated: ocr, auto-captions, arxiv-html; published-copy, accepted-copy or
-submitted-copy for an open-access copy of a DOI; retracted when OpenAlex marks the work retracted;
-reused for a source fetched before.
+Marks, comma-separated: ocr, auto-captions, arxiv-html; published-copy, accepted-copy, submitted-copy
+or copy (no version stated) for an open-access copy of a DOI, with landing-page when it came from a
+landing page rather than a PDF link; retracted when OpenAlex marks the work retracted; unchecked when
+OpenAlex could not be asked, so neither copies nor a retraction were checked; reused for a source
+fetched before (a reuse adds no index row).
 """
 import argparse, datetime, html.parser, http.client, json, os, re, shutil, socket, ssl, subprocess, sys, tempfile, time
 import unicodedata, urllib.error, urllib.parse, urllib.request
@@ -164,9 +166,22 @@ class Handler(urllib.request.HTTPRedirectHandler):
 OPENER = urllib.request.build_opener(Handler)
 
 
+def uri(url):
+    """The URL with non-ASCII characters and spaces percent-encoded and a non-ASCII host in IDNA form."""
+    u = urllib.parse.urlsplit(url)
+    netloc = u.netloc
+    if not netloc.isascii():
+        try:
+            netloc = netloc.encode("idna").decode("ascii")
+        except UnicodeError:
+            raise Fail("bad host name") from None
+    esc = lambda s: re.sub(r"[^\x21-\x7e]+", lambda m: urllib.parse.quote(m.group()), s)
+    return urllib.parse.urlunsplit((u.scheme, netloc, esc(u.path), esc(u.query), esc(u.fragment)))
+
+
 def get(url):
     """(body, content type, final URL) of one GET; every failure raised as Fail with a short reason."""
-    req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": ACCEPT})
+    req = urllib.request.Request(uri(url), headers={"User-Agent": UA, "Accept": ACCEPT})
     for backoff in (*BACKOFF, None):
         try:
             with OPENER.open(req, timeout=30) as r:
@@ -377,6 +392,7 @@ def pdf_text(work, data):
     (work / "in.pdf").write_bytes(data)
     out = []
     for flags, name in (([], "out.txt"), (["-layout"], "layout.txt")):
+        (work / name).unlink(missing_ok=True)  # never read an earlier copy's text
         run([exe, *flags, "-enc", "UTF-8", str(work / "in.pdf"), str(work / name)])
         out.append((work / name).read_text(encoding="utf-8", errors="replace") if (work / name).is_file() else "")
     return tuple(out)
@@ -385,6 +401,8 @@ def pdf_text(work, data):
 def ocr(work):
     """OCR text of work/in.pdf, pages joined by form feeds."""
     # ponytail: renders every page before OCR, so temp space grows with page count; render page ranges if books matter
+    for old in work.glob("page-*.png"):
+        old.unlink()
     run([shutil.which("pdftoppm"), "-r", "300", "-png", str(work / "in.pdf"), str(work / "page")])
     tess = shutil.which("tesseract")
     have = run([tess, "--list-langs"]).split()
@@ -430,13 +448,13 @@ def pdf_dates(data):
     found = []
     for info, xmp in ((rb"/CreationDate\s*\(\s*D:(\d{4})(\d{2})?(\d{2})?", rb"xmp:CreateDate[>=\"'\s]+(\d{4})-?(\d{2})?-?(\d{2})?"),
                       (rb"/ModDate\s*\(\s*D:(\d{4})(\d{2})?(\d{2})?", rb"xmp:ModifyDate[>=\"'\s]+(\d{4})-?(\d{2})?-?(\d{2})?")):
-        m = re.search(info, data) or re.search(xmp, data)
-        found.append(day("-".join(x.decode() for x in m.groups() if x)) if m else "")
+        hits = list(re.finditer(info, data)) or list(re.finditer(xmp, data))  # an incremental update appends its info last
+        found.append(day("-".join(x.decode() for x in hits[-1].groups() if x)) if hits else "")
     return tuple(found)
 
 
-def convert(work, data, ctype, base, paths, arxiv=None):
-    """What a downloaded body gives (see got), after the checks."""
+def convert(work, data, ctype, base, paths, want_pdf=False):
+    """What a downloaded body gives (see got), after the checks; an HTML body fails when a PDF was asked for."""
     mime = ctype.split(";")[0].strip().lower()
     if b"%PDF-" in data[:1024]:
         created, modified = pdf_dates(data)
@@ -452,7 +470,7 @@ def convert(work, data, ctype, base, paths, arxiv=None):
                    final=base, published=created, modified=modified)
     if re.search(rb"<!doctype html|<(?:html|head|body)\b", data[:4096], re.I):
         title, text = html_md(data, ctype, base)
-        if arxiv or "pdf" in mime or any(p.endswith(".pdf") for p in paths):
+        if want_pdf or "pdf" in mime or any(p.endswith(".pdf") for p in paths):
             raise Fail(f"expected PDF, got an HTML page: {title or 'no title'}")
         check(title, text)
         published, modified = html_dates(data, ctype)
@@ -526,8 +544,11 @@ def egress(text):
 
 
 def doi_of(src):
-    """The DOI in a doi.org URL, a doi: name or a bare DOI, else None."""
-    m = re.fullmatch(r"(?:https?://(?:dx\.)?doi\.org/|doi:)?(10\.\d{4,9}/\S+)", src.strip(), re.I)
+    """The DOI in a doi.org URL (percent-decoded), a doi: name or a bare DOI, else None."""
+    s = src.strip()
+    if re.match(r"https?://", s, re.I):
+        s = urllib.parse.unquote(s)
+    m = re.fullmatch(r"(?:https?://(?:dx\.)?doi\.org/|doi:)?(10\.\d{4,9}/\S+)", s, re.I)
     return m.group(1) if m else None
 
 
@@ -544,16 +565,18 @@ def oa_kind(loc):
 
 
 def oa_order(w):
-    """The open-access locations of an OpenAlex work, best first: published, accepted, submitted, then unknown
-    versions; within each, repository copies (arXiv included) before other hosts and publisher pages, which often bot-check."""
+    """The open-access locations of an OpenAlex work, best first: those with a PDF link before those with only a
+    landing page (often a record or abstract page); within each, published, accepted, submitted, then unknown
+    versions, and repository copies (arXiv included) before other hosts and publisher pages, which often bot-check."""
     kinds = {"repository": 0, "other": 1, "publisher": 2}
     locs = [loc for loc in w.get("locations") or [] if isinstance(loc, dict) and loc.get("is_oa")
             and (loc.get("pdf_url") or loc.get("landing_page_url"))]
-    return sorted(locs, key=lambda loc: (OA_RANKS.get(loc.get("version"), 3), kinds[oa_kind(loc)]))
+    return sorted(locs, key=lambda loc: (not loc.get("pdf_url"), OA_RANKS.get(loc.get("version"), 3), kinds[oa_kind(loc)]))
 
 
 def openalex_work(doi):
-    """A DOI's OpenAlex record (a lookup by id costs no credits), or {} when OpenAlex cannot give it."""
+    """A DOI's OpenAlex record (a lookup by id costs no credits); {} when OpenAlex does not know the DOI,
+    None when it could not be asked (an error, a rate limit, a reply that is not JSON)."""
     params = {"select": "id,type,is_retracted,locations"}
     key = os.environ.get("OPENALEX_API_KEY", "").strip()
     if key:
@@ -561,25 +584,29 @@ def openalex_work(doi):
     path = urllib.parse.quote("doi:" + doi.lower(), safe="/:")  # DOIs are case-insensitive
     try:
         w = json.loads(get(f"{OPENALEX}/works/{path}?{urllib.parse.urlencode(params)}")[0])
-    except (Fail, ValueError):
-        return {}
-    return w if isinstance(w, dict) else {}
+    except Fail as e:
+        return {} if str(e) == HTTP_REASONS[404] else None
+    except ValueError:
+        return None
+    return w if isinstance(w, dict) else None
 
 
 def load_doi(work, doi):
     """A DOI: its open-access copies first (published, accepted, then submitted versions), then the publisher's page."""
     w = openalex_work(doi)
-    late = ["retracted"] * bool(w.get("is_retracted"))
+    late = ["unchecked"] if w is None else ["retracted"] * bool(w.get("is_retracted"))
     names = {"publishedVersion": "published", "acceptedVersion": "accepted", "submittedVersion": "submitted"}
     failed = 0
-    for loc in oa_order(w):
+    for n, loc in enumerate(oa_order(w or {})):
+        sub = work / f"copy{n}"  # each copy gets its own folder, so no tool output carries over
+        sub.mkdir()
         try:
-            r = load_url(work, loc.get("pdf_url") or loc.get("landing_page_url"))
-        except Fail:
+            r = load_url(sub, loc.get("pdf_url") or loc.get("landing_page_url"), want_pdf=bool(loc.get("pdf_url")))
+        except (Fail, ValueError):  # a malformed URL from OpenAlex counts as a copy that failed
             failed += 1
             continue
         version = names.get(loc.get("version"), "")
-        r["marks"] += [f"{version}-copy" if version else "copy"] + late
+        r["marks"] += [f"{version}-copy" if version else "copy"] + ["landing-page"] * (not loc.get("pdf_url")) + late
         r["version"] = version or r["version"]
         return r
     try:
@@ -608,9 +635,11 @@ def load(work, src):
     return load_url(work, src)
 
 
-def load_url(work, src):
-    """What one URL gives, after the egress and host checks."""
+def load_url(work, src, want_pdf=False):
+    """What one URL gives, after the egress and host checks; want_pdf refuses an HTML answer."""
     egress(src)
+    if not re.match(r"https?://[^/?#\s]", src, re.I):
+        raise Fail("not an http(s) URL")
     if reason := refused(src):
         raise Fail(reason)
     u = urllib.parse.urlsplit(src)
@@ -626,12 +655,12 @@ def load_url(work, src):
         return load_arxiv(work, abs_pdf[1])
     data, ctype, final = get(src)
     paths = [urllib.parse.urlsplit(x).path.lower() for x in (src, final)]
-    return convert(work, data, ctype, final, paths)
+    return convert(work, data, ctype, final, paths, want_pdf)
 
 
 def arxiv_version(url):
     """arXiv vN from an arXiv URL that names a version, else arXiv."""
-    m = re.search(r"/(?:abs|pdf|html)/[^/?#]*?(v\d+)(?:\.pdf)?/?(?:[?#]|$)", url)
+    m = re.search(r"/(?:abs|pdf|html)/(?:[\w.-]+/)?[^/?#]*?(v\d+)(?:\.pdf)?/?(?:[?#]|$)", url)
     return f"arXiv {m[1]}" if m else "arXiv"
 
 
@@ -645,7 +674,7 @@ def arxiv_html(work, arxiv):
     notice = next((n for n in ARXIV_NOTICES if n in head), None)
     if notice:
         raise Fail(f"conversion notice: {notice}")
-    check(title, text)
+    check("", text)  # a paper's title may read like a wall phrase; the body checks still apply
     published, modified = html_dates(data, ctype)
     return got({".md": text}, text, "arxiv-html", ["arxiv-html"], final=final, published=published, modified=modified,
                version=arxiv_version(final))
@@ -659,7 +688,7 @@ def load_arxiv(work, arxiv):
         html_why = e
     try:
         data, ctype, final = get(f"{ARXIV}/pdf/{arxiv}")
-        r = convert(work, data, ctype, final, [urllib.parse.urlsplit(final).path.lower()], arxiv)
+        r = convert(work, data, ctype, final, [urllib.parse.urlsplit(final).path.lower()], True)
     except Fail as e:
         raise Fail(f"arXiv HTML: {html_why}; PDF: {e}") from None
     r["version"] = arxiv_version(final)
@@ -701,13 +730,15 @@ def fetch(sources, name, src):
         raise Fail("bad name")
     local = not re.match(r"https?://", src, re.I) and not (doi_of(src) and not Path(src).expanduser().exists())
     rows, key = read_index(sources), None if local else source_key(src)
-    for row in reversed(rows):
-        files = [f for f in row["files"].split(",") if f and f != "-"]
-        if key and source_key(row["url"]) == key and files and all((sources / f).is_file() for f in files):
-            readable = next((f for f in files if f.endswith((".md", ".txt")) and not f.endswith(".layout.txt")), files[0])
+    newest = list({row["name"]: row for row in rows}.values())  # a name fetched again replaces its older rows
+    for row in reversed(newest):
+        files = row["files"].split(",")
+        readable = next((f for f in files if f in (row["name"] + ".md", row["name"] + ".txt")), None)
+        if key and readable and source_key(row["url"]) == key and (sources / readable).is_file():
             text = (sources / readable).read_text(encoding="utf-8", errors="replace")
             return ok_line(row["name"], readable, text, [m for m in row["marks"].split(",") if m not in ("", "-")] + ["reused"])
-    old = [p.name for p in sorted(sources.glob(f"{name}.*")) if p.stem.lower() in (name, f"{name}.layout")]
+    old = [p.name for p in sorted(sources.glob(f"{name}.*"))
+           if p.stem.lower() == name or p.name.lower() == f"{name}.layout.txt"]
     if old:
         holder = next((row for row in reversed(rows) if row["name"] == name), None)
         raise Fail(f"exists: {old[0]}" + (f", fetched from {holder['url']}" if holder else ""))
@@ -721,17 +752,17 @@ def fetch(sources, name, src):
                 (staged / f"{name}{suffix}").write_text(body, encoding="utf-8", newline="")
             else:
                 (staged / f"{name}{suffix}").write_bytes(body)
-        for f in sorted(staged.iterdir()):
-            shutil.move(str(f), str(sources / f.name))
-    doi = doi_of(src)
-    url = f"local:{Path(src).name}" if local else f"https://doi.org/{doi}" if doi else src
-    fetched = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    cells = [name, url, r["final"], fetched, r["published"], r["modified"], r["extraction"], r["version"],
-             ",".join(r["marks"]), ",".join(f"{name}{s}" for s in sorted(r["files"]))]
-    index = sources / INDEX
-    head = "" if index.is_file() else "\t".join(INDEX_HEAD) + "\n"
-    with index.open("a", encoding="utf-8", newline="") as f:
-        f.write(head + "\t".join(clean(c, 500) or "-" for c in cells) + "\n")
+        doi = doi_of(src)
+        url = f"local:{Path(src).name}" if local else f"https://doi.org/{doi}" if doi else src
+        fetched = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        cells = [name, url, r["final"], fetched, r["published"], r["modified"], r["extraction"], r["version"],
+                 ",".join(r["marks"]), ",".join(f"{name}{s}" for s in sorted(r["files"]))]
+        index = sources / INDEX
+        head = "" if index.is_file() else "\t".join(INDEX_HEAD) + "\n"
+        with index.open("a", encoding="utf-8", newline="") as out:  # opened first: an index that cannot be written stops the fetch here
+            for f in sorted(staged.iterdir()):
+                shutil.move(str(f), str(sources / f.name))
+            out.write(head + "\t".join(clean(c, None if i in (1, 2) else 500) or "-" for i, c in enumerate(cells)) + "\n")
     readable = next(f"{name}{s}" for s, body in r["files"].items() if isinstance(body, str))
     return ok_line(name, readable, r["text"], r["marks"])
 

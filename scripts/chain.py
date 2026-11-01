@@ -15,9 +15,10 @@ Rows, tab-separated: <year> <cited_by_count> <W id> <title> <doi or -> <free pdf
   <flags or ->, flags from: retracted, preprint, erratum (also retraction notices), comment (letters, editorials,
   peer reviews, paratext), accepted-copy (an open-access accepted manuscript exists)
 oa rows: <published|accepted|submitted|-> <repository|publisher|other> <pdf url or -> <landing url or -> <source or ->
-  <license or ->, published before accepted before submitted, repository copies (arXiv included) first in each
+  <license or ->, copies with a PDF link first, then landing pages; in each, published before accepted before
+  submitted, and repository copies (arXiv included) first
 Other lines, a label and then tab-separated fields:
-  # work <W id> <year> <title>                   first line of refs, cites and oa
+  # work <W id> <year> <title> <flags or ->      first line of refs, cites and oa
   # author <A id> <name> <institution or -> <N> works
   # other matches <A id> <name> (<institution>)  one field; up to 3 lines after the author line
   # note: ...                                    zero results
@@ -189,12 +190,13 @@ def oa_kind(loc):
 
 
 def oa_order(w):
-    """The open-access locations of an OpenAlex work, best first: published, accepted, submitted, then unknown
-    versions; within each, repository copies (arXiv included) before other hosts and publisher pages, which often bot-check."""
+    """The open-access locations of an OpenAlex work, best first: those with a PDF link before those with only a
+    landing page (often a record or abstract page); within each, published, accepted, submitted, then unknown
+    versions, and repository copies (arXiv included) before other hosts and publisher pages, which often bot-check."""
     kinds = {"repository": 0, "other": 1, "publisher": 2}
     locs = [loc for loc in w.get("locations") or [] if isinstance(loc, dict) and loc.get("is_oa")
             and (loc.get("pdf_url") or loc.get("landing_page_url"))]
-    return sorted(locs, key=lambda loc: (OA_RANKS.get(loc.get("version"), 3), kinds[oa_kind(loc)]))
+    return sorted(locs, key=lambda loc: (not loc.get("pdf_url"), OA_RANKS.get(loc.get("version"), 3), kinds[oa_kind(loc)]))
 
 
 def flags(w):
@@ -230,6 +232,8 @@ def inst(a):
 def work_key(s):
     """'W123' or the bare DOI when s is a work id, an openalex.org URL, a DOI (doi: prefix allowed) or a doi.org URL; else None."""
     s = s.strip()
+    if re.match(r"https?://", s, re.I):
+        s = urllib.parse.unquote(s)  # a doi.org link may carry its DOI percent-encoded
     m = re.fullmatch(r"(?:https?://openalex\.org/)?(W\d+)", s, re.I)
     if m:
         return m.group(1).upper()
@@ -258,12 +262,13 @@ def title_query(q):
 
 def find(q):
     egress(q)
+    egress(title_query(q))  # cleaning turns commas and pipes into spaces, which can form a listed term
     key = work_key(q)
     show([work(key)] if key else works("title.search:" + title_query(q), 5), NOTE_NO_MATCH)
 
 
 def header(w):
-    print(f"# work\t{cell(short(w.get('id')))}\t{cell(w.get('publication_year'))}\t{cell(w.get('display_name'), 200)}")
+    print(f"# work\t{cell(short(w.get('id')))}\t{cell(w.get('publication_year'))}\t{cell(w.get('display_name'), 200)}\t{flags(w)}")
 
 
 def chain(kind, key, n, sort="cited", since=None):

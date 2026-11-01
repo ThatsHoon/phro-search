@@ -43,12 +43,12 @@ One label per source, no scores; the reader decides what to trust by reading the
 - `summary`: collected or restated knowledge (explainers, roundups, encyclopedias, glossaries). Good for finding what to follow backward; back claims with `first-hand` or `paper` sources where possible.
 - `official`: documents and announcements by the maker of a tool or product.
 
-Marks after the label, when known: `retracted` (OpenAlex marks the work retracted: it never backs a required or central claim), `preprint` (a submitted version, such as fetch.py's submitted-copy: quote the published version when one exists), `examples` (the writer's own work is shown; read these first when the user wants how skilled people do it), `measured` (the writer's own measurements or comparisons), `self-reported` (a score or feature stated by its own authors), `ai-assisted` (the writer says an AI wrote it), `promo` (leads to something the writer sells), `unread` (downloaded, read by nobody yet), `auto-captions` (automatic captions: frequent errors, quote only what is legible, have the user check the video), `unverified` (from a search report, not read in the original).
+Marks after the label, when known: `retracted` (OpenAlex marks the work retracted: it never backs a required or central claim), `preprint` (a submitted version, such as fetch.py's submitted-copy: quote the published version when one exists), `landing-page` (fetch.py took the copy from a landing page: check that it holds the full text, not only a record), `unchecked` (fetch.py could not ask OpenAlex, so neither copies nor a retraction were checked), `examples` (the writer's own work is shown; read these first when the user wants how skilled people do it), `measured` (the writer's own measurements or comparisons), `self-reported` (a score or feature stated by its own authors), `ai-assisted` (the writer says an AI wrote it), `promo` (leads to something the writer sells), `unread` (downloaded, read by nobody yet), `auto-captions` (automatic captions: frequent errors, quote only what is legible, have the user check the video), `unverified` (from a search report, not read in the original).
 
 ## File names and locations
 
 - `<author>-<year>-<short-title>` in lowercase ASCII with hyphens; arXiv papers `arxiv-<id>-<short-title>`.
-- A PDF gives `<name>.pdf`, `<name>.txt` (its text in reading order: grep and quote this) and `<name>.layout.txt` (page layout, table rows kept); an arXiv paper read from its HTML version gives `<name>.md`.
+- A PDF gives `<name>.pdf`, `<name>.txt` (its text in reading order: grep and quote this) and `<name>.layout.txt` (page layout, table rows kept); an OCR'd PDF gives no layout copy; an arXiv paper read from its HTML version gives `<name>.md`.
 - A location is `sources/<file>:<line>`; video captions are located by time, `sources/<file>.md [12:34]`.
 
 ## log.md
@@ -81,7 +81,7 @@ The `brief:` and `feedback:` lines start at column 0 so that later intakes can g
 
 ## sources/index.tsv
 
-Written by `fetch.py`, one row per fetched source, never edited by hand: a header line, then `name`, `url` (as asked: a URL, `https://doi.org/<doi>` or `local:<file name>`), `final` (the URL read), `fetched` (UTC), `published` and `modified` (as the page or the PDF states them, `-` when it does not), `extraction` (pdftotext, ocr, html, arxiv-html, text or captions), `version` (published, accepted or submitted for an open-access copy, `arXiv vN`, or `-`), `marks` and `files`, tab-separated. The evidence page shows each quote's dates from it.
+Written by `fetch.py`, one row per fetched source, never edited by hand: a header line, then `name`, `url` (as asked: a URL, `https://doi.org/<doi>` or `local:<file name>`), `final` (the URL read), `fetched` (UTC), `published` and `modified` (as the page or the PDF states them, `-` when it does not), `extraction` (pdftotext, ocr, html, arxiv-html, text or captions), `version` (published, accepted or submitted for an open-access copy, `arXiv vN`, `arXiv` when the URL names no version, or `-`), `marks` and `files`, tab-separated. A PDF's published and modified dates are the file's own creation and change dates. A reused source adds no row, and a name fetched again gets a new row that replaces the older one. The evidence page shows each quote's dates and a retracted mark from it.
 
 ## extracts.json
 
@@ -111,7 +111,7 @@ Written by `fetch.py`, one row per fetched source, never edited by hand: a heade
 ```
 
 - Ids run c1, c2 and on in the order the findings are taken, and are never reused in a topic.
-- `importance` is `central` (the answer rests on it: at most 10, each located in extracts.json), `supporting` or `tangential`.
+- `importance` is `central` (the answer rests on it: at most 10 in one report's view, each located in that view, `extracts-<stem>.json`), `supporting` or `tangential`.
 - `votes` holds only replies that parsed, at most 3, each with `checked`, the day the verifier ran. `verdict`: 2 refutations, `refuted`; fewer than 2 votes, `unverified`; otherwise `survived`. A claim never sent to verifiers has no votes and no verdict.
 
 ## notes/<subtopic>.md (report)
