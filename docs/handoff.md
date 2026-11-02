@@ -61,6 +61,12 @@ State on 2026-11-02, for the next session that continues this work.
   - Duplicate rules cut.
   - Maintainer notes removed from the skill.
   - It found no broken pointers and no command or flag the scripts reject.
+- 0.5.0 cut a report's cost and noise, from one measured run (30 votes, 0 refuted; the time went to hand work in the main session):
+  - One verifier per central claim; a refuted, low-confidence or missing reply gets two more. The word 정밀, deep or thorough keeps three from the start.
+  - A default run takes 5 central claims and 20 in a view; a deep run 10 and 40, which report.py enforces.
+  - `scripts/locate.py` replaces hand grep and hand-written claims.json and view.
+  - plan_line.py reads the transcript again for about 2 s before it blocks, since a plan line in the same message can arrive after its calls.
+  - Risk: a claim can now survive on one vote, and the false-survival rate of a single verifier has not been measured. The planted verifier set (below) measures it: the FALSE line's "votes not refuting".
 
 ## Open: the owner decides
 

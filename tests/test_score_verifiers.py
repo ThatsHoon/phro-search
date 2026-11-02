@@ -52,6 +52,13 @@ class VerifierScoreTest(unittest.TestCase):
         self.assertEqual(out[-1], "R6\tfalse refutations of true claims 1/3 33.3% of verdicts\tthreshold 10%\tcrossed\t"
                                   "switch to: refuted needs a stated reason from the check list; could not check is no vote")
 
+    def test_a_single_vote_follows_the_rule(self):
+        self.assertEqual(score.verdict([False]), "survived")
+        self.assertEqual(score.verdict([False], low=True), "unverified")
+        self.assertEqual(score.verdict([True]), "unverified")
+        self.claims.write_text(json.dumps([{"id": "c1", "votes": [dict(vote(False), confidence="low")]}]), encoding="utf-8")
+        self.assertIn("CLAIM\tc1\ttrue\trefuted 0/1\tunverified\tno verdict", self.run_score()[1])
+
     def test_verdict_from_votes_not_the_file(self):
         claims = [dict(c, verdict="survived") for c in CLAIMS]  # a stale verdict field
         self.claims.write_text(json.dumps(claims), encoding="utf-8")

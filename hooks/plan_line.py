@@ -1,8 +1,9 @@
 """PreToolUse check for Agent, WebSearch and WebFetch: once a run of the search skill has loaded its mode reference, the
 plan line (SKILL.md, Routing step 4) must be in the transcript before the call goes out. Exit 2 blocks and tells the
 model why; anything unreadable lets the call through, since this guards a habit and not a boundary. The probe comes
-before the mode reference, so it passes. A Bash call to a script is not seen: R17 keeps hooks off Bash."""
-import json, re, sys
+before the mode reference, so it passes. A Bash call to a script is not seen: R17 keeps hooks off Bash. A message's text
+can reach the transcript just after its tool calls go out, so a miss is read again for about 2 s before it blocks."""
+import json, re, sys, time
 
 MODE_REFERENCE = re.compile(r"[\\/]references[\\/](dig|report|pulse|docs|models|watch)\.md$")
 PLAN = re.compile(r"^PLAN: ", re.M)
@@ -34,15 +35,17 @@ def owed(lines):
 def main():
     try:
         path = json.load(sys.stdin)["transcript_path"]
-        with open(path, encoding="utf-8", errors="replace") as f:
-            due = owed(f)
+        for _ in range(10):
+            with open(path, encoding="utf-8", errors="replace") as f:
+                if not owed(f):
+                    return 0
+            time.sleep(.2)
     except (OSError, ValueError, KeyError, TypeError):
         return 0
-    if due:
-        print("phro-search: no plan line yet, so retrying is blocked too. Make your next message text only, starting with "
-              "PLAN: <mode>; <rounds, agents or steps>; ceiling <n> <calls>. Then repeat this call.", file=sys.stderr)
-        return 2
-    return 0
+    print("phro-search: no plan line yet, so retrying is blocked too. Start your next message with "
+          "PLAN: <mode>; <rounds, agents or steps>; ceiling <n> <calls>, with a harmless read such as the topic's map.md "
+          "if nothing else is due, and repeat this call in the message after it.", file=sys.stderr)
+    return 2
 
 
 if __name__ == "__main__":

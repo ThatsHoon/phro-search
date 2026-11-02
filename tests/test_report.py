@@ -305,7 +305,9 @@ class ClaimsTest(unittest.TestCase):
 
     def test_verdict_must_follow_the_votes(self):
         cases = [([vote(True), vote(True), vote(False)], "survived", "refuted"),
-                 ([vote(False)], "survived", "unverified"),
+                 ([vote(False)], "unverified", "survived"),  # one vote that holds is enough
+                 ([vote(False, confidence="low")], "survived", "unverified"),  # unless it doubts itself
+                 ([vote(True)], "survived", "unverified"),  # one refutation alone settles nothing
                  ([], "refuted", "unverified"),
                  ([vote(False), vote(True)], None, "survived")]
         for votes, stored, expected in cases:
@@ -336,6 +338,10 @@ class ClaimsTest(unittest.TestCase):
         out = self.report(self.topic([claimed(i, verdict="unverified") for i in ids], ids=ids))[1]
         self.assertIn("CLAIM\tclaims.json\t11 central claims in this view (limit 10)", out)
         self.assertEqual(self.report(self.topic([claimed(i, verdict="unverified") for i in ids], ids=ids[:2]))[0], 0)
+        ids = [f"c{i}" for i in range(1, 42)]
+        out = self.report(self.topic([claimed(i, "supporting") for i in ids], ids=ids))[1]
+        self.assertIn("CLAIM\tclaims.json\t41 claims in this view (limit 40)", out)
+        self.assertEqual(self.report(self.topic([claimed(i, "supporting") for i in ids], ids=ids[:40]))[0], 0)
 
     def test_dig_view_beside_a_report_claims_file(self):
         # A dig's extracts.json cites no claim ids, so a report's claims.json beside it no longer blocks its page.

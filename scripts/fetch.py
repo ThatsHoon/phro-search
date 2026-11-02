@@ -49,7 +49,7 @@ import argparse, datetime, html.parser, http.client, json, os, re, shutil, socke
 import unicodedata, urllib.error, urllib.parse, urllib.request
 from pathlib import Path
 
-VERSION = "0.4.0"
+VERSION = "0.5.0"
 ARXIV = "https://arxiv.org"
 OPENALEX = "https://api.openalex.org"
 DOI = "https://doi.org"

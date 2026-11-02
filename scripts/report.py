@@ -7,11 +7,12 @@ Usage:
 
 When the topic has a claims.json (report mode), a claim in a view may carry its "id";
 the page then shows that claim's verdict and votes. Every claims.json claim is checked:
-each verdict must follow from its votes (2 refutations: refuted; fewer than 2 votes:
-unverified; else survived), at most 3 votes, and a vote's "checked" date written
-YYYY-MM-DD. The claims a view cites are checked too: every id is in claims.json, each
-central one has a quote in the view that is not marked retracted, and the view cites at
-most 10 central claims. In any view, a sourced claim needs a quote from a source that is not
+each verdict must follow from its votes (2 refutations: refuted; one vote that holds with
+high or medium confidence: survived; any other single vote or none: unverified; else
+survived), at most 3 votes, and a vote's "checked" date written YYYY-MM-DD. The claims a
+view cites are checked too: every id is in claims.json, each central one has a quote in the
+view that is not marked retracted, and the view cites at most 10 central claims and 40 in
+all, the limits of a deep run. In any view, a sourced claim needs a quote from a source that is not
 retracted whose support (from the support pass) is full, and a claim whose quotes all come
 from retracted sources cannot be sourced or partial. A quote's qualifier, the sentence that limits it, is checked like a quote.
 The page shows each source's dates from sources/index.tsv when there is one, with the snapshot date of an
@@ -44,7 +45,7 @@ import re
 import sys
 import urllib.parse
 
-VERSION = "0.4.0"
+VERSION = "0.5.0"
 
 _CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\U0000061c\U0000200b-\U0000200f\U0000202a-\U0000202e\U00002060-\U00002064\U00002066-\U00002069\U0000feff]")
 _QUOTES = str.maketrans("\U00002018\U00002019\U0000201a\U0000201b\U00002032\U0000201c\U0000201d\U0000201e\U0000201f\U00002033\U0000ff02\U0000ff07", "'''''\"\"\"\"\"\"'")
@@ -72,7 +73,7 @@ VOTE = {"refuted": bool, "confidence": str, "evidence": str, "counter_source?": 
 INDEX_HEAD = ("name", "url", "final", "fetched", "published", "modified", "extraction", "version", "marks", "files")
 IMPORTANCE = ("central", "supporting", "tangential")
 VERDICTS = ("survived", "refuted", "unverified")
-MAX_CENTRAL, MAX_VOTES = 10, 3
+MAX_CENTRAL, MAX_CITED, MAX_VOTES = 10, 40, 3
 ELLIPSIS = "\U00002026"
 # A caption timestamp, then a list marker: a bullet glyph, or -, *, +, 1. or 1) with whitespace after it.
 _LEAD = re.compile(r"^\s*(?:\[(?:\d+:)?\d+:\d\d\])?\s*(?:[\U000000b7\U00002022\U00002023\U00002043\U000025a0\U000025a1"
@@ -178,8 +179,13 @@ def load_claims(path):
 
 
 def verdict(votes):
-    """The vote rule: 2 refutations kill a claim; fewer than 2 votes leave it unverified, never refuted."""
-    return "refuted" if sum(v["refuted"] for v in votes) >= 2 else "unverified" if len(votes) < 2 else "survived"
+    """The vote rule: 2 refutations kill a claim; one vote keeps it only if it holds and is not low in confidence;
+    any other single vote or none leaves it unverified, never refuted."""
+    if sum(v["refuted"] for v in votes) >= 2:
+        return "refuted"
+    if len(votes) == 1 and not votes[0]["refuted"] and str(votes[0].get("confidence")).lower() != "low":
+        return "survived"
+    return "unverified" if len(votes) < 2 else "survived"
 
 
 def index_rows(src):
@@ -201,7 +207,7 @@ def claim_problems(claims, data, flagged=frozenset()):
     """Where the claims break the rules, as (where, reason) pairs: in the view, a sourced or partial claim whose quotes
     all come from retracted sources (marked so in the quote, or in sources/index.tsv: flagged); with claims.json, every
     claim's votes and verdict, and for the claims the view cites a known id, a quote from a source that is not
-    retracted for each central one, and at most MAX_CENTRAL central ones."""
+    retracted for each central one, at most MAX_CENTRAL central ones and at most MAX_CITED in all."""
     def retracted(q):
         return q["file"] in flagged or bool(re.search(r"\bretracted\b", q.get("mark") or "", re.I))
     out = []
@@ -226,6 +232,8 @@ def claim_problems(claims, data, flagged=frozenset()):
     central = [i for i in cited if claims[i]["importance"] == "central"]
     if len(central) > MAX_CENTRAL:
         out.append(("claims.json", f"{len(central)} central claims in this view (limit {MAX_CENTRAL})"))
+    if len(cited) > MAX_CITED:
+        out.append(("claims.json", f"{len(cited)} claims in this view (limit {MAX_CITED})"))
     for c in claims.values():
         where = f'claims.json {clean(c["id"], 40)}'
         if c["id"] in central and not cited[c["id"]]:

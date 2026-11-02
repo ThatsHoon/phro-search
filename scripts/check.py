@@ -35,7 +35,7 @@ space (U+00A0, U+202F) or a soft hyphen in a quote line is allowed, since a quot
 import argparse, itertools, json, re, sys, urllib.parse
 from pathlib import Path
 
-VERSION = "0.4.0"
+VERSION = "0.5.0"
 
 # One hit fails. English entries match whole words; Korean entries match anywhere in the text.
 HARD_PHRASES = [

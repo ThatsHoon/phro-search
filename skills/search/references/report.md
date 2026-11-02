@@ -1,6 +1,6 @@
 # report
 
-A decision-ready answer from many sources. Researchers gather findings with exact quotes; every cited page is archived and each quote located in it; the claims the answer rests on are attacked by three verifiers each; this session writes the report on what survived. Researchers run as `phro-search:web-gatherer`, verifiers as `phro-search:verifier`, the support pass as `phro-search:local-reader`.
+A decision-ready answer from many sources. Researchers gather findings with exact quotes; every cited page is archived and each quote located in it; the claims the answer rests on are attacked by one verifier each, and two more when the first doubts it; this session writes the report on what survived. Researchers run as `phro-search:web-gatherer`, verifiers as `phro-search:verifier`, the support pass as `phro-search:local-reader`.
 
 ## Before spawning
 
@@ -15,9 +15,10 @@ A decision-ready answer from many sources. Researchers gather findings with exac
 | options, entities or regions taken one by one | one per option, at most 5, plus one for head-to-head comparisons when they exist, and the independent viewpoint when the options are a choice |
 | a large set to enumerate | at most 6 slices along a natural split (kind, year, region) |
 
+- Depth: a default run takes at most 5 central claims and 20 claims in a view. A request for a precise, deep or thorough report, in any language, makes it a deep run: at most 10 central claims, 40 in a view, and three verifiers per central claim from the start.
 - Checkpoint: show the subtopics and the decision criteria in one round before spawning. Skip it when the user's brief already named them or there is no user to answer; log the skip and why.
 - Log `research`, `archive`, `verify` and `write` sections in the round's shape of log.md (spawned, came back, fetched, decisions); `verify` adds `votes: <n> central claims; <s> survived, <r> refuted, <u> unverified; <m> missing votes`.
-- Plan line: "PLAN: report; 5 researchers, up to 2 support readers, up to 30 verifier calls; ceiling 39 agent calls", with the researcher count from the table and the ceiling 34 above it (it counts the researchers, at most 2 for a gap round, a support reader and one more for reworded claims, and 3 verifiers for each of at most 10 central claims).
+- Plan line: "PLAN: report; 5 researchers, up to 2 support readers, up to 15 verifier calls; ceiling 24 agent calls", with the researcher count from the table and the ceiling 19 above it (it counts the researchers, at most 2 for a gap round, a support reader and one more for reworded claims, and up to 3 verifiers for each of at most 5 central claims). A deep run says up to 30 verifier calls and puts the ceiling 34 above.
 
 ## Research
 
@@ -41,7 +42,7 @@ Takeaway: <one or two sentences>
 - F<n>. <one falsifiable claim>. Quote: "<the sentence from the page that states it, copied exactly in its own language>" <URL> (<paper | official | first-hand | observed | summary>)
 Inferences: <what follows, marked as inference>
 Gaps: <what you looked for and did not find, with the queries tried>
-Keep each finding on one line. A finding without a URL and an exact quote goes under Gaps.
+Keep each finding on one line, with nothing between `Quote:` and the opening quotation mark. A finding without a URL goes under Gaps. When your fetch tool only summarized the page, you have no exact words: write `Quote: none.` before the URL and never present the summary as a quote.
 Reply with the notes, then one line per key question: answered, partly or gap.
 ```
 
@@ -50,9 +51,9 @@ One gap round at most: 1 or 2 researchers, only for a key question left without 
 ## Archive and locate
 
 1. Collect the URLs of the finding lines; one per host and path. Fetch at most 25 with `fetch.py <topic>/sources <name> <url>`, passing a paper's DOI so its legal open-access copies come first: first the pages behind findings the answer would rest on, then by label (paper, official, first-hand before summary). Reuse what `sources/` already holds; never download again. Every FAIL goes to `log.md`; a walled page behind a likely central finding goes to the user's browser, as in dig.
-2. Locate each finding: grep a distinctive phrase of its quote in the fetched copy (`grep -n -F -e "<phrase>" -e "<phrase>" <topic>/sources/<file>` for several at once), read a few lines around a hit, and take the text exactly as the copy has it. Not found (the page changed, the researcher paraphrased, the fetch failed): the finding stays URL-only.
-3. Write `claims.json`: one entry per finding the report may use. Importance:
-   - central: the answer would change if it were false; at most 10 in one report's view, each located in that view (`extracts-<stem>.json`); a URL-only finding is never central, nor is one whose source is retracted;
+2. Locate the findings: `locate.py <topic>` lists each one as FOUND with its place, or MISS with the reason. For a MISS that names a nearest line, read that line: if the page states the claim there, give its text exactly as the pick's `quotes`. Otherwise the finding stays URL-only.
+3. Pick the findings the report may use, in a picks file (its shape is in `locate.py --help`), and run `locate.py <topic> <stem> --picks <file>`. It adds new ids to `claims.json` and writes the report's view. A URL-only finding the report still uses goes into `claims.json` by hand. Importance:
+   - central: the answer would change if it were false; at most 5 in one report's view (10 in a deep run), each located in that view (`extracts-<stem>.json`); a URL-only finding is never central, nor is one whose source is retracted;
    - supporting: backs a section;
    - tangential: context.
 
@@ -65,7 +66,7 @@ One gap round at most: 1 or 2 researchers, only for a key question left without 
 
    - Ids run c1, c2 and on in the order the findings are taken, and are never reused in a topic. `claim` is English; `quote` is the located text, or the researcher's copy when unlocated.
    - `votes` holds only replies that parsed, at most 3, each with `checked`, the day the verifier ran; `verdict` follows the vote rule in Verify. A claim never sent to verifiers has no votes and no verdict.
-4. Write the report's view, `extracts-<stem>.json` (the stem of `report-<stem>.md`: the date, then -2 and on), with one claim per located finding, carrying its id, its claim text in the user's language, its located quotes and status `partial` (`sourced` once the support pass in Verify rates a quote full); conflicting findings go side by side under `disagreements`, unfetched pages under `unreached`. Run `report.py <topic> <stem> --check` and fix each MISMATCH by copying the source text exactly.
+4. The view, `extracts-<stem>.json` (the stem of `report-<stem>.md`: the date, then -2 and on), has one claim per pick, carrying its id, its claim text in the user's language, its located quotes and status `partial` (`sourced` once the support pass in Verify rates a quote full); conflicting findings go side by side under `disagreements`, unfetched pages under `unreached`, both given in the picks. Run `report.py <topic> <stem> --check` and fix each MISMATCH by copying the source text exactly.
 
 ## Standards
 
@@ -83,7 +84,7 @@ For a source that is a standard, a specification or an RFC. Families: robotics a
 
 Before any vote, run the support pass (`references/briefs.md`) on every located quote in the view, central and supporting, and write each `support` and `qualifier` into the view. A central claim with no full rating is lowered to supporting, or reworded to what its source says and rated again: one more support pass takes all the reworded claims together, and a reworded claim still below full is lowered to supporting. Only a central claim rated full is sent.
 
-Three verifiers per central claim, one per starting point: counter-evidence; source standing and date; benchmark and marketing. Several claims may share a turn, at most 12 verifiers at once; record a claim's verdict only when each of its three verifiers has replied or been stopped.
+One verifier per central claim, starting from counter-evidence. A claim whose reply is refuted, low in confidence or no vote gets two more, one from source standing and date, one from benchmark and marketing; they are part of this one pass. A deep run sends all three at once. Several claims may share a turn, at most 12 verifiers at once; record a claim's verdict only when every verifier sent for it has replied or been stopped.
 
 ```
 You are a verifier. Try to refute one claim.
@@ -94,12 +95,12 @@ Context from the archived copy: <the located paragraph, from its first line to i
 Start with: <counter-evidence | source standing and date | benchmark and marketing>
 It serves the question: <Q>
 
-A support reader has already checked that the quote states the claim. Search from your starting point, then check, in order: does a credible source contradict it; is the source strong enough for the claim (a maker's page on its own product's results is weak); is it outdated; is it marketing or a picked benchmark. If you are unsure, the claim is refuted. At most 8 tool calls.
+A support reader has already checked that the quote states the claim. Run at least one web search of your own beyond the quoted page. Search from your starting point, then check, in order: does a credible source contradict it; is the source strong enough for the claim (a maker's page on its own product's results is weak); is it outdated; is it marketing or a picked benchmark. If you are unsure, the claim is refuted. At most 8 tool calls.
 Reply with one JSON object and nothing else:
 {"refuted": <true or false>, "confidence": "<high, medium or low>", "evidence": "<one or two sentences on what you checked>", "counter_source": "<URL, only when a source contradicts the claim>"}
 ```
 
-Vote rule: a reply that is missing, not that JSON object, or without a true or false `refuted` is no vote. Record the votes under the claim in `claims.json`, each with today's date as `checked`, then its verdict: 2 refutations, refuted; fewer than 2 votes, unverified (a failed check, never read as refuted); otherwise survived. Verification runs once and is never repeated to rescue a claim; a claim is never reworded after its votes. `report.py` checks every verdict against its votes.
+Vote rule: a reply that is missing, not that JSON object, or without a true or false `refuted` is no vote. Record the votes under the claim in `claims.json`, each with today's date as `checked`, then its verdict: 2 refutations, refuted; one vote that holds with high or medium confidence, survived; any other single vote or none, unverified (a failed check, never read as refuted); otherwise survived. Verification runs once and is never repeated to rescue a claim; a claim is never reworded after its votes. `report.py` checks every verdict against its votes.
 
 ## Write
 

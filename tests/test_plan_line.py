@@ -1,4 +1,4 @@
-import json, os, shutil, subprocess, tempfile, unittest
+import json, os, shutil, subprocess, tempfile, threading, time, unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -42,6 +42,17 @@ class PlanLine(unittest.TestCase):
 
     def test_allows_once_the_plan_line_is_sent(self):
         path = self.transcript(skill(), read(REPORT), say("PLAN: report; 2 rounds; ceiling 9 agent calls"))
+        self.assertEqual(self.run_hook(path).returncode, 0)
+
+    def test_waits_for_a_plan_line_still_being_written(self):
+        path = self.transcript(skill(), read(REPORT))
+        def late():
+            time.sleep(.5)
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(say("PLAN: report; 2 rounds; ceiling 9 agent calls")) + "\n")
+        t = threading.Thread(target=late)
+        t.start()
+        self.addCleanup(t.join)
         self.assertEqual(self.run_hook(path).returncode, 0)
 
     def test_allows_the_probe_before_a_mode_reference(self):
