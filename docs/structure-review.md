@@ -351,6 +351,8 @@ Retiring the competing skills, on the owner's order of 2026-11-02: phro-gcp-mlfl
 
 Install fault found on 2026-11-02 by a routing pass with `--installed` (0/23 in scope, 15.83 USD): with core.autocrlf on Windows the install checked out SKILL.md with CRLF, and Claude Code then registers no skill from it, though the plugin's agents load. An LF copy of the same file registers. Every earlier pass used `--plugin-dir` on an LF working copy, so none saw it. `.gitattributes` now pins every text file to LF.
 
+Routing after the fix, on 2026-11-02, with `--installed --runs 1`, imozuru and huggingface-best moved out and T5.4 pushed: in scope fired 26/28, right mode 25/28; near 0/12; out 0/6; 14.88 USD. Misses: report-ko-3 went to anthropic-skills:docs, docs-en-2 fired nothing. report-ko-1 fired in the wrong mode. One run per prompt does not judge R1, which asks for 3. The install path also changed from the 22/28 baseline, so the gain is not all from the move.
+
 ## Appendix A. Platform facts relied on
 
 Checked in the official Claude Code docs on 2026-11-01.
