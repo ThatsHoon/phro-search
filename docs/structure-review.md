@@ -314,15 +314,33 @@ Consequential, following from the confirmed decisions:
 
 ## 7. Open items
 
-- The subagent_type value for plugin agents is not documented; test it before R3 relies on it.
 - Substitution of ${CLAUDE_PLUGIN_ROOT} in files read with Read is not documented (F6); backlog item 18 removes the dependence.
 - report.md:80 says Claude Code refuses a subagent's write; this is unconfirmed, and R3 makes it moot.
-- The routes and terms of the measured-board candidates (R13) are not checked yet.
 - T5.3's rating of 5 real requests is still open (plan:643).
 
 Settled after the review: the owner reports OpenAlex's daily budget as $1.000 without a key, which matches the 1,000 credits a day that plan:565 measured. Backlog items 1 to 3 were built on the branch claude/optimistic-volta-rio18v on 2026-11-01; the PDF measurement of R9 waits for the owner's topics (dev/pdf_modes.py), so merging that branch is the switch to reading order. P4's OpenAlex source kind for watch (journals and proceedings without a feed) is not built yet and joins backlog item 11. Backlog items 4 to 6 followed on the same branch: agents/ holds the three agents, the skill spawns them by subagent_type, and dev/agent_cost.py splits a session's tokens by agent type for R4's cost-share check. Whether the Agent tool takes the name phro-search:<agent> is still to be seen in the owner's first run.
 
 Backlog items 7 to 15, 17 and 18 followed on the same branch, with the accepted details P2, P4, P7, P8, P10, P11, P12, P14 and P18. Still open, because each needs the owner's machine, data or a live route check: item 16 (trigger phrases wait for a live routing pass with evals/routing and dev/routing.py); MTEB and a measured board for current LLMs (R13); the owner's replay of the T3.5 topic that decides whether the hf lane stays; live checks of chain.py topic and related, the Hugging Face and OpenAlex watch routes and the Wayback route; the R1 runs (gold lists for round-0 recall, the planted verifier set, the routing pass), which the scorers in dev/ grade; R17's check on Windows without Git Bash and a run of hooks/egress.sh in Git Bash; three reruns of the Korean report prompt after the PLAN line change; the README allow rule and the Windows install package names on a real install. Following P18, dig's round-0 default split is now term search plus surveys and textbooks, with the user's language added only when the brief's scope calls for it. A review of the build changed one detail of R9: open-access copies with a PDF link are tried before landing pages of any version, since a landing page is often only a record page, and a copy taken from a landing page is marked so.
+
+Live round on 2026-11-02, on the owner's Windows machine with the plugin installed from this branch.
+
+Passed: `phro-search:local-reader`, `web-gatherer` and `verifier` are accepted as subagent types; chain.py topic and related, the Hugging Face routes, watch's OpenAlex kind and fetch.py's Wayback route answer; `hooks/egress.sh` in Git Bash exits 0 with no list, 2 on a listed term and 0 on a clean query; the winget and scoop package names exist.
+
+Fixed, each with a test that failed first:
+- fetch.py took a deep link redirected to a site's front page as a good page; it is now dead, so Wayback is tried.
+- pulse's hf lane read as partial on every run, because the Hub answers 400 for the current day's daily papers.
+- models.py gave display names a broken Hub link, and called a proprietary license open.
+- The README allow rule did not match on Windows, where the skill calls `python`.
+
+Built: the `arena` board (R13). lmarena-ai/leaderboard-dataset is CC-BY-4.0, keyless and self-measured. The dataset viewer's filter route answered 500 and timed out in most tries, so the board reads the rows route, where the overall category is the first block of the split. Its document config answers 501 and is left out. Display names are not Hub repos, so every row is off the Hub.
+
+Measured:
+- Routing (one run per prompt, 14.08 USD): in-scope firing 22/28, right mode 20/28, near misses 0/12, out of scope 0/6. Reruns after changing the description (9.40 USD): docs-ko-2 fired 3/3 with "소스 코드에서 확인해줘", which replaced "선행 연구 찾아줘" because the guard allows six Korean phrases; dig-ko-2 still fires without it. dig-en-2 fired 2/3 with "canonical papers", and lost the third to imozuru. "check the official docs" changed nothing on docs-en-2 and was cut. Near misses stayed 0/12. Still missed: dig-en-1 to imozuru, models-en-1 to huggingface-best, report-ko-3 to the docs skill, docs-en-2 to no skill. One run per prompt is weak evidence.
+- R9 (`dev/pdf_modes.py`, 94 PDFs): 87 quotes on PDF text; 22 use the ellipsis and 20 of those read as one run in reading order; 7 without it are not found in reading order, mostly line-end hyphens, ligatures, table rows and Japanese spacing.
+- Korean report PLAN line: 0/3 with the full tool set, and 0/3 after stronger wording, which was reverted. Project-only settings and an English prompt also miss it (0/1 each), so neither user style hooks nor language is the cause.
+- hf lane replay of the T3.5 topic: 803 of 878 items, 310 models of which 264 have no likes. Official releases with 64 and 464 likes score 26.6 and 25.9, below a community GGUF with 1 like at 47.9. Clusters changed little.
+
+Left open: MTEB per task. mteb/results (CC0) answers on the filter route, but a task mixes splits and trained_on rows (MSMARCO: dev, test, train), so a per-task board needs a rule for the split and for averaging subsets. The filter route's failures also apply. LiveBench has no data route found, Epoch's CSV is 404.
 
 ## Appendix A. Platform facts relied on
 

@@ -62,30 +62,26 @@ State on 2026-11-02, for the next session that continues this work.
   - Maintainer notes removed from the skill.
   - It found no broken pointers and no command or flag the scripts reject.
 
-## Open: needs the owner's machine, data or a live check
+## Open: the owner decides
 
-1. Item 16, trigger phrases: run a live routing pass with `dev/routing.py` (evals/routing/prompts.tsv), then adjust the SKILL.md description and when_to_use. Together they are capped at 1,536 characters.
-2. The R1 eval runs: gold lists for round-0 recall (`dev/score_round0.py`), the planted verifier set (`dev/score_verifiers.py`, which decides R6's vote-rule switch), and the routing pass. The owner chose to run all evals headless on Windows.
-3. R9: measure PDF modes on the owner's topics with `dev/pdf_modes.py` before merging. Merging the branch switches quoting to reading-order text.
-4. R13: check the routes and terms of MTEB and of a measured board for current LLMs.
-5. The pulse hf lane is kept or dropped by the owner's replay of the T3.5 topic, small multilingual models.
-6. Live route checks:
-   - chain.py topic and related.
-   - The Hugging Face routes.
-   - watch's OpenAlex source kind.
-   - The Wayback route of fetch.py.
-7. Check that the Agent tool accepts `subagent_type: phro-search:<name>`. SKILL.md falls back to `<name>`, else it stops.
-8. R17: the hook on Windows without Git Bash, and `hooks/egress.sh` run in Git Bash.
-9. Three reruns of the Korean report prompt after the PLAN line change.
-10. The README allow rule and the Windows install package names, checked on a real install.
-11. T5.3, the rating of 5 real requests (plan:643).
+The numbers behind each are in structure-review.md section 7, round of 2026-11-02.
 
-## Open: can be done without the owner
+1. Routing is at 22/28 in scope against a threshold of 90 percent. Two misses go to imozuru and one to huggingface-best, so the T5.4 migration of those skills is what can close it. Rerun `dev/routing.py` with `--runs 3` after that.
+2. The R1 eval runs that need the owner's data: gold lists for round-0 recall (`dev/score_round0.py`) and the planted verifier set (`dev/score_verifiers.py`, which decides R6's vote-rule switch).
+3. R9: merging the branch switches quoting to reading-order text. The measure supports it.
+4. The pulse hf lane: keep or drop. As scored now it ranks zero-like uploads over official releases; if kept, engagement must enter its score.
+5. The Korean report PLAN line is not written. Wording did not fix it. The remaining option is a PreToolUse hook on Agent, WebSearch and WebFetch that reads the transcript; it would miss a Bash fetch.py.
+6. T5.3, the rating of 5 real requests (plan:643).
 
-- Check `report.md`'s opening sentence that maps report roles to agent types against SKILL.md's agent rule. The audit flagged it as a possible repeat; it was kept because it maps roles. Cut it if it adds nothing.
-- `intake.md` and `models.md` restate parts of SKILL.md intake step 5 (lettered options, recommended first, a "don't know" option). Decide whether intake.md, as the question template, should own that rule and SKILL.md only point at it.
-- `pulse.md`'s plan field list repeats defaults stated earlier in the file. It was kept as the schema; trim it if tokens matter more.
+## Open: needs another machine
+
+- R17: the hook on Windows without Git Bash. Without Git on PATH `sh` is not found, but Claude Code's behavior there is untested.
+- R13: an MTEB per-task board needs a rule for the split and for averaging subsets, and only then a board.
+
+## Rules for later work
+
 - Before claiming any script behavior in the docs, run that script's `--help`.
+- The README's `phro-search@phro` install line works only after T5.6.
 
 ## Working method that worked
 

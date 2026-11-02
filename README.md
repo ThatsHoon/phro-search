@@ -49,6 +49,8 @@ The skill calls each script with literal paths, one command per call, so one all
 {"permissions": {"allow": ["Bash(python3 -I */phro-search/*/scripts/*.py *)"]}}
 ```
 
+On Windows the skill calls `python`, so the rule starts `Bash(python -I `. It matches the forward-slash paths the skill writes, not backslashes.
+
 On Windows, use `"Bash(python -I */phro-search/*/scripts/*.py *)"`. If Claude still asks, compare the rule with the command it shows and adjust the path pattern.
 
 ## Waiting for subagents

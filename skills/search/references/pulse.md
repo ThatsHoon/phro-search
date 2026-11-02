@@ -44,7 +44,7 @@ Write `<topic>/pulse/plan.json` (each result keeps a copy, so a rerun may overwr
  "youtube_queries": ["<spoken phrasing>"]}
 ```
 
-- `label` is unique and not `dedicated`, `reddit`, `repo` or `youtube`. `lanes` may name hn, reddit, github, arxiv, youtube or hf and defaults to all but hf, `weight` to 1.0, `ranking_query` to the search query, `reddit_queries` (at most 3) to the entity, else the first subquery; subreddits are names, a leading `r/` is dropped.
+- `label` is unique and not `dedicated`, `reddit`, `repo` or `youtube`. `weight` defaults to 1.0, `ranking_query` to the search query; a leading `r/` on a subreddit is dropped.
 - 1 to 4 subqueries, the first one the topic itself. `search_query` is keywords, with no dates and no meta words ("news", "update", "latest"). `ranking_query` says in words what an on-topic item is about. `weight`: 1.0 for the primary subquery, 0.6 to 0.8 secondary, 0.3 to 0.5 peripheral.
 - `freshness`: `strict` for breaking news, `balanced` by default, `evergreen` for slow fields where a month-old post still matters.
 
