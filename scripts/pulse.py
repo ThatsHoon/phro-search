@@ -43,6 +43,7 @@ RETRY_AFTER_CAP = 60  # longest Retry-After (or X-RateLimit-Reset) honored, in s
 BOT_CHECK = (b"just a moment", b"checking your browser", b"captcha", b"verify you are human", b"are you a robot",
              b"attention required", b"challenge-platform", b"/cdn-cgi/challenge", b"ddos-guard")
 W_REL, W_FRESH, W_ENG = 0.65, 0.25, 0.10
+W_MODEL = 0.35, 0.40  # relevance and engagement of a Hub model: its name and tags say little, and most uploads have no users
 PHRASE_BONUS, GENERIC_CAP, FLOOR = 0.15, 0.25, 0.15
 FRESH = {"strict": (1.0, 0), "balanced": (0.8, 10), "evergreen": (0.6, 40)}  # freshness = a * recency + b
 DUP, JOIN = 0.7, 0.45  # title token Jaccard: near duplicates in one lane; joining a cluster's leader
@@ -615,7 +616,8 @@ def score(items, ctx):
         # a post or an abstract may name the topic late: a word found only there counts half; GitHub bodies are mostly
         # templates and logs, so an issue counts on its lead alone
         full = lead if i["lane"] == "github" else f"{lead} {i['_body']}"
-        w_rel, w_eng = (W_REL + W_ENG, 0.0) if i["lane"] == "arxiv" else (W_REL, W_ENG)
+        model = "likes" in i["engagement"].get("hf", ())
+        w_rel, w_eng = (W_REL + W_ENG, 0.0) if i["lane"] == "arxiv" else W_MODEL if model else (W_REL, W_ENG)
         best = (-1.0, 0.0, "")
         for sq in [s for s in ctx.plan["subqueries"] if s["label"] in i["_found"]] or ctx.plan["subqueries"]:
             rel = (relevance(lead, sq) + relevance(full, sq)) / 2

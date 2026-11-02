@@ -466,6 +466,15 @@ class PulseTest(unittest.TestCase):
                    (("huggingface.co/api/daily_papers?",), js([]))], "--days", "3")
         self.assertEqual(result["lanes"]["hf"]["status"], "partial")
 
+    def test_hf_model_with_users_outranks_a_fresh_upload_nobody_touched(self):
+        models = [model("acme/widget-lora", "2026-10-30", likes=0, downloads=0, trending=0, tags=("multilingual", "language", "region:us")),
+                  model("official/widget-9b", "2026-10-20", likes=460, downloads=18000, trending=0, tags=("region:us",))]
+        code, lines, result, _ = self.run_pulse(
+            {"subqueries": [sub(query="widget", ranking="a small multilingual language model", lanes=("hf",))]},
+            [(("huggingface.co/api/models?",), js(models)), (("huggingface.co/api/daily_papers?",), js([]))], "--days", "30")
+        self.assertEqual(code, 0)
+        self.assertEqual([i["id"] for i in result["items"]][:2], ["hf:official/widget-9b", "hf:acme/widget-lora"])
+
     def test_hf_lane_reads_models_and_daily_papers(self):
         models = [model("acme/widget-9b", "2026-10-29", likes=40, downloads=900, trending=12, tags=("multilingual", "region:us")),
                   model("acme/widget-1b", "2026-09-20")]  # created before the window
