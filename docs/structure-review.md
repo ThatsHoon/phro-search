@@ -349,6 +349,8 @@ Owner's decisions on the live round, 2026-11-02: merge the branch (R9); keep the
 
 Retiring the competing skills, on the owner's order of 2026-11-02: phro-gcp-mlflow names phro-search dig mode with imozuru as the fallback, and its guard treats `pulse.py` and `models.py` as network scripts (T5.4, committed there, not pushed). models.py gained `benchmarks`, the live list of official benchmark datasets that replaces a dated list in models.md, and `search`, Hub models by downloads marked as popularity. These cover what huggingface-best had and models mode did not (T4.5).
 
+Install fault found on 2026-11-02 by a routing pass with `--installed` (0/23 in scope, 15.83 USD): with core.autocrlf on Windows the install checked out SKILL.md with CRLF, and Claude Code then registers no skill from it, though the plugin's agents load. An LF copy of the same file registers. Every earlier pass used `--plugin-dir` on an LF working copy, so none saw it. `.gitattributes` now pins every text file to LF.
+
 ## Appendix A. Platform facts relied on
 
 Checked in the official Claude Code docs on 2026-11-01.

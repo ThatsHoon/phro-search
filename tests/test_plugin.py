@@ -1,4 +1,4 @@
-import ast, json, re, subprocess, sys, unittest
+import ast, json, re, shutil, subprocess, sys, unittest
 from tests._load import ROOT
 
 SKILL = ROOT / "skills/search/SKILL.md"
@@ -249,6 +249,15 @@ class PluginTest(unittest.TestCase):
         if not SKILL.exists():
             self.skipTest("SKILL.md comes in T1.7")
         self.assertLess(len(read(SKILL).splitlines()), 150)
+
+    def test_every_text_file_checks_out_with_lf(self):
+        # with core.autocrlf on Windows an install got a CRLF SKILL.md, and Claude Code did not register the skill
+        git = shutil.which("git")
+        if not git:
+            self.skipTest("needs git")
+        for path in ("skills/search/SKILL.md", "skills/search/references/dig.md", "agents/verifier.md", "hooks/hooks.json", "scripts/fetch.py"):
+            out = subprocess.run([git, "check-attr", "eol", "--", path], cwd=ROOT, capture_output=True, text=True).stdout
+            self.assertEqual(out.strip(), f"{path}: eol: lf")
 
     def test_description(self):
         if not SKILL.exists():
