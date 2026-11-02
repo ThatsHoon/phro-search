@@ -36,11 +36,11 @@ Example, compromised: "Find papers on small text classifiers" when the use is a 
 | `arena` (LMArena) | `text` (default), `search` | rating (higher) | votes from people comparing answers, updated often; names are display names, so every row is off the Hub |
 | `hub:<org>/<dataset>` | `main` | value (direction from the board) | a Hub benchmark's leaderboard: current models, mostly self-reported |
 
-Hub benchmarks that rank general models (2026-10-30): `Idavidrein/gpqa`, `TIGER-Lab/MMLU-Pro`, `cais/hle`, `openai/gsm8k`, `MathArena/aime_2026`, `SWE-bench/SWE-bench_Verified`, `LiquidAI/ifstruct-v1.0`, `MMMU/MMMU_Pro`, `allenai/olmOCR-bench`, `mteb/BRIGHT`. The full list is https://huggingface.co/api/datasets?filter=benchmark:official.
+`models.py benchmarks` lists the Hub's official benchmark datasets with their tasks and languages; pick the closest for `hub:<dataset>`. Many have few entries.
 
 Pick the board from the task: speech recognition `asr`, speech synthesis `tts` (`streaming` when latency matters), a small LM `slm`, a current LLM `arena` for how people rate its answers, or a `hub:` benchmark close to the use, with `llm` only for models before March 2025.
 
-No board measures the task or the language (a classifier to fine-tune, a language the speech boards skip): say so in the one-line answer, keep the closest table as a proxy and name what it measures, and add up to 3 models the boards do not rank but the field uses for that task or language (encoders for classification, models whose cards list the language). `follow` takes any Hub repo; their card scores go in a self-reported column of their own.
+No board measures the task or the language (a classifier to fine-tune, a language the speech boards skip): say so in the one-line answer, keep the closest table as a proxy and name what it measures, and add up to 3 models the boards do not rank but the field uses for that task or language (encoders for classification, models whose cards list the language). `models.py search <words> --tag <pipeline tag>` lists candidates by downloads, which is popularity and never a score. `follow` takes any Hub repo; their card scores go in a self-reported column of their own.
 
 ## 3. Run
 

@@ -160,7 +160,7 @@ class Base(unittest.TestCase):
         self.opener = Opener(routes)
         out = io.StringIO()
         with mock.patch.object(m, "OPENER", self.opener), contextlib.redirect_stdout(out):
-            code = m.main([argv[0], str(self.topic), *argv[1:]])
+            code = m.main([argv[0], *([] if argv[0] in ("benchmarks", "search") else [str(self.topic)]), *argv[1:]])
         for url in self.opener.urls():  # fetch() asks only for registry routes, and never for a write endpoint
             self.assertTrue(any(r.fullmatch(url) for r in m.ROUTES), url)
             self.assertNotIn("save_feedback", url)
@@ -282,6 +282,29 @@ class SnapshotTest(Base):
 class FetchTest(Base):
     URL = H + "/api/models/acme/x?blobs=true"
 
+    def test_benchmarks_lists_the_official_datasets(self):
+        rows = [{"id": "acme/asr-bench", "likes": 7, "description": "\n  Speech  bench\n", "tags": [
+            "benchmark:official", "task_categories:automatic-speech-recognition", "language:ko", "format:parquet"]}]
+        code, out = self.run_main([(("filter=benchmark:official",), js(rows))], "benchmarks")
+        self.assertEqual(code, 0, out)
+        self.assertIn("BENCHMARK\tacme/asr-bench\tautomatic-speech-recognition\tko\t7\tSpeech bench", out)
+
+    def test_search_lists_hub_models_by_downloads_and_marks_them_unmeasured(self):
+        rows = [{"id": "acme/encoder", "pipeline_tag": "sentence-similarity", "downloads": 900, "likes": 3, "createdAt": "2026-01-02T00:00:00Z"}]
+        url = H + "/api/models?search=small+encoder&pipeline_tag=sentence-similarity&sort=downloads&direction=-1&limit=20"
+        code, out = self.run_main([((url,), js(rows))], "search", "small", "encoder", "--tag", "sentence-similarity")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.opener.urls(), [url])
+        self.assertIn("HUBMODEL\tacme/encoder\tsentence-similarity\t900\t3\t2026-01-02", out)
+        self.assertIn("popularity", out)
+
+    def test_search_words_are_checked_for_egress(self):
+        with mock.patch.object(m, "egress_terms", lambda cwd=None: [("secretset", "the list")]):
+            code, out = self.run_main([], "search", "secretset", "encoder")
+        self.assertEqual(code, 2)
+        self.assertIn("egress", out)
+        self.assertEqual(self.opener.calls, [])
+
     def test_arena_board_reads_every_page_and_links_no_display_name(self):
         def page(names, total, category="overall"):
             return json.dumps({"num_rows_total": total, "rows": [{"row": {
@@ -358,7 +381,7 @@ class FetchTest(Base):
                 with self.assertRaises(m.Fail) as e:
                     m.fetch(self.URL)
                 self.assertEqual((str(e.exception), len(opener.calls)), (why, 1))
-        self.assertEqual(m.DEADLINE, {"shortlist": 270, "snapshot": 100, "follow": 100})  # only shortlist gets a 5-minute call
+        self.assertEqual(m.DEADLINE, {"shortlist": 270, "snapshot": 100, "follow": 100, "benchmarks": 100, "search": 100})  # only shortlist gets a 5-minute call
         with mock.patch.dict(m.DEADLINE, follow=5):
             code, out = self.run_main([(("api/models/acme/x",), [(429, {"Retry-After": "30"}), b"{}"])], "follow", "acme/x")
         self.assertEqual((code, out.splitlines()[0], len(self.opener.calls)), (1, "FAIL\tacme/x\thttp 429; run deadline reached", 1))

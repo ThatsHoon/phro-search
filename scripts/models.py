@@ -4,6 +4,8 @@ usage: models.py snapshot  <topic_dir> --board B [--table T] [--lang L] [--clone
        models.py shortlist <topic_dir> --board B [--table T] [--lang L] [--metric COL] [--max-gb G]
                            [--license permissive|open|any] [--since YYYY-MM-DD] [--off-hub] [--top N]
        models.py follow    <topic_dir> <org/name>... [--need F1,F2] [--task asr|tts|llm]
+       models.py benchmarks
+       models.py search    [<word>...] [--tag PIPELINE_TAG]
 boards: asr (Open ASR; tables english, multilingual, longform, private), tts (Open TTS; quality for one --lang, with
         --clone for voice cloning, and streaming for one --hardware), llm (Open LLM, frozen since 2025-03-20),
         slm (Open SLM), arena (LMArena; tables text, search), hub:<org/dataset> (the leaderboard of a Hub benchmark dataset, mostly self-reported)
@@ -25,6 +27,8 @@ output, tab-separated:
   FACTS    <repo>  <card file>  <facts file>
   FEATURE  <repo>  <feature>  <file>:<line>: <text>   or   not stated
   HOP      <repo>  <need>  paper|repo <url>   (where to look next for a need the card and config do not state)
+  BENCHMARK <dataset>  <tasks>  <languages>  <likes>  <description>
+  HUBMODEL <repo>  <pipeline tag>  <downloads>  <likes>  <created>
   # <note>
   OK       <file>
   FAIL     <what>  <reason>
@@ -50,7 +54,8 @@ DECOR = ("So", "Sk", "Mn", "Me", "Cf")  # arrows, flags, emoji and their joiners
 BACKOFF = (2, 4, 8)  # seconds before each retry of a 429 or a 5xx; a timeout is retried once
 TIMEOUT = 20  # seconds one request may stall before it counts as a timeout
 RETRY_AFTER_CAP = 60  # longest Retry-After honored, in seconds; a longer one gets the backoff
-DEADLINE = {"shortlist": 270, "snapshot": 100, "follow": 100}  # seconds for all requests of one run, per command
+# seconds for all requests of one run, per command
+DEADLINE = {"shortlist": 270, "snapshot": 100, "follow": 100, "benchmarks": 100, "search": 100}
 BOT_CHECK = (b"just a moment", b"checking your browser", b"captcha", b"verify you are human", b"are you a robot",
              b"attention required", b"challenge-platform", b"/cdn-cgi/challenge", b"ddos-guard")
 
@@ -158,6 +163,8 @@ ROUTES = [re.compile(p) for p in (
     r"https://huggingface\.co/api/(spaces|datasets)/[\w.-]+/[\w.-]+",
     r"https://huggingface\.co/api/datasets/[\w.-]+/[\w.-]+/leaderboard",
     r"https://huggingface\.co/api/models/[\w.-]+/[\w.-]+\?blobs=true",
+    r"https://huggingface\.co/api/datasets\?filter=benchmark:official&limit=500",
+    r"https://huggingface\.co/api/models\?(search=[\w.%+-]*)?&?(pipeline_tag=[\w-]+)?&sort=downloads&direction=-1&limit=20",
     r"https://huggingface\.co/api/models\?filter=base_model%3Aquantized%3A[\w.-]+%2F[\w.-]+&limit=100",
     r"https://huggingface\.co/api/papers/\d{4}\.\d{4,5}",
     r"https://huggingface\.co/[\w.-]+/[\w.-]+/raw/[0-9a-f]{40}/(README\.md|config\.json)")]
@@ -1068,6 +1075,33 @@ def follow(args, topic):
     return code
 
 
+def benchmarks(args, topic):
+    d = get(f"{HUB}/api/datasets?filter=benchmark:official&limit=500")
+    if not isinstance(d, list) or not all(isinstance(x, dict) and REPO.fullmatch(str(x.get("id"))) for x in d):
+        raise Drift("an entry lacks a dataset id")
+    for x in d:
+        tags = [str(t) for t in x.get("tags") or []]
+        pick = lambda kind: ",".join(t.split(":", 1)[1] for t in tags if t.startswith(kind + ":"))
+        print(f"BENCHMARK\t{x['id']}\t{pick('task_categories') or '-'}\t{pick('language') or '-'}\t{x.get('likes', 0)}\t"
+              f"{clean(x.get('description') or '', 100)}")
+    print(f"# {len(d)} official benchmarks; hub:<dataset> reads the leaderboard of one, if it has entries")
+    return 0
+
+
+def search(args, topic):
+    if not args.words and not args.tag:
+        raise Usage("search needs words or --tag")
+    q = urllib.parse.urlencode({k: v for k, v in (("search", " ".join(args.words)), ("pipeline_tag", args.tag)) if v})
+    d = get(f"{HUB}/api/models?{q}&sort=downloads&direction=-1&limit=20")
+    if not isinstance(d, list) or not all(isinstance(x, dict) and REPO.fullmatch(str(x.get("id"))) for x in d):
+        raise Drift("an entry lacks a repo id")
+    for x in d:
+        print(f"HUBMODEL\t{x['id']}\t{x.get('pipeline_tag') or '-'}\t{x.get('downloads', 0)}\t{x.get('likes', 0)}\t"
+              f"{str(x.get('createdAt') or '?')[:10]}")
+    print(f"# {len(d)} models by downloads: popularity, not a measured score; follow reads their cards")
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Model leaderboards, shortlists and model facts for the models mode.",
                                  formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
@@ -1098,13 +1132,18 @@ def main(argv=None):
     s.add_argument("repos", nargs="+", metavar="org/name")
     s.add_argument("--need", help="must-have features, comma-separated")
     s.add_argument("--task", choices=tuple(FEATURES), help="feature list (default: from the shortlist's board)")
+    sub.add_parser("benchmarks", help="list the Hub's official benchmark datasets, for hub:<dataset> boards")
+    s = sub.add_parser("search", help="list Hub models by downloads, for a task no board measures")
+    s.add_argument("words", nargs="*")
+    s.add_argument("--tag", help="a Hub pipeline tag, e.g. sentence-similarity")
     args = ap.parse_args(argv)
-    topic = Path(args.topic).expanduser()  # a quoted ~ reaches the script unexpanded
+    topic = Path(getattr(args, "topic", ".")).expanduser()  # a quoted ~ reaches the script unexpanded
     global _end
     _end = time.monotonic() + DEADLINE[args.cmd]
     try:
         terms = egress_terms()
-        sent = [args.board if hasattr(args, "board") else "", getattr(args, "lang", None) or ""] + getattr(args, "repos", [])
+        sent = [args.board if hasattr(args, "board") else "", getattr(args, "lang", None) or ""] + getattr(args, "repos", []) \
+            + getattr(args, "words", [])
         for v in sent:
             hit = egress_hit(v, terms)
             if hit:
@@ -1112,7 +1151,8 @@ def main(argv=None):
                 return 2
         if args.since and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", args.since) if args.cmd == "shortlist" else False:
             raise Usage("--since is YYYY-MM-DD")
-        return {"snapshot": snapshot, "shortlist": shortlist, "follow": follow}[args.cmd](args, topic)
+        return {"snapshot": snapshot, "shortlist": shortlist, "follow": follow, "benchmarks": benchmarks,
+                "search": search}[args.cmd](args, topic)
     except Usage as e:
         print(f"FAIL\tusage\t{e}")
         return 2
