@@ -6,11 +6,11 @@ Status: in development, not released. The design and the build plan are in `docs
 
 ## Install
 
-After the first release:
+This repository is private and is not listed in a public marketplace. Install it from a local marketplace folder whose `.claude-plugin/marketplace.json` lists this plugin with the source `{"source": "url", "url": "https://github.com/ThatsHoon/phro-search.git", "ref": "main"}`:
 
 ```bash
-claude plugin marketplace add ThatsHoon/phro
-claude plugin install phro-search@phro
+claude plugin marketplace add <that folder>
+claude plugin install phro-search@phro-search
 ```
 
 ## Requirements

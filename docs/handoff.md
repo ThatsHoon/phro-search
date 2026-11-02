@@ -66,7 +66,7 @@ State on 2026-11-02, for the next session that continues this work.
 
 The numbers behind each are in structure-review.md section 7, round of 2026-11-02.
 
-1. Routing is at 22/28 in scope against a threshold of 90 percent. Two misses went to imozuru and one to huggingface-best. T5.4 is committed in phro-gcp-mlflow but not pushed, because that repo is public and phro-search is still private. The owner moves both skills out of `~/.claude/skills` (a permission check stops the agent from doing it), then `dev/routing.py --installed --runs 3` gives the number to judge.
+1. Routing is at 22/28 in scope against a threshold of 90 percent. Two misses went to imozuru and one to huggingface-best. T5.4 is committed in phro-gcp-mlflow but not pushed: that repo is public and phro-search stays private, so the owner decides whether public docs may name it. The owner moves both skills out of `~/.claude/skills` (a permission check stops the agent from doing it), then `dev/routing.py --installed --runs 3` gives the number to judge.
 2. The R1 eval runs that need the owner's data: gold lists for round-0 recall (`dev/score_round0.py`) and the planted verifier set (`dev/score_verifiers.py`, which decides R6's vote-rule switch).
 3. T5.3, the rating of 5 real requests (plan:643).
 
@@ -78,7 +78,7 @@ The numbers behind each are in structure-review.md section 7, round of 2026-11-0
 ## Rules for later work
 
 - Before claiming any script behavior in the docs, run that script's `--help`.
-- The README's `phro-search@phro` install line works only after T5.6.
+- The owner keeps this repository private and for personal use (2026-11-02), so T5.6 is cancelled. Do not publish it or add it to the `phro` marketplace.
 
 ## Working method that worked
 
