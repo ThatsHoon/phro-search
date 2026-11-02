@@ -6,7 +6,7 @@ usage: models.py snapshot  <topic_dir> --board B [--table T] [--lang L] [--clone
        models.py follow    <topic_dir> <org/name>... [--need F1,F2] [--task asr|tts|llm]
 boards: asr (Open ASR; tables english, multilingual, longform, private), tts (Open TTS; quality for one --lang, with
         --clone for voice cloning, and streaming for one --hardware), llm (Open LLM, frozen since 2025-03-20),
-        slm (Open SLM), hub:<org/dataset> (the leaderboard of a Hub benchmark dataset, mostly self-reported)
+        slm (Open SLM), arena (LMArena; tables text, search), hub:<org/dataset> (the leaderboard of a Hub benchmark dataset, mostly self-reported)
 Only the read-only routes in ROUTES are requested. HF_TOKEN is read from the environment, sent to huggingface.co only
 and never printed. Requests are 1 s apart per host. A 429 or a 5xx is retried after 2, 4 and 8 s (after Retry-After
 when it asks 60 s or less); a timeout (20 s without an answer) is retried once; any other status is not, nor a 403 or
@@ -141,6 +141,11 @@ BOARDS = {
             "tables": {"main": table(None, "name", {m: HIGH for m in ("Intelligence Index", "hellaswag", "arc", "arcChall",
                                                                       "piqa", "arithmark3")},
                                      size=("params", 1), link="card")}},  # addedDate: when the board added it
+    "arena": {"route": "dataset-viewer", "dataset": "lmarena-ai/leaderboard-dataset",
+              "url": "https://datasets-server.huggingface.co/rows?dataset=lmarena-ai/leaderboard-dataset&split=latest"
+                     "&length=100",
+              "tables": {c: table(c, "model_name", {"rating": HIGH}, license="license")
+                         for c in ("text", "search")}},
 }
 SLM_INDEX = "97ac2e3647429545"  # hash of the page's index code that intelligence_index() follows; a change is drift
 ROUTES = [re.compile(p) for p in (
@@ -148,6 +153,8 @@ ROUTES = [re.compile(p) for p in (
     r"https://hf-audio-open-tts-leaderboard\.hf\.space/gradio_api/(info|call/_refresh_(leaderboard|streaming)(/[0-9a-f]+)?)",
     r"https://open-llm-leaderboard-open-llm-leaderboard\.hf\.space/api/leaderboard/formatted",
     r"https://axiomiclabs-open-slm-leaderboard\.static\.hf\.space/index\.html",
+    r"https://datasets-server\.huggingface\.co/rows\?dataset=lmarena-ai/leaderboard-dataset&split=latest&length=100"
+    r"&config=(text|search)&offset=\d+",
     r"https://huggingface\.co/api/(spaces|datasets)/[\w.-]+/[\w.-]+",
     r"https://huggingface\.co/api/datasets/[\w.-]+/[\w.-]+/leaderboard",
     r"https://huggingface\.co/api/models/[\w.-]+/[\w.-]+\?blobs=true",
@@ -548,8 +555,28 @@ def read_hub(b, t, args):
     return list(cols), [[e.get(c) if c != "source" else (e.get("source") or {}).get("url") for c in cols] for e in d]
 
 
+def read_viewer(b, t, args):
+    """The overall rows of a table the Hub's dataset viewer serves: the first block of the split, so the many other
+    categories after it (11,000 rows on text) are not paged through."""
+    recs, offset = [], 0
+    while True:
+        d = get(f"{b['url']}&config={t['at']}&offset={offset}")
+        page = [x.get("row") for x in d.get("rows") or []] if isinstance(d, dict) else None
+        if not page or not all(isinstance(r, dict) for r in page) or not isinstance(d.get("num_rows_total"), int):
+            raise Drift("a page lacks rows or num_rows_total")
+        offset += len(page)
+        overall = [r for r in page if r.get("category") == "overall"]
+        recs += overall
+        if len(overall) < len(page) or offset >= d["num_rows_total"]:
+            break
+    if not recs:
+        raise Drift("the overall rows no longer come first; found " + str(page[0].get("category")))
+    heads = list(dict.fromkeys(k for r in recs for k in r))
+    return heads, [[r.get(h) for h in heads] for r in recs]
+
+
 READ = {"gradio-config": read_gradio_config, "gradio-call": read_gradio_call, "space-api": read_llm,
-        "static-html": read_slm, "hub-leaderboard": read_hub}
+        "static-html": read_slm, "hub-leaderboard": read_hub, "dataset-viewer": read_viewer}
 
 
 def revision(b):
@@ -584,7 +611,7 @@ def snapshot(args, topic):
     elif t["link"]:
         links = [str(r[labels.index(t["link"])] or "") for r in rows]
     else:
-        links = [f"{HUB}/{r[mi]}" for r in rows]
+        links = [f"{HUB}/{r[mi]}" if REPO.fullmatch(str(r[mi])) else "" for r in rows]
     meta = {"board": args.board, "table": tname, "route": b["route"], "url": b["url"] + (f"/call/{t['at']}" if
             b["route"] == "gradio-call" else ""), "revision": revision(b),
             "fetched": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
@@ -623,10 +650,13 @@ def width(dtype):
 
 
 def license_class(lic):
-    """permissive, open (a model-specific or copyleft license: terms to read), non-commercial, or unknown."""
+    """permissive, open (a model-specific or copyleft license: terms to read), non-commercial, closed (a hosted service,
+    no weights to take), or unknown."""
     s = re.sub(r"[\s_]+", "-", str(lic or "").strip().lower())
     if not s or s in ("other", "unknown", "custom", "none") or "://" in s:
         return "unknown"
+    if s == "proprietary":
+        return "closed"
     if re.search(r"(^|-)nc(-|$)|non-?commercial|research", s):
         return "non-commercial"
     if re.match(r"(apache|mit$|bsd|cc0|isc$|zlib|unlicense|bsl-1)", s) or re.fullmatch(r"cc-by-\d(\.\d)?", s):
@@ -749,7 +779,7 @@ def fit(c, budget):
 
 def license_drop(c, args):
     cls = c["license_class"]
-    bad = (args.license == "permissive" and cls != "permissive") or (args.license == "open" and cls == "non-commercial")
+    bad = (args.license == "permissive" and cls != "permissive") or (args.license == "open" and cls in ("non-commercial", "closed"))
     return f"license {cls}" if bad else None
 
 
@@ -841,7 +871,7 @@ def shortlist(args, topic):
         c["license_class"] = license_class(c["license"])
         sizes(c)
         # what the board's own columns already rule out costs no Hub request
-        c["dropped"] = (c["license_class"] in ("open", "non-commercial") and license_drop(c, args)) \
+        c["dropped"] = (c["license_class"] in ("open", "non-commercial", "closed") and license_drop(c, args)) \
             or since_drop(c, args) or fit(c, args.max_gb)[0]
         if c["dropped"] or c["off_hub"]:
             continue

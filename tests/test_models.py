@@ -282,6 +282,41 @@ class SnapshotTest(Base):
 class FetchTest(Base):
     URL = H + "/api/models/acme/x?blobs=true"
 
+    def test_arena_board_reads_every_page_and_links_no_display_name(self):
+        def page(names, total, category="overall"):
+            return json.dumps({"num_rows_total": total, "rows": [{"row": {
+                "model_name": n, "organization": "acme", "license": "MIT", "rating": 1500.0 - i, "rating_lower": 1490.0,
+                "rating_upper": 1510.0, "vote_count": 400.0, "rank": i + 1.0,
+                "category": "math" if n == "Math only" else category}}
+                for i, n in enumerate(names)]}).encode()
+        base = ("https://datasets-server.huggingface.co/rows?dataset=lmarena-ai/leaderboard-dataset&split=latest"
+                "&length=100&config=search&offset=")
+        code, out = self.run_main([((base + "0",), page([f"Acme {i} (High)" for i in range(100)], 500)),
+                                   ((base + "100",), page(["Acme last", "Math only"], 500)),
+                                   (("/api/datasets/lmarena-ai/leaderboard-dataset",), js({"sha": "a" * 40}))],
+                                  "snapshot", "--board", "arena", "--table", "search")
+        self.assertEqual(code, 0, out)
+        self.assertRegex(out, r"101 rows	101 linked off the Hub")
+        _, heads, rows = self.tsv("board-arena-search")
+        self.assertEqual((heads[0], rows[-1]["model_name"], rows[0]["link"]), ("model_name", "Acme last", ""))
+        code, out = self.run_main([], "shortlist", "--board", "arena", "--table", "search")
+        self.assertEqual(code, 0, out)
+        self.assertIn("OFFHUB	Acme 0 (High)	rating=1500	no link", out)
+
+    def test_proprietary_license_is_closed_and_filtered(self):
+        self.assertEqual(m.license_class("Proprietary"), "closed")
+        for choice, kept in (("permissive", False), ("open", False), ("any", True)):
+            c = {"license_class": "closed", "license": "Proprietary"}
+            self.assertEqual(m.license_drop(c, SimpleNamespace(license=choice)) is None, kept, choice)
+
+    def test_arena_board_drift_is_named(self):
+        url = "https://datasets-server.huggingface.co/rows?"
+        for row, reason in (({"name": "x", "category": "overall"}, "model_name"), ({"category": "math"}, "come first")):
+            code, out = self.run_main([((url,), js({"num_rows_total": 1, "rows": [{"row": row}]}))],
+                                      "snapshot", "--board", "arena")
+            self.assertEqual(code, 2)
+            self.assertIn(reason, out)
+
     def test_registry_routes_only(self):
         opener = Opener([])
         with mock.patch.object(m, "OPENER", opener):

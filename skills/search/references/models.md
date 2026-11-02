@@ -33,11 +33,12 @@ Example, compromised: "Find papers on small text classifiers" when the use is a 
 | `tts` (Open TTS) | `quality` per `--lang`, `--clone` for voice cloning; `streaming` per `--hardware` (A100, CPU, H200) | Average WER (lower), Average RTFx, UTMOS (en), Average SIM with `--clone` (higher); TTFA p50 and p95 in ms (lower) | the language list is the Space's own; a wrong `--lang` prints it; quality averages the Seed-TTS, CV3-Eval and MiniMax sets |
 | `llm` (Open LLM) | `main` | average_score, IFEval, BBH, MATH Level 5, GPQA, MUSR, MMLU-PRO (higher) | frozen since 2025-03-20: newer models are absent |
 | `slm` (Open SLM) | `main` | Intelligence Index, hellaswag, arc, arcChall, piqa, arithmark3 (higher) | small LMs up to about 400M parameters; the index is computed as the page does |
+| `arena` (LMArena) | `text` (default), `search` | rating (higher) | votes from people comparing answers, updated often; names are display names, so every row is off the Hub |
 | `hub:<org>/<dataset>` | `main` | value (direction from the board) | a Hub benchmark's leaderboard: current models, mostly self-reported |
 
 Hub benchmarks that rank general models (2026-10-30): `Idavidrein/gpqa`, `TIGER-Lab/MMLU-Pro`, `cais/hle`, `openai/gsm8k`, `MathArena/aime_2026`, `SWE-bench/SWE-bench_Verified`, `LiquidAI/ifstruct-v1.0`, `MMMU/MMMU_Pro`, `allenai/olmOCR-bench`, `mteb/BRIGHT`. The full list is https://huggingface.co/api/datasets?filter=benchmark:official.
 
-Pick the board from the task: speech recognition `asr`, speech synthesis `tts` (`streaming` when latency matters), a small LM `slm`, a current LLM a `hub:` benchmark close to the use, with `llm` only for models before March 2025.
+Pick the board from the task: speech recognition `asr`, speech synthesis `tts` (`streaming` when latency matters), a small LM `slm`, a current LLM `arena` for how people rate its answers, or a `hub:` benchmark close to the use, with `llm` only for models before March 2025.
 
 No board measures the task or the language (a classifier to fine-tune, a language the speech boards skip): say so in the one-line answer, keep the closest table as a proxy and name what it measures, and add up to 3 models the boards do not rank but the field uses for that task or language (encoders for classification, models whose cards list the language). `follow` takes any Hub repo; their card scores go in a self-reported column of their own.
 
