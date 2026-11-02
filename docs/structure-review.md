@@ -342,6 +342,11 @@ Measured:
 
 Left open: MTEB per task. mteb/results (CC0) answers on the filter route, but a task mixes splits and trained_on rows (MSMARCO: dev, test, train), so a per-task board needs a rule for the split and for averaging subsets. The filter route's failures also apply. LiveBench has no data route found, Epoch's CSV is 404.
 
+Owner's decisions on the live round, 2026-11-02: merge the branch (R9); keep the hf lane; enforce the plan line with a hook.
+
+- The hf lane keeps its place with a score of its own for Hub models: relevance 0.35 and engagement 0.40 instead of 0.65 and 0.10, because a model's name and tags say little about a topic and 264 of 310 uploads had no likes. Replay of the T3.5 topic: the status is ok, and the models with users lead (unsloth Mistral-Large-4 with 41 likes at 48.6, Timestral-209M with 464 likes at 45.1). Three of the first seven clusters are hf-only, so the lane now shows releases that have users.
+- `hooks/plan_line.py` runs before Agent, WebSearch and WebFetch: after a run of the skill has read its mode reference, the call is blocked until a plan line is in the transcript. It fails open, and sessions without the skill start no Python. Korean report prompt, headless: 5/5 runs wrote the plan line (0/3 before). With the final message, 2/2 stopped after one blocked batch of 5 calls. A Bash call to a script is not seen, by R17.
+
 ## Appendix A. Platform facts relied on
 
 Checked in the official Claude Code docs on 2026-11-01.

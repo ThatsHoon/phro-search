@@ -7,7 +7,7 @@ State on 2026-11-02, for the next session that continues this work.
 - Talk to the owner in Korean. Everything written into the repo (skill, references, agents, scripts, docs) is English.
 - Instructions must be token efficient: each rule in exactly one place, no duplicates, no contradictions. SKILL.md is loaded every run, so keep it short.
 - Root-cause fixes, no workarounds.
-- Work on branch `claude/optimistic-volta-rio18v` and push only there. Never push to main. Open no PR unless the owner asks.
+- Work on a branch and push there. Main moves only when the owner says merge. Open no PR unless the owner asks.
 - Commit as the owner, with a plain message and no AI attribution or trailers:
   `git -c user.name=thatshoon -c user.email=gagea45@gmail.com commit -m "<message>"`.
   A stop hook may ask to re-author commits as Claude. Do not, unless the owner says so.
@@ -25,7 +25,7 @@ State on 2026-11-02, for the next session that continues this work.
   - `briefs.md` holds the agent briefs shared by modes and `formats.md` the shared file formats.
   - `theory.md` says why the rules exist and points at them.
 - `agents/` holds three agents, `web-gatherer`, `verifier` and `local-reader`. They are spawned as `phro-search:<name>`.
-- `hooks/` holds the egress guard: `hooks.json`, `egress.sh`, `egress.py`.
+- `hooks/` holds the egress guard (`egress.sh`, `egress.py`) and the plan line check (`plan_line.sh`, `plan_line.py`).
 - `scripts/` holds stdlib Python run as `python -I`: fetch, chain, report, watch, pulse, models, check.
 - `dev/` holds maintainer tools: pdf_modes, agent_cost, routing, score_round0, score_verifiers, feedback_gold.
 - `evals/` holds the routing prompts and the README on running the R1 evals.
@@ -68,10 +68,7 @@ The numbers behind each are in structure-review.md section 7, round of 2026-11-0
 
 1. Routing is at 22/28 in scope against a threshold of 90 percent. Two misses go to imozuru and one to huggingface-best, so the T5.4 migration of those skills is what can close it. Rerun `dev/routing.py` with `--runs 3` after that.
 2. The R1 eval runs that need the owner's data: gold lists for round-0 recall (`dev/score_round0.py`) and the planted verifier set (`dev/score_verifiers.py`, which decides R6's vote-rule switch).
-3. R9: merging the branch switches quoting to reading-order text. The measure supports it.
-4. The pulse hf lane: keep or drop. As scored now it ranks zero-like uploads over official releases; if kept, engagement must enter its score.
-5. The Korean report PLAN line is not written. Wording did not fix it. The remaining option is a PreToolUse hook on Agent, WebSearch and WebFetch that reads the transcript; it would miss a Bash fetch.py.
-6. T5.3, the rating of 5 real requests (plan:643).
+3. T5.3, the rating of 5 real requests (plan:643).
 
 ## Open: needs another machine
 
