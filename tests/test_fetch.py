@@ -716,6 +716,28 @@ class FetchTest(unittest.TestCase):
                          (s.url + "/gone", f"{s.url}/web/{ts}id_/{s.url}/gone", "2019-05-01, archived 2020-03-04", "archived-copy"))
         self.assertEqual(self.fetch("again", s.url + "/gone")[1][5], "archived-copy,reused")
 
+    def test_deep_link_sent_to_the_front_page_is_dead(self):
+        front = page("<article>" + LONG + "</article>")
+        body = f"<!doctype html><html><head><title>Old</title></head><body><article><h1>Kept</h1>{LONG}</article></body></html>"
+        s = self.archive({"/gone": (302, {"Location": "/"}, b""), "/": (200, HTML, front)}, snapshot=(200, HTML, body.encode()))
+        code, f = self.fetch("old", s.url + "/gone")
+        self.assertEqual((code, f[4], f[5]), (0, "# Kept", "archived-copy"))
+
+    def test_deep_link_sent_to_the_front_page_with_no_snapshot_fails(self):
+        s = self.serve({"/gone": (301, {"Location": "/"}, b""), "/": (200, HTML, page("<article>" + LONG + "</article>")),
+                        "/wayback/available": (200, {}, b'{"archived_snapshots": {}}')})
+        self.patch(m, "WAYBACK", s.url)
+        code, f = self.fetch("old", s.url + "/gone")
+        self.assertEqual((code, f[2]), (1, "redirected to the site's front page; no archived copy"))
+
+    def test_front_page_asked_and_moved_pages_stay_ok(self):
+        art = page("<article>" + LONG + "</article>")
+        s = self.serve({"/": (200, HTML, art), "/a": (301, {"Location": "/b/c"}, b""), "/b/c": (200, HTML, art),
+                        "/search": (302, {"Location": "/?q=x"}, b"")})
+        self.assertEqual(self.fetch("front", s.url + "/")[0], 0)
+        self.assertEqual(self.fetch("moved", s.url + "/a")[0], 0)
+        self.assertEqual(self.fetch("query", s.url + "/search")[0], 0)
+
     def test_snapshot_date_follows_a_redirect_and_stands_alone(self):
         s = self.archive({"/gone": (410, {}, b""),
                           "/web/20200305000000id_/X": (200, HTML, page("<article>" + LONG + "</article>"))},

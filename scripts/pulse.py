@@ -486,7 +486,10 @@ def hf_search(st, ctx):
         st["notes"].append(f"daily papers read for the newest {HF_DAYS} of {ctx.days} days")
     for k in range(days):
         day = ctx.last - timedelta(days=k)
+        seen = len(st["errors"])
         d = listed(st, get(st, f"{HF}/api/daily_papers?date={day:%Y-%m-%d}", "Hugging Face"), "daily papers")
+        if k == 0 and st["errors"][seen:] == ["http 400"]:  # the Hub answers 400 for a date whose list is not out yet
+            st["errors"].pop()
         if not d:
             continue
         rows = [(x, x.get("paper")) for x in d if isinstance(x, dict)]

@@ -17,7 +17,8 @@ landing pages; then published, accepted, submitted; repository copies first) bef
 lookup costs no OpenAlex credits, and OPENALEX_API_KEY is sent when set. Nothing is written on
 FAIL, and an existing <name>.* is never overwritten.
 
-A dead public page (http 404 or 410, a DNS or TLS failure, a second timeout) is taken from the
+A dead public page (http 404 or 410, a DNS or TLS failure, a second timeout, a link with a path redirected to the
+site's front page) is taken from the
 Wayback Machine: its availability API names the closest snapshot, which is read with the id_ flag, so the
 original bytes come back and get the same checks. Never for 401, 403, 451, a bot check or a wall page, nor for
 a DOI's copies or publisher page. Every URL asked, the API's and the snapshot's included, and every redirect is
@@ -157,7 +158,7 @@ class Fail(Exception):
 
 
 class Dead(Fail):
-    """A public page that is gone or out of reach (http 404 or 410, DNS, TLS, timeout): the Wayback Machine may hold it."""
+    """A public page that is gone or out of reach (http 404 or 410, DNS, TLS, timeout, a redirect to the front page): the Wayback Machine may hold it."""
 
 
 def refused(url):
@@ -738,12 +739,20 @@ def load_url(work, src, want_pdf=False, archive=False):
         return load_arxiv(work, abs_pdf[1])
     try:
         data, ctype, final = get(src)
+        if front_page(src, final):
+            raise Dead("redirected to the site's front page")
     except Dead as e:
         if not archive:
             raise
         return wayback(work, asked, str(e), want_pdf)
     paths = [urllib.parse.urlsplit(x).path.lower() for x in (src, final)]
     return convert(work, data, ctype, final, paths, want_pdf)
+
+
+def front_page(asked, final):
+    """True when a link with a path ended on a site's bare front page: the page is gone, whatever the status says."""
+    a, f = urllib.parse.urlsplit(asked), urllib.parse.urlsplit(final)
+    return bool(a.path.strip("/")) and not f.path.strip("/") and not f.query
 
 
 def wayback(work, url, why, want_pdf=False):

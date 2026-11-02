@@ -454,6 +454,18 @@ class PulseTest(unittest.TestCase):
         self.assertIn("error: KeyError: 'points'", "\t".join(lane))
     # hf lane (Hugging Face): models created in the window, and daily papers
 
+    def test_hf_newest_date_not_published_is_no_lane_error(self):
+        plan = {"subqueries": [sub(query="widget", ranking="widget engine model", lanes=("hf",))]}
+        models = [model("acme/widget-9b", "2026-10-29", likes=40)]
+        code, lines, result, _ = self.run_pulse(
+            plan, [(("huggingface.co/api/models?",), js(models)), (("huggingface.co/api/daily_papers?date=2026-10-30",), 400),
+                   (("huggingface.co/api/daily_papers?",), js([]))], "--days", "3")
+        self.assertEqual((code, result["lanes"]["hf"]["status"]), (0, "ok"))
+        code, lines, result, _ = self.run_pulse(
+            plan, [(("huggingface.co/api/models?",), js(models)), (("huggingface.co/api/daily_papers?date=2026-10-29",), 400),
+                   (("huggingface.co/api/daily_papers?",), js([]))], "--days", "3")
+        self.assertEqual(result["lanes"]["hf"]["status"], "partial")
+
     def test_hf_lane_reads_models_and_daily_papers(self):
         models = [model("acme/widget-9b", "2026-10-29", likes=40, downloads=900, trending=12, tags=("multilingual", "region:us")),
                   model("acme/widget-1b", "2026-09-20")]  # created before the window
