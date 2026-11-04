@@ -155,6 +155,8 @@ Addresses F18.
 
 Rejected: identical briefs; distinct roles that each check one lens, because a flaw that only one role checks gets one refutation and survives the 2-refutation rule (report.md:76).
 
+Amended on 2026-11-04 by the owner's order: the source's standing (open-post, reviewed, unknown) sets the check list and the verifier count. A source anyone could post gets its results read in the full text by two verifiers; a reviewed one gets its acceptance confirmed and what it keeps closed named by one, and a closed item alone refutes nothing. All verifiers of one claim still share one check list, so the rejection above holds.
+
 ### R7. Disconfirm searcher in dig
 
 When a required claim asks how well a method works or where it fails, run one disconfirm searcher in round 1 (criticism, failed or partial replications, negative results, errata). It is judged by its own claims like a hypothesis branch and left out of the overlap count (dig.md:49; briefs.md:31). The searcher ceiling rises from 8 to 9 or 10 calls (dig.md:12). Addresses F19.
@@ -352,6 +354,8 @@ Retiring the competing skills, on the owner's order of 2026-11-02: phro-gcp-mlfl
 Install fault found on 2026-11-02 by a routing pass with `--installed` (0/23 in scope, 15.83 USD): with core.autocrlf on Windows the install checked out SKILL.md with CRLF, and Claude Code then registers no skill from it, though the plugin's agents load. An LF copy of the same file registers. Every earlier pass used `--plugin-dir` on an LF working copy, so none saw it. `.gitattributes` now pins every text file to LF.
 
 Routing after the fix, on 2026-11-02, with `--installed --runs 1`, imozuru and huggingface-best moved out and T5.4 pushed: in scope fired 26/28, right mode 25/28; near 0/12; out 0/6; 14.88 USD. Misses: report-ko-3 went to anthropic-skills:docs, docs-en-2 fired nothing. report-ko-1 fired in the wrong mode. One run per prompt does not judge R1, which asks for 3. The install path also changed from the 22/28 baseline, so the gain is not all from the move.
+
+Standing, on 2026-11-04 (0.6.0, R6's amendment). Before it, the `paper` label held preprints and reviewed papers alike, retraction was the only venue fact any check used, and `chain.py`'s venue and preprint flag reached no verifier. A real run showed the cost: of the 5 arXiv papers behind one report, `chain.py find` gave all 5 as preprint, and one of them presented a results table its own text calls an evaluation template. `chain.py find` already separates them (an arXiv DOI of a CVPR paper comes back as conference-paper with the CVPR venue), so no lookup code was added. OpenAlex's `is_core` is not used: it was true for CVPR and for a broad open-access journal alike on 2026-11-04, so `reviewed` stays a judgment of the session and `unknown` takes the stricter check. Not measured: whether routing lowers false survival; the planted verifier set (R1) measures it once it exists.
 
 ## Appendix A. Platform facts relied on
 

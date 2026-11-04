@@ -42,7 +42,7 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-VERSION = "0.5.0"
+VERSION = "0.6.0"
 
 ARCTIC = "https://arctic-shift.photon-reddit.com"
 OPENALEX = "https://api.openalex.org"  # OPENALEX_API_KEY from the environment is sent when set, never stored or printed

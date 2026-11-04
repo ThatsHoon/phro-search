@@ -87,6 +87,13 @@ class PluginTest(unittest.TestCase):
             m = re.search(r'^VERSION = "([^"]+)"', read(path), re.M)
             self.assertEqual(m and m.group(1), version, path.name)
 
+    def test_verifiers_are_routed_on_standing(self):
+        for standing in ("open-post", "reviewed", "unknown"):
+            self.assertIn(f"- `{standing}`:", read(REFS / "formats.md"))
+        report = read(REFS / "report.md")
+        for needed in ("Source standing: <standing>", "The check for `open-post` and `unknown`:", "The check for `reviewed`:", '"withheld":'):
+            self.assertIn(needed, report)
+
     def test_named_paths_exist(self):
         texts = docs() + [(p.name, read(p)) for p in sorted(ROOT.glob("hooks/*.json"))]
         missing = [(name, rel) for name, text in texts

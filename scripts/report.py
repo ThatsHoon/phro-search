@@ -6,7 +6,8 @@ Usage:
   report.py <topic_dir> [<stem>] --check check only; write nothing
 
 When the topic has a claims.json (report mode), a claim in a view may carry its "id";
-the page then shows that claim's verdict and votes. Every claims.json claim is checked:
+the page then shows that claim's verdict, standing and votes. Every claims.json claim is checked:
+a standing is one of open-post, reviewed or unknown, and
 each verdict must follow from its votes (2 refutations: refuted; one vote that holds with
 high or medium confidence: survived; any other single vote or none: unverified; else
 survived), at most 3 votes, and a vote's "checked" date written YYYY-MM-DD. The claims a
@@ -45,7 +46,7 @@ import re
 import sys
 import urllib.parse
 
-VERSION = "0.5.0"
+VERSION = "0.6.0"
 
 _CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\U0000061c\U0000200b-\U0000200f\U0000202a-\U0000202e\U00002060-\U00002064\U00002066-\U00002069\U0000feff]")
 _QUOTES = str.maketrans("\U00002018\U00002019\U0000201a\U0000201b\U00002032\U0000201c\U0000201d\U0000201e\U0000201f\U00002033\U0000ff02\U0000ff07", "'''''\"\"\"\"\"\"'")
@@ -68,8 +69,10 @@ QUOTE = {"file": str, "line": int, "end?": int, "text": str, "translation?": str
 QUALIFIER = {"file": str, "line": int, "end?": int, "text": str}  # the source's own sentence that limits the claim
 SUPPORT = ("full", "partial", "none", "contradicts")
 # claims.json (report mode) is a list of CLAIMED, each with its verifiers' votes.
-CLAIMED = {"id": str, "claim": str, "quote": str, "url": str, "label": str, "importance": str, "votes?": list, "verdict?": str}
-VOTE = {"refuted": bool, "confidence": str, "evidence": str, "counter_source?": str, "checked?": str}
+CLAIMED = {"id": str, "claim": str, "quote": str, "url": str, "label": str, "importance": str, "votes?": list, "verdict?": str,
+           "standing?": str, "venue?": str}
+VOTE = {"refuted": bool, "confidence": str, "evidence": str, "counter_source?": str, "checked?": str, "withheld?": str}
+STANDING = ("open-post", "reviewed", "unknown")
 INDEX_HEAD = ("name", "url", "final", "fetched", "published", "modified", "extraction", "version", "marks", "files")
 IMPORTANCE = ("central", "supporting", "tangential")
 VERDICTS = ("survived", "refuted", "unverified")
@@ -170,6 +173,8 @@ def load_claims(path):
             raise ValueError(f"{where}: the id appears twice")
         if c["importance"] not in IMPORTANCE or c.get("verdict", VERDICTS[0]) not in VERDICTS:
             raise ValueError(f"{where}: importance must be one of {', '.join(IMPORTANCE)}; verdict one of {', '.join(VERDICTS)}")
+        if c.get("standing", STANDING[0]) not in STANDING:
+            raise ValueError(f"{where}: standing must be one of {', '.join(STANDING)}")
         for j, v in enumerate(c.setdefault("votes", []), 1):  # a claim never sent to verifiers has none
             need(v, VOTE, f"{where} vote {j}")
             if "checked" in v and not re.fullmatch(r"\d{4}-\d\d-\d\d", v["checked"]):
@@ -349,9 +354,11 @@ def votes_html(c):
     for vote in c["votes"]:
         src = vote.get("counter_source")
         checked = f', checked {esc(vote["checked"])}' if vote.get("checked") else ""
-        rows.append(f'<li>{"refuted" if vote["refuted"] else "held"} ({esc(vote["confidence"])}{checked}): {esc(vote["evidence"])}'
+        closed = f'; withheld: {esc(vote["withheld"])}' if vote.get("withheld") else ""
+        rows.append(f'<li>{"refuted" if vote["refuted"] else "held"} ({esc(vote["confidence"])}{checked}): {esc(vote["evidence"])}{closed}'
                     + (f" ({link(src, 'counter source')})" if src else "") + "</li>")
-    return (f'<div class="votes"><p>Votes: {head} {esc(c["importance"])}, {esc(c["label"])}, {link(c["url"], "original")}</p>'
+    known = "".join(f"{esc(c[k])}, " for k in ("standing", "venue") if c.get(k))
+    return (f'<div class="votes"><p>Votes: {head} {esc(c["importance"])}, {esc(c["label"])}, {known}{link(c["url"], "original")}</p>'
             + (f'<ul>{"".join(rows)}</ul>' if rows else "") + "</div>")
 
 

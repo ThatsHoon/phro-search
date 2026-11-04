@@ -67,6 +67,7 @@ State on 2026-11-02, for the next session that continues this work.
   - `scripts/locate.py` replaces hand grep and hand-written claims.json and view.
   - plan_line.py reads the transcript again for about 2 s before it blocks, since a plan line in the same message can arrive after its calls.
   - Risk: a claim can now survive on one vote, and the false-survival rate of a single verifier has not been measured. The planted verifier set (below) measures it: the FALSE line's "votes not refuting".
+- 0.6.0 routes verifiers on the source's standing (R6's amendment, 2026-11-04): open-post and unknown sources get two verifiers who read the results; reviewed sources get one who confirms the acceptance and names what is withheld. Only reviewed sources can now survive on one vote.
 
 ## Open: the owner decides
 

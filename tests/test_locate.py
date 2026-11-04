@@ -80,6 +80,22 @@ class LocateTest(unittest.TestCase):
             {"id": "c1", "findings": ["flood F1"], "importance": "central", "claim": "x"}))[0], 0)
         self.assertEqual(json.loads((self.topic / "claims.json").read_text(encoding="utf-8")), [kept])
 
+    def test_a_pick_sets_the_standing_and_keeps_the_votes(self):
+        vote = {"refuted": False, "confidence": "high", "evidence": "e"}
+        kept = {"id": "c1", "claim": "old", "quote": "q", "url": "u", "label": "paper", "importance": "central",
+                "votes": [vote], "verdict": "survived"}
+        (self.topic / "claims.json").write_text(json.dumps([kept]), encoding="utf-8")
+        self.assertEqual(self.run_it("s", "--picks", self.picks(
+            {"id": "c1", "findings": ["flood F1"], "importance": "central", "claim": "x", "standing": "reviewed", "venue": "A Conf"},
+            {"id": "c2", "findings": ["flood F2"], "importance": "central", "claim": "y", "standing": "open-post"}))[0], 0)
+        claims = json.loads((self.topic / "claims.json").read_text(encoding="utf-8"))
+        self.assertEqual(claims[0], dict(kept, standing="reviewed", venue="A Conf"))
+        self.assertEqual(claims[1]["standing"], "open-post")
+        code, out = self.run_it("s", "--picks", self.picks(
+            {"id": "c3", "findings": ["flood F1"], "importance": "central", "claim": "x", "standing": "famous"}))
+        self.assertEqual(code, 1)
+        self.assertIn("standing must be one of open-post, reviewed, unknown", out[0])
+
     def test_a_pick_that_did_not_locate_blocks_the_write(self):
         code, out = self.run_it("s", "--picks", self.picks(
             {"id": "c1", "findings": ["flood F4"], "importance": "supporting", "claim": "x"},

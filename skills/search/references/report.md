@@ -1,6 +1,6 @@
 # report
 
-A decision-ready answer from many sources. Researchers gather findings with exact quotes; every cited page is archived and each quote located in it; the claims the answer rests on are attacked by one verifier each, and two more when the first doubts it; this session writes the report on what survived. Researchers run as `phro-search:web-gatherer`, verifiers as `phro-search:verifier`, the support pass as `phro-search:local-reader`.
+A decision-ready answer from many sources. Researchers gather findings with exact quotes; every cited page is archived and each quote located in it; the claims the answer rests on are attacked by verifiers according to the source's standing, and by more when one doubts it; this session writes the report on what survived. Researchers run as `phro-search:web-gatherer`, verifiers as `phro-search:verifier`, the support pass as `phro-search:local-reader`.
 
 ## Before spawning
 
@@ -16,6 +16,7 @@ A decision-ready answer from many sources. Researchers gather findings with exac
 | a large set to enumerate | at most 6 slices along a natural split (kind, year, region) |
 
 - Depth: a default run takes at most 5 central claims and 20 claims in a view. A request for a precise, deep or thorough report, in any language, makes it a deep run: at most 10 central claims, 40 in a view, and three verifiers per central claim from the start.
+- Standing: `references/formats.md`. Set it for each central claim's source in the picks, before the support pass.
 - Checkpoint: show the subtopics and the decision criteria in one round before spawning. Skip it when the user's brief already named them or there is no user to answer; log the skip and why.
 - Log `research`, `archive`, `verify` and `write` sections in the round's shape of log.md (spawned, came back, fetched, decisions); `verify` adds `votes: <n> central claims; <s> survived, <r> refuted, <u> unverified; <m> missing votes`.
 - Plan line: "PLAN: report; 5 researchers, up to 2 support readers, up to 15 verifier calls; ceiling 24 agent calls", with the researcher count from the table and the ceiling 19 above it (it counts the researchers, at most 2 for a gap round, a support reader and one more for reworded claims, and up to 3 verifiers for each of at most 5 central claims). A deep run says up to 30 verifier calls and puts the ceiling 34 above.
@@ -59,8 +60,8 @@ One gap round at most: 1 or 2 researchers, only for a key question left without 
 
    ```
    [{"id": "c1", "claim": "<one falsifiable claim, in English>", "quote": "<exact text: as located, or as the researcher copied it>",
-     "url": "<original URL>", "label": "paper", "importance": "central",
-     "votes": [{"refuted": false, "confidence": "high", "evidence": "<what the verifier checked>", "counter_source": "<URL>", "checked": "<YYYY-MM-DD>"}],
+     "url": "<original URL>", "label": "paper", "importance": "central", "standing": "open-post", "venue": "<name>",
+     "votes": [{"refuted": false, "confidence": "high", "evidence": "<what the verifier checked>", "withheld": "<what it found closed>", "counter_source": "<URL>", "checked": "<YYYY-MM-DD>"}],
      "verdict": "survived"}]
    ```
 
@@ -84,21 +85,33 @@ For a source that is a standard, a specification or an RFC. Families: robotics a
 
 Before any vote, run the support pass (`references/briefs.md`) on every located quote in the view, central and supporting, and write each `support` and `qualifier` into the view. A central claim with no full rating is lowered to supporting, or reworded to what its source says and rated again: one more support pass takes all the reworded claims together, and a reworded claim still below full is lowered to supporting. Only a central claim rated full is sent.
 
-One verifier per central claim, starting from counter-evidence. A claim whose reply is refuted, low in confidence or no vote gets two more, one from source standing and date, one from benchmark and marketing; they are part of this one pass. A deep run sends all three at once. Several claims may share a turn, at most 12 verifiers at once; record a claim's verdict only when every verifier sent for it has replied or been stopped.
+The source's standing sets the check and the number of verifiers. They differ only in where they start, so every verifier of a claim runs the same check list. Further replies are part of this one pass. Several claims may share a turn, at most 12 verifiers at once; record a claim's verdict only when every verifier sent for it has replied or been stopped.
+
+| Standing | First | When a reply is refuted, low in confidence or no vote | Deep run, at once |
+|---|---|---|---|
+| `open-post`, `unknown` | 2: results; counter-evidence | 1 more: benchmark and marketing | results; counter-evidence; benchmark and marketing |
+| `reviewed` | 1: what is withheld | 2 more: counter-evidence; benchmark and marketing | what is withheld; counter-evidence; source standing and date |
 
 ```
 You are a verifier. Try to refute one claim.
 
 Claim: <its claims.json text, copied exactly>
 Quoted support: "<quote>" from <URL> (<label>)
+Source standing: <standing>, <venue>
 Context from the archived copy: <the located paragraph, from its first line to its last>
-Start with: <counter-evidence | source standing and date | benchmark and marketing>
+Start with: <the row's starting point>
 It serves the question: <Q>
 
-A support reader has already checked that the quote states the claim. Run at least one web search of your own beyond the quoted page. Search from your starting point, then check, in order: does a credible source contradict it; is the source strong enough for the claim (a maker's page on its own product's results is weak); is it outdated; is it marketing or a picked benchmark. If you are unsure, the claim is refuted. At most 8 tool calls.
+A support reader has already checked that the quote states the claim. Run at least one web search of your own beyond the quoted page.
+<the standing's check, below>
+Search from your starting point, then check, in order: does a credible source contradict it; the standing's check; is the source strong enough for the claim (a maker's page on its own product's results is weak); is it outdated; is it marketing or a picked benchmark. If you are unsure, the claim is refuted. At most 8 tool calls.
 Reply with one JSON object and nothing else:
-{"refuted": <true or false>, "confidence": "<high, medium or low>", "evidence": "<one or two sentences on what you checked>", "counter_source": "<URL, only when a source contradicts the claim>"}
+{"refuted": <true or false>, "confidence": "<high, medium or low>", "evidence": "<one or two sentences on what you checked>", "withheld": "<what the source keeps closed among code, weights, data, splits, baseline settings, hardware and failure cases; none; or not checked>", "counter_source": "<URL, only when a source contradicts the claim>"}
 ```
+
+The check for `open-post` and `unknown`: "Nobody vetted this source before it appeared, so its venue lends it nothing. Open the full text, not the abstract. The table or figure behind each number must exist, the source must state it as measured rather than planned or expected, the abstract and the table must agree, the sample, split and baseline must be stated, and the claim's scope must be what was tested. A number with no results behind it is refuted."
+
+The check for `reviewed`: "Review vouched for the results as shown, so do not redo them. Confirm the acceptance on the venue's own page or proceedings; an author's line is not enough. Then look for what the authors keep closed and name it in withheld. A closed item alone does not refute a number; refute when the acceptance fails or a source contradicts the number."
 
 Vote rule: a reply that is missing, not that JSON object, or without a true or false `refuted` is no vote. Record the votes under the claim in `claims.json`, each with today's date as `checked`, then its verdict: 2 refutations, refuted; one vote that holds with high or medium confidence, survived; any other single vote or none, unverified (a failed check, never read as refuted); otherwise survived. Verification runs once and is never repeated to rescue a claim; a claim is never reworded after its votes. `report.py` checks every verdict against its votes.
 
@@ -114,13 +127,14 @@ Write the report in this session, where the claims, votes and extracts already a
 ## <when another option wins> (a choice): the conditions under which another option is the better pick, each citing the claims behind it
 ## <what would change this answer> (a choice): the 1 to 3 central claims the pick rests on most, and for each the check the user can run
 ## <a heading that starts with the word for conclusion in the report's language>: new implications only, citing the claims they rest on
-## <evidence>: a table with the columns id, claim, label, location (sources/<file>:<line>, or URL only), URL, vote
+## <evidence>: a table with the columns id, claim, label, standing, withheld, location (sources/<file>:<line>, or URL only), URL, vote
 ## <refuted and unverified claims>: each with the reason from its votes
 ```
 
 - The decision table: the options as rows, the brief's decision criteria as columns. Each cell is a short value with the claims behind it ("40 ms [c3]"), or the word unknown alone, in the report's language, when no claim backs it. Mark a cell unverified when none of its claims survived votes; a refuted claim never fills a cell. A landscape or standards report has no pick: its table puts the entities (projects, vendors, standards) as rows and the key questions as columns, under the same cell rule, and it has no "when another option wins" or "what would change this answer".
 - Cite claims inline as [c3] or [c3, c7]. Every fact cites a claim; add nothing that is not in claims.json.
 - The BLUF and the conclusion cite survived claims only. A refuted claim appears in a section only as refuted, with why.
+- A vote that held does not make a number reproduced. The BLUF says so when every number it rests on comes from `open-post` or `unknown` sources, and the first sentence that uses a claim with something withheld names what is closed.
 - Prose, not lists, outside the tables. Say what is unknown, give the strongest case for the other side, and take a position where the evidence allows one.
 - Check the report with `check.py --kind report <topic>/report-<stem>.md`.
 

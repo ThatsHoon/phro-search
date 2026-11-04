@@ -41,7 +41,7 @@ python3 -I dev/score_round0.py gold.txt runs/a1/flood-mapping --found "round 0"
 
 ## Verifier set
 
-Make 20 to 30 planted claims from T2.4's `claims.json` (overstated, outdated, contradicted and true variants), let 3 verifiers vote on each, and list the truth in a planted file, one claim per line: `<claim id> <true|false> [<variant>]`. A default run sends one verifier first, so the FALSE line's "votes not refuting" reads as the chance that it lets a false claim pass.
+Make 20 to 30 planted claims from T2.4's `claims.json` (overstated, outdated, contradicted and true variants), let 3 verifiers vote on each, and list the truth in a planted file, one claim per line: `<claim id> <true|false> [<variant>]`. A default run sends one verifier first on a reviewed source, so the FALSE line's "votes not refuting" reads as the chance that it lets a false claim pass.
 
 ```bash
 python3 -I dev/score_verifiers.py planted.tsv research/<topic>/claims.json

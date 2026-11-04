@@ -11,8 +11,8 @@ the votes the verifiers gave (references/report.md).
 A vote is one parsed reply, with refuted true or false; anything else is no vote. The verdict follows the vote
 rule of report.md, computed from the votes (a verdict field that disagrees gets a # note): 2 refutations,
 refuted; one vote that holds with high or medium confidence, survived; any other single vote or none, unverified;
-otherwise survived. A run sends one verifier first, so on the FALSE line "votes not refuting" is the chance that a
-single verifier lets a false claim pass.
+otherwise survived. A run sends one verifier first on a reviewed source, so on the FALSE line "votes not refuting" is
+the chance that a single verifier lets a false claim pass.
 
 Output, tab-separated:
   CLAIM <id> <truth> refuted <r>/<votes> <verdict> <ok|false refutation|false survival|no verdict>

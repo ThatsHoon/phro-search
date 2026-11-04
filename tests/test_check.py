@@ -308,7 +308,7 @@ class ReportKindTest(unittest.TestCase):
                          [(3, "bluf", "the BLUF names no as-of date; write it as YYYY-MM-DD")])
 
     def test_central_claims_it_cites_have_quotes_in_its_view(self):
-        claims = [dict(VERDICTS[0], importance="central")] + VERDICTS[1:]
+        claims = [dict(VERDICTS[0], importance="central", standing="open-post")] + VERDICTS[1:]
         self.assertEqual(self.run_report(REPORT, claims), (0, ["OK"]))
         code, out = self.run_report(REPORT, claims, located=("c2",))
         self.assertEqual((code, [line.split(":")[:2] for line in out[:-1]]), (1, [["3", "claim"], ["7", "claim"], ["19", "claim"]]))
@@ -316,6 +316,14 @@ class ReportKindTest(unittest.TestCase):
         self.assertEqual(self.run_report(REPORT, claims, view="extracts.json"), (0, ["OK"]))  # an older topic's single view
         code, out = self.run_report(REPORT, claims, view=None)
         self.assertEqual((code, out[0]), (1, "0:view: no extracts-2026-10-30.json beside the report; write the report's evidence view"))
+
+    def test_central_claims_it_cites_name_their_standing(self):
+        claims = [dict(VERDICTS[0], importance="central")] + VERDICTS[1:]
+        code, out = self.run_report(REPORT, claims)
+        self.assertEqual(code, 1)
+        self.assertIn("[c1] is central, but claims.json gives it no standing", out[0])
+        claims[0]["standing"] = "reviewed"
+        self.assertEqual(self.run_report(REPORT, claims), (0, ["OK"]))
 
     def problems(self, text):
         return [(line, rule) for line, rule, _ in m.report_problems(text, {c["id"].lower(): c.get("verdict", "not checked")

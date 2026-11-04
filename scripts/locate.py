@@ -14,9 +14,10 @@ the source's own text, which report.py then checks.
 The picks file is JSON:
   {"title": "...", "question": "...", "stopped": "...", "disagreements?": [], "unreached?": [],
    "claims": [{"id": "c1", "findings": ["flood F3"], "importance": "central", "claim": "<in the user's language>",
+               "standing?": "open-post|reviewed|unknown", "venue?": "<name>",
                "quotes?": [{"file": "a.md", "line": 12, "end?": 13, "text": "<exact text>"}]}]}
 A new id is appended to claims.json with the finding's English claim, its first quote, URL and label, and no votes; an
-id already there keeps its entry and its votes. The view lists each picked claim with its located quotes and status
+id already there keeps its entry and its votes. A pick's standing and venue are written to either. The view lists each picked claim with its located quotes and status
 partial; the support pass sets the rest. A pick whose finding did not locate blocks the write, unless the pick gives
 "quotes" itself: text read from the source, which replaces what the findings located and which report.py checks.
 
@@ -38,7 +39,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import report as rep  # noqa: E402  (python -I leaves the script's folder off the path)
 
-VERSION = "0.5.0"
+VERSION = "0.6.0"
 FINDING = re.compile(r"^- F(\d+)\.\s*(.*?)\s*Quote[^:\"]*:\s*\"(.*)\"(.*?)(https?://\S+)(.*)$")
 LABEL = re.compile(r"\(([a-z-]+)\)")
 TEXT = (".md", ".txt")
@@ -175,12 +176,14 @@ def write(topic, stem, picks, found):
     for pick in picks["claims"]:
         items = [found[key] for key in pick["findings"]]
         quotes = pick.get("quotes") or [quote_of(i) for i in items]
+        standing = {k: pick[k] for k in ("standing", "venue") if k in pick}
         if pick["id"] not in known:
             first = items[0]
             claims.append({"id": pick["id"], "claim": first["claim"], "quote": quotes[0]["text"], "url": first["url"],
                            "label": first["label"], "importance": pick["importance"], "votes": []})
             known.add(pick["id"])
             new += 1
+        next(c for c in claims if c["id"] == pick["id"]).update(standing)
         view.append({"id": pick["id"], "claim": pick["claim"], "status": "partial", "quotes": quotes})
         count += len(quotes)
     data = {k: picks[k] for k in ("title", "question", "stopped", "disagreements", "unreached") if k in picks}
@@ -225,6 +228,8 @@ def main(argv=None):
             rep.need(pick, {"id": str, "findings": list, "importance": str, "claim": str}, "pick")
             if pick["importance"] not in rep.IMPORTANCE or not pick["findings"]:
                 raise ValueError(f'pick {pick["id"]}: needs findings and an importance of {", ".join(rep.IMPORTANCE)}')
+            if pick.get("standing", rep.STANDING[0]) not in rep.STANDING:
+                raise ValueError(f'pick {pick["id"]}: standing must be one of {", ".join(rep.STANDING)}')
     except (OSError, ValueError) as e:
         print(f"FAIL\t{rep.clean(e)}")
         return 1

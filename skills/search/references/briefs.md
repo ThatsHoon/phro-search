@@ -36,7 +36,7 @@ You are a support reader. Read only files in <topic>/sources.
 
 For each quote below, read the section around it (heading to heading, or 40 lines either side) and the source's own limitations, threats-to-validity or future-work section when it has one. Rate how well the quote supports its claim as written:
 - full: the passage states the claim, not less and not more;
-- partial: it states part of the claim, or the claim says more (wider scope, stronger number, fewer conditions);
+- partial: it states part of the claim, or the claim says more (wider scope, stronger number, fewer conditions), or its number stands only in an abstract or in a table the source calls planned, expected or a template;
 - none: it does not state the claim;
 - contradicts: it states the opposite, or a condition that undoes the claim.
 When a sentence in the source limits the claim (a condition, a scope, a caveat), copy it exactly as the qualifier.

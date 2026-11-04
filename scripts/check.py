@@ -13,8 +13,8 @@ space (U+00A0, U+202F) or a soft hyphen in a quote line is allowed, since a quot
              as-of date as YYYY-MM-DD;
        section: a conclusion section exists (a ## heading that starts with the word for conclusion),
                 and it and every ## section before it cite a claim;
-       claim: every cited id is in claims.json, every central claim cited has a quote in the view, and the
-              BLUF and the conclusion cite survived claims only;
+       claim: every cited id is in claims.json, every central claim cited has a quote in the view and a
+              standing in claims.json, and the BLUF and the conclusion cite survived claims only;
        table: in a Markdown table above the evidence table (the title, the BLUF and every ## section up to
               and including the conclusion), every cell but the header row and the first column cites a
               claim or is only the word unknown (or its word in the report's language); a row with fewer
@@ -35,7 +35,7 @@ space (U+00A0, U+202F) or a soft hyphen in a quote line is allowed, since a quot
 import argparse, itertools, json, re, sys, urllib.parse
 from pathlib import Path
 
-VERSION = "0.5.0"
+VERSION = "0.6.0"
 
 # One hit fails. English entries match whole words; Korean entries match anywhere in the text.
 HARD_PHRASES = [
@@ -180,9 +180,10 @@ def table_problems(block):
     return found
 
 
-def report_problems(raw, verdicts, unlocated=frozenset(), view="its evidence view"):
+def report_problems(raw, verdicts, unlocated=frozenset(), view="its evidence view", unranked=frozenset()):
     """A report's structure as (line, rule, detail) tuples; verdicts maps each claims.json id, lowercase, to its verdict,
-    and unlocated holds the central ids that the evidence view (named view) gives no quote."""
+    unlocated holds the central ids that the evidence view (named view) gives no quote, and unranked the central ids
+    with no standing."""
     lines = FENCE.sub(lambda m: "\n" * m.group().count("\n"), raw.replace("\r\n", "\n")).split("\n")
     parts = [[0, 0, "", []]]  # heading line, level (0 before any heading), heading, body as (line, text) pairs
     for n, line in enumerate(lines, 1):
@@ -198,6 +199,8 @@ def report_problems(raw, verdicts, unlocated=frozenset(), view="its evidence vie
     found = [(n, "claim", f"[{c}] is not in claims.json") for p in parts for n, c in cites(p[3]) if c not in verdicts]
     found += [(n, "claim", f"[{c}] is central, but {view} gives it no quote") for p in parts for n, c in cites(p[3])
               if c in unlocated]
+    found += [(n, "claim", f"[{c}] is central, but claims.json gives it no standing") for p in parts for n, c in cites(p[3])
+              if c in unranked]
     title = next((p for p in parts if p[1] == 1), None)
     if title is None:
         return found + [(0, "bluf", "no title line (# title)")]
@@ -386,6 +389,7 @@ def main(argv=None):
             claims = json.loads(path.read_text(encoding="utf-8-sig"))
             verdicts = {c["id"].lower(): c.get("verdict", "not checked") for c in claims}
             central = {c["id"].lower() for c in claims if c.get("importance") == "central"}
+            unranked = {c["id"].lower() for c in claims if c.get("importance") == "central" and not c.get("standing")}
         except (OSError, ValueError, TypeError, KeyError, AttributeError) as e:
             print(f"FAIL\tcannot read {path}: {e}")
             return 1
@@ -404,7 +408,7 @@ def main(argv=None):
                 break
         if view is None:
             problems.append((0, "view", f"no {views[0].name} beside the report; write the report's evidence view"))
-        problems += report_problems(raw, verdicts, central - located if view else frozenset(), view.name if view else "")
+        problems += report_problems(raw, verdicts, central - located if view else frozenset(), view.name if view else "", unranked)
     if args.kind == "pulse":
         if args.file == "-":
             print("FAIL\t--kind pulse reads the pulse.py result beside the brief; pass the file, not -")

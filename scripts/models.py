@@ -41,7 +41,7 @@ from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
-VERSION = "0.5.0"
+VERSION = "0.6.0"
 
 HUB = "https://huggingface.co"
 UA = f"Mozilla/5.0 (compatible; phro-search/{VERSION}; +https://github.com/ThatsHoon/phro-search)"

@@ -43,6 +43,11 @@ One label per source, no scores; the reader decides what to trust by reading the
 
 Marks after the label, when known: `retracted` (OpenAlex marks the work retracted: it never backs a required or central claim), `preprint` (a submitted version, such as fetch.py's submitted-copy: quote the published version when one exists), `landing-page` (fetch.py took the copy from a landing page: check that it holds the full text, not only a record), `unchecked` (fetch.py could not ask OpenAlex, so neither copies nor a retraction were checked), `archived-copy` (fetch.py read a dead page from its closest Wayback snapshot: it shows the page as of that snapshot), `examples` (the writer's own work is shown; read these first when the user wants how skilled people do it), `measured` (the writer's own measurements or comparisons), `self-reported` (a score or feature stated by its own authors), `ai-assisted` (the writer says an AI wrote it), `promo` (leads to something the writer sells), `unread` (downloaded, read by nobody yet), `auto-captions` (automatic captions: frequent errors, quote only what is legible, have the user check the video), `unverified` (from a search report, not read in the original).
 
+Standing says who vetted a source before it appeared, and so what a check must attack. It goes after the label in map.md's Sources table and in each central claim's `standing`, with the venue's name in `venue`. Look a paper up with `chain.py find <DOI or title>` (an arXiv paper as `10.48550/arXiv.<id>`) and read its type, venue and flags:
+- `open-post`: anyone could post it, so its venue lends it nothing and its results must be read: type preprint or a repository venue, and every `first-hand`, `official`, `observed` or `summary` source. An author's "accepted at" line does not change this; only the venue's own record does.
+- `reviewed`: published by a venue the field treats as core (its surveys and most cited works appear there), or a standard from its body. Review vouches for the results as shown, not for what the authors kept closed.
+- `unknown`: a venue you cannot place, such as a journal that charges authors and promises fast acceptance. It takes the checks of `open-post`.
+
 ## File names and locations
 
 - `<author>-<year>-<short-title>` in lowercase ASCII with hyphens; arXiv papers `arxiv-<id>-<short-title>`.

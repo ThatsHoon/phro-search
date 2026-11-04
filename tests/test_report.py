@@ -296,6 +296,17 @@ class ClaimsTest(unittest.TestCase):
         self.assertEqual(votes.count("<li>held (high): checked the release notes</li>"), 2)
         self.assertIn('<li>refuted (high): a later benchmark disagrees (<a href="https://example.org/b">counter source</a>)</li>', votes)
 
+    def test_standing_and_withheld_shown_next_to_the_claim(self):
+        held = vote(False, withheld="weights and the split")
+        html = self.page(self.topic([claimed("c1", votes=[held], verdict="survived", standing="reviewed", venue="A Conf")]))
+        self.assertIn('central, paper, reviewed, A Conf, <a href="https://example.org/a">', html)
+        self.assertIn("<li>held (high): checked the release notes; withheld: weights and the split</li>", html)
+
+    def test_standing_must_be_known(self):
+        code, out = self.report(self.topic([claimed("c1", standing="famous")]))
+        self.assertEqual(code, 1)
+        self.assertIn("standing must be one of open-post, reviewed, unknown", out)
+
     def test_only_web_urls_become_links(self):
         bad = vote(True, counter_source="javascript:alert(1)")
         html = self.page(self.topic([claimed("c1", votes=[bad, bad], verdict="refuted", url="file:///etc/passwd")]))
