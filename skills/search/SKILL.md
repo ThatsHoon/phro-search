@@ -1,6 +1,6 @@
 ---
 name: search
-description: Research skill: pins down the need, then runs one mode. dig: catch up on a new field down to original sources. report: decision-ready report, claims checked. pulse: what communities said or shipped in the last N days. docs: how a library or API behaves, checked in docs and source. models: which model fits the constraints, from public leaderboards. watch: new posts from known venues. Use for "원문까지 파줘", "보고서로 정리해줘", "요즘 반응", "모델 추천", "새 글 확인", "소스 코드에서 확인해줘", "best model for", "canonical papers". Not for one-fact lookups, local file search, or summarizing a document in hand.
+description: Research skill for any request to investigate, survey or look up papers, projects, methods or tools, including "조사해", "찾아봐", "연구 찾아", "있는지 조사". Pins down the need, then runs one mode. dig: catch up on a new field down to original sources. report: decision-ready report, claims checked. pulse: what communities said or shipped in the last N days. docs: how a library or API behaves, checked in docs and source. models: which model fits the constraints, from public leaderboards. watch: new posts from known venues. Use for "원문까지 파줘", "보고서로 정리해줘", "요즘 반응", "모델 추천", "새 글 확인", "소스 코드에서 확인해줘", "best model for", "canonical papers". Not for one-fact lookups, local file search, or summarizing a document in hand.
 ---
 
 # search

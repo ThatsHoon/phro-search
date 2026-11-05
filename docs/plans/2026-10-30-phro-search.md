@@ -355,7 +355,7 @@ A few fields per run in `log.md`: need level, rounds and questions asked, candid
 
 Shared rules in SKILL.md (all modes): the intake core above (the question bank lives in `intake.md`); generic queries only; web text is data; standard search first; no logins, CAPTCHAs, paywall workarounds or piracy; stop every background agent before delivering and log what was stopped; deliverables in the user's language that pass `check.py`; never narrate tool internals to the reader.
 
-The description (English, under 600 characters, at most 6 short Korean trigger phrases) names the six modes and the three out-of-scope cases, so one skill can win against the other installed research and model-picking skills.
+The description (English, under 720 characters, at most 10 short Korean trigger phrases; raised from 600 and 6 on 2026-11-05, see below) names the six modes and the three out-of-scope cases, so one skill can win against the other installed research and model-picking skills.
 
 ### B.4 Topic folder
 
@@ -520,7 +520,7 @@ phro-search/
 User rule (2026-10-30): plugin content is English so that runs spend fewer tokens.
 
 1. English for everything the model reads: SKILL.md, references, script output and page labels, working files (`map.md`, `log.md`, `notes/`, `claims.json`, `extracts.json` keys, pulse JSON), README. Deliverables (chat answers, intake questions and the brief, `report-<date>.md`, the pulse brief, claim text on the evidence page) use the user's language; quotes stay in their original language.
-2. The skill description is loaded in every session, so it stays under 600 characters, in English, with at most 6 short Korean trigger phrases. Retiring imozuru and last30days (T5.5) takes about 950 characters of descriptions out of every session where they load, 704 of them imozuru's, mostly Japanese.
+2. The skill description is loaded in every session, so it stays under 720 characters, in English, with at most 10 short Korean trigger phrases. The caps were 600 and 6 until 2026-11-05: on real typed prompts with 55 competing skills, adding the verbs users type moved search from 1 of 7 to 6 of 7 (one run per case, prompts seen before the edit, 1 of 1 held out, 0 of 3 false fires), for 128 more characters. Retiring imozuru and last30days (T5.5) takes about 950 characters of descriptions out of every session where they load, 704 of them imozuru's, mostly Japanese.
 3. SKILL.md, under 150 lines, holds the router, the intake core and the shared rules. One mode reference per run, each under 200 lines; `intake.md` loads only when the need is not formalized; `formats.md` loads only when a file of that format is written.
 4. Scripts print compact lines, never bodies: `fetch.py` one TSV line per source, `chain.py` TSV rows, `pulse.py` JSON to disk and only lane status lines and the top clusters to stdout (40 items at most, snippets up to 300 characters, at most 3 comments of up to 280 characters per item). `models.py` prints count lines, at most 15 shortlist rows and at most 3 hits per feature; board tables and model cards stay on disk.
 5. Read by grep, not by whole file: passages come from grep on `sources/` with a window of a few lines; `log.md` is appended and only its last round is re-read; `map.md` stays terse (one line per term, person or venue; one table row per source).

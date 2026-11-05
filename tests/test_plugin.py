@@ -270,10 +270,10 @@ class PluginTest(unittest.TestCase):
         if not SKILL.exists():
             self.skipTest("SKILL.md comes in T1.7")
         desc = split_skill(read(SKILL))[0]
-        self.assertLess(len(desc), 600)
+        self.assertLess(len(desc), 720)
         self.assertEqual([m for m in MODES if not re.search(rf"\b{m}\b", desc)], [])
         korean = [q for q in re.findall(r'"([^"]+)"', desc) if KO.search(q)]
-        self.assertTrue(1 <= len(korean) <= 6 and all(len(q) <= 20 for q in korean), korean)
+        self.assertTrue(1 <= len(korean) <= 10 and all(len(q) <= 20 for q in korean), korean)
         self.assertIsNone(KO.search(re.sub(r'"[^"]+"', "", desc)), "Hangul outside the quoted trigger phrases")
         self.assertIsNone(JA.search(desc))
 

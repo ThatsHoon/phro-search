@@ -39,7 +39,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import report as rep  # noqa: E402  (python -I leaves the script's folder off the path)
 
-VERSION = "0.6.0"
+VERSION = "0.6.1"
 FINDING = re.compile(r"^- F(\d+)\.\s*(.*?)\s*Quote[^:\"]*:\s*\"(.*)\"(.*?)(https?://\S+)(.*)$")
 LABEL = re.compile(r"\(([a-z-]+)\)")
 TEXT = (".md", ".txt")
