@@ -1,4 +1,4 @@
-import json, os, shutil, subprocess, tempfile, threading, time, unittest
+import importlib.util, json, os, shutil, subprocess, tempfile, threading, time, unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -89,6 +89,39 @@ class PlanLine(unittest.TestCase):
         self.assertEqual(wrap(self.transcript(skill(), read(REPORT))).returncode, 2)
         self.assertEqual(wrap(self.transcript(say("hello"))).returncode, 0)
         self.assertEqual(wrap(self.dir / "missing.jsonl").returncode, 0)
+
+    def big(self, *lines, filler_mb=20):
+        path = self.dir / "big.jsonl"
+        row = json.dumps(say("x" * 1000)) + "\n"
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(row * (filler_mb * 1024))
+            f.write("".join(json.dumps(x) + "\n" for x in lines))
+        return path
+
+    def test_a_long_transcript_is_read_from_its_tail(self):
+        path = self.big(skill(), read(REPORT))
+        self.assertEqual(self.run_hook(path).returncode, 2)
+        spec = importlib.util.spec_from_file_location("plan_line", HOOK)
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        lines, end = m.read_lines(path)
+        self.assertEqual((len(lines), end), (2, path.stat().st_size))
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(say("PLAN: report; 2 rounds; ceiling 9 agent calls")) + "\n" + '{"partial')
+        more, after = m.read_lines(path, end)
+        self.assertEqual((len(more), after), (1, path.stat().st_size - len('{"partial')), "a retry reads only the new complete lines")
+
+    def test_a_run_older_than_the_tail_does_not_block(self):
+        path = self.big(skill(), read(REPORT), filler_mb=0)
+        with open(path, "a", encoding="utf-8") as f:
+            f.write((json.dumps(say("x" * 1000)) + "\n") * (10 * 1024))
+        self.assertEqual(self.run_hook(path).returncode, 0)
+
+    @unittest.skipUnless(SH, "needs sh")
+    def test_wrapper_finds_the_skill_in_a_long_transcript(self):
+        event = json.dumps({"transcript_path": str(self.big(skill(), read(REPORT)))})
+        r = subprocess.run([SH, (ROOT / "hooks" / "plan_line.sh").as_posix()], input=event, capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(r.returncode, 2)
 
     def test_registered_in_hooks_json(self):
         hooks = json.loads((ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))["hooks"]["PreToolUse"]

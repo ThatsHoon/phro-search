@@ -5,7 +5,7 @@ Standalone on purpose: it imports nothing from the scripts."""
 import json, os, re, sys, threading, unicodedata, urllib.parse
 from pathlib import Path
 
-DEADLINE = 6  # seconds for the check once Python runs, under the hook's 10 s timeout with room for a slow start
+DEADLINE = 20  # seconds for the check once Python runs, under the hook's 30 s timeout with room for a start slowed by parallel searches
 
 
 def egress_terms(cwd=None):

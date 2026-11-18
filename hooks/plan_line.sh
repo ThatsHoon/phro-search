@@ -1,11 +1,12 @@
 #!/bin/sh
 # PreToolUse hook for Agent, WebSearch and WebFetch: runs plan_line.py only in a session where the search skill ran, so
-# other sessions start no Python. Any failure here lets the call through; plan_line.py says why.
+# other sessions start no Python. Any failure here lets the call through; plan_line.py says why. Only the transcript's
+# last 8 MB is searched, the same window plan_line.py reads, so a long session's transcript costs no more than a short one.
 
 input=$(cat)
 path=$(printf '%s\n' "$input" | sed -n -E 's/.*"transcript_path"[[:space:]]*:[[:space:]]*"(([^"\\]|\\.)*)".*/\1/p' |
 	sed -e 's/\\\\/\//g' -e 's/\\\//\//g')
-grep -q "phro-search:search" "$path" 2>/dev/null || exit 0
+tail -c 8388608 "$path" 2>/dev/null | grep -q "phro-search:search" || exit 0
 
 case $0 in
 */* | *\\*) dir=${0%[/\\]*} ;;

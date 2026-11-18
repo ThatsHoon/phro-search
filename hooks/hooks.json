@@ -7,7 +7,7 @@
           {
             "type": "command",
             "command": "sh \"${CLAUDE_PLUGIN_ROOT}/hooks/egress.sh\"",
-            "timeout": 10
+            "timeout": 30
           }
         ]
       },
@@ -17,7 +17,7 @@
           {
             "type": "command",
             "command": "sh \"${CLAUDE_PLUGIN_ROOT}/hooks/plan_line.sh\"",
-            "timeout": 10
+            "timeout": 30
           }
         ]
       }

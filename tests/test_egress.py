@@ -211,7 +211,7 @@ class HookCommandTest(unittest.TestCase):
 
     def test_command_runs_the_wrapper(self):
         self.assertIn("${CLAUDE_PLUGIN_ROOT}/hooks/egress.sh", HOOKS["command"])
-        self.assertEqual(HOOKS["timeout"], 10)
+        self.assertEqual(HOOKS["timeout"], 30)
 
     def test_no_list_passes_without_starting_python(self):
         for name in ("py", "python3", "python"):
