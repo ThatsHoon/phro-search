@@ -27,7 +27,7 @@ State on 2026-11-02, for the next session that continues this work.
 - `agents/` holds three agents, `web-gatherer`, `verifier` and `local-reader`. They are spawned as `phro-search:<name>`.
 - `hooks/` holds the egress guard (`egress.sh`, `egress.py`) and the plan line check (`plan_line.sh`, `plan_line.py`).
 - `scripts/` holds stdlib Python run as `python -I`: fetch, chain, report, watch, pulse, models, check.
-- `dev/` holds maintainer tools: pdf_modes, agent_cost, routing, score_round0, plant_verifiers, score_verifiers, feedback_gold.
+- `dev/` holds maintainer tools: pdf_modes, agent_cost, routing, score_round0, replay_support, plant_verifiers, score_verifiers, feedback_gold.
 - `evals/` holds the routing prompts and the README on running the R1 evals.
 
 ## How to verify

@@ -533,6 +533,7 @@ class PulseTest(unittest.TestCase):
         self.assertIn("AI agent", top["snippet"])
         self.assertEqual((tiny["date"], tiny["exempt"], tiny["engagement"]), ("2026-10-28", True, {"ts": {"stars": 12}}))
         self.assertEqual(self.lanes(lines), {"ts": "ok"})
+        self.assertIn("2 from topics, kept without the relevance floor", result["lanes"]["ts"]["note"])
 
     def test_ts_runs_only_when_named_and_joins_the_github_copy(self):
         code, lines, result, opener = self.run_pulse({"subqueries": [{"search_query": "widget engine"}]}, [])

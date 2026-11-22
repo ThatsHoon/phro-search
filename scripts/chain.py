@@ -34,7 +34,8 @@ oa rows: <published|accepted|submitted|-> <repository|publisher|other> <pdf url 
   submitted, and repository copies (arXiv included) first
 cocited rows: <sources citing it> <in|missing> then the work's row; LINK <hosts citing it> <in|missing> <url>
 Other lines, a label and then tab-separated fields:
-  # cocited <k> of <n> sources resolved <m> works cited by <min> or more   first line of cocited
+  # cocited <k> of <n> sources with a DOI or arXiv id resolved (<all> sources) <m> works cited by <min> or more
+                                                first line of cocited; a source without such an id is not asked
   # audit <k> of <n> in the map                 after the cocited rows; k and n count the rows printed
   # links <k> of <n> in the map                 after the LINK rows
   # work <W id> <year> <title> <flags or ->      first line of refs, cites, related and oa
@@ -62,7 +63,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-VERSION = "0.7.0"
+VERSION = "0.7.1"
 API = "https://api.openalex.org"
 UA = f"Mozilla/5.0 (compatible; phro-search/{VERSION}; +https://github.com/ThatsHoon/phro-search)"
 CAP = 10 * 1024 * 1024  # bytes read per API page
@@ -421,13 +422,15 @@ def source_key(row):
 
 def link_id(url):
     """(host, host and path) of a link as compared: no scheme, www, query, fragment or trailing slash; a GitHub link
-    reduced to its repository. None for a site's front page or a static file."""
+    reduced to its repository. None for a site's front page, a static file, a license page or a DOI cut short."""
     u = urllib.parse.urlsplit(url.rstrip(".,;:"))
     host = re.sub(r"^www\.", "", (u.hostname or "").lower())
     path = u.path.rstrip("/")
     if host == "github.com":
         path = "/".join(path.lower().split("/")[:3])
-    if not host or not path or STATIC.search(path):
+    if not host or not path or STATIC.search(path) or host == "creativecommons.org":
+        return None
+    if host in ("doi.org", "dx.doi.org") and not re.fullmatch(r"/10\.\d{4,9}/\S{6,}", path):
         return None
     return host, host + path
 
@@ -455,9 +458,10 @@ def cocited(topic, n, least):
             break
         resolved += 1
         own.add(short(w.get("id")))
+        held += " " + str(w.get("doi") or "").lower()
         tally.update({short(u) for u in w.get("referenced_works") or []})
     top = [wid for wid, c in tally.most_common() if c >= least]
-    print(f"# cocited\t{resolved} of {len(keys)} sources resolved{cut}\t{len(top)} works cited by {least} or more")
+    print(f"# cocited\t{resolved} of {len(keys)} sources with a DOI or arXiv id resolved{cut} ({len(rows)} sources)\t{len(top)} works cited by {least} or more")
     found = [r for i in range(0, min(len(top), 4 * BATCH), BATCH) for r in works("openalex:" + "|".join(top[i:i + BATCH]), BATCH)] if top else []
     found = sorted(found, key=lambda r: (-tally[short(r.get("id"))], -(r.get("cited_by_count") or 0)))[:n]
     have = 0
@@ -483,7 +487,7 @@ def cocited(topic, n, least):
     links = sorted(((len(v), k) for k, v in hosts.items() if len(v) >= least), key=lambda t: (-t[0], t[1]))[:n]
     have = 0
     for c, k in links:
-        known = k in held
+        known = k.lower().split("doi.org/", 1)[-1] in held
         have += known
         print(f"LINK\t{c}\t{'in' if known else 'missing'}\thttps://{clean(k, 300)}")
     print(f"# links\t{have} of {len(links)} in the map")

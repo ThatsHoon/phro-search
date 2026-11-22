@@ -47,20 +47,23 @@ Pick leads with a strong scent: named again and again, surveys and textbooks, ci
 
 Round 0 only builds the map. A round counts once leads were downloaded and at least one backward, forward or author move was made (in a field without papers, following a downloaded post's links backward counts). A round where the searchers came back empty-handed and the main session searched itself still counts, but its saturation is not counted. Empty-handed means none of the pages a searcher named turned out to be a hit once downloaded.
 
+Ledger: a required claim worded as a question cannot be rated full, so once a passage answers it, write the answer the sources give as the claim's text and rate that. After each round, log one line per required claim: what is located, what is still missing (cut down to the part no quote covers yet), and the angles tried for it (method and terms). The next round's leads come from the missing parts, and a claim with nothing missing gets no more searches. "Is it covered" and "would another round help" are two questions: answer both.
+
 Stop when one of these holds, and log which:
 1. Every required claim has a source location (file:line and a short quote) that the support pass rated full. Run the support pass (`references/briefs.md`) once every claim is located; a claim rated below full keeps the dig going, and the quotes later located for it get another pass.
-2. Saturation: 70 percent or more of the people and sources the searchers named this round were already in `map.md`, and few new terms appeared. Log the numbers ("11 of 14 already known"). Count only searchers that searched the same question with different methods; hypothesis branches and the disconfirm searcher overlap little by design, so judge each by its own claims and leave it out of the count. "Known" includes what the main session found itself, and the searchers get the same known list.
+2. Saturation: 70 percent or more of the people and sources the searchers named this round were already in `map.md`, and few new terms appeared. Log the numbers ("11 of 14 already known"). The measure is against the map, not between searchers, so searchers sent on moves from different leads count too; hypothesis branches and the disconfirm searcher overlap little by design, so judge each by its own claims and leave it out of the count. "Known" includes what the main session found itself, and the searchers get the same known list.
 3. Four rounds done: list the claims not reached and why.
 4. Wall: the originals for the remaining claims are all behind logins or paywalls, with nothing left in front of the wall. A partial claim counts when its missing part is walled. Free pages blocked only by bot checks go to the user's browser first.
-5. Budget: a time or count limit agreed in the brief came first. Say how far each measure got (claims sourced, saturation numbers); never pretend a measure was met.
+5. Gap: every claim still missing something was searched from two different angles in two rounds, and neither round cut its missing part down. List each as a gap with the angles tried; a third angle rarely pays.
+6. Budget: a time or count limit agreed in the brief came first. Say how far each measure got (claims sourced, saturation numbers); never pretend a measure was met.
 
 Never stop before round 1 is done, even when round 0 seems to cover every claim: stopping early and missing is the other typical error of search agents. When not stopping, write 2 to 4 leads for the next round to `log.md` first.
 
 ## Canonical audit
 
-Once a stop holds, run `chain.py cocited <topic_dir>`: the works and the links that the archived sources themselves cite most, each marked `in` or `missing`. It needs no field terms, so it also holds in a new field and in one without papers. Mark each `missing` row in the log as out of scope, with a one-line reason (general background the whole field builds on counts), or missing, added to Next leads. Log "audit: k of n" for the works and "links: k of n" for the LINK rows (k in the map, n the rows in scope) as the run's recall estimate; with fewer than 5 sources resolved, log "audit: too few sources" for the works instead.
+Once a stop holds, run `chain.py cocited <topic_dir>`: the works and the links that the archived sources themselves cite most, each marked `in` or `missing`. It needs no field terms, so it also holds in a new field and in one without papers. Mark each row in the log as core (a baseline the sources compare against, a dataset or tool they use, a method they build on, or a number the required claims lean on), background (broad history, general related work) or out of scope, with a one-line reason; a missing core row goes to Next leads. Log "audit core: k of n" and "audit background: k of n" for the works and "links: k of n" for the LINK rows (k in the map) as the run's recall estimate; the core count is the one that matters. With fewer than 5 sources resolved, log "audit: too few sources" for the works instead.
 
-- Audit round: when 3 or more rows stay missing and fewer than 4 rounds ran, run one more round on them, once: download each, locate the required claims in them, and send searchers only for what a download cannot reach. Then audit again and log both counts.
+- Audit round: when 2 or more core rows are missing, run one more round on them, once, even after four rounds: download each and locate the required claims in them; send searchers for what a download cannot reach only while calls remain under the plan line's ceiling. Then audit again and log both counts.
 - In a field with papers, `chain.py topic <confirmed terms>` (`--since <year>` for recent work) lists more leads. It is no recall estimate: its terms also match works outside the field.
 
 ## Evidence page
@@ -71,7 +74,7 @@ Once a stop holds, run `chain.py cocited <topic_dir>`: the works and the links t
 
 ## Deliver
 
-1. The stop reason (one of the five).
+1. The stop reason (one of the six).
 2. Per required claim, its source location (`sources/<file>` and line), one or two lines each.
 3. What was not reached.
 4. The evidence page path first (`report.html`), then 2 to 4 originals to read, each with where to read in it.

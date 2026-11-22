@@ -24,7 +24,7 @@ With any --kind, language: when the Title line of the brief in the topic's map.m
        view: the evidence view exists.
 --kind pulse also checks a pulse brief against the pulse.py result (<stem>.json) beside it:
        lanes: one line names every lane the run listed (Hacker News, Reddit, GitHub, arXiv, YouTube,
-              Hugging Face);
+              Hugging Face, Trendshift);
        quote: every quote (> lines) is found verbatim in the result's titles, snippets or comments ("..." may
               join pieces kept in order), with the quoted item's or comment's link on the line after it, or
               found in a web supplement fetch.py archived: the link line names a URL that sources/index.tsv in the
@@ -37,7 +37,7 @@ With any --kind, language: when the Title line of the brief in the topic's map.m
 import argparse, itertools, json, re, sys, urllib.parse
 from pathlib import Path
 
-VERSION = "0.7.0"
+VERSION = "0.7.1"
 
 # One hit fails. English entries match whole words; Korean entries match anywhere in the text.
 HARD_PHRASES = [

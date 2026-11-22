@@ -39,9 +39,9 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import report as rep  # noqa: E402  (python -I leaves the script's folder off the path)
 
-VERSION = "0.7.0"
+VERSION = "0.7.1"
 FINDING = re.compile(r"^- F(\d+)\.\s*(.*?)\s*Quote[^:\"]*:\s*\"(.*)\"(.*?)(https?://\S+)(.*)$")
-LABEL = re.compile(r"\(([a-z-]+)\)")
+LABEL = re.compile(r"\((paper|official|first-hand|observed|summary)\b[^)]*\)")
 TEXT = (".md", ".txt")
 MIN_QUOTE = 12
 
@@ -128,7 +128,7 @@ def findings(topic):
                 continue
             claim, quote, url, tail = m.group(2), m.group(3), m.group(5).rstrip(".,;)"), m.group(6)
             labels = LABEL.findall(tail)
-            item = {"claim": claim, "quote": quote, "url": url, "label": labels[-1] if labels else "summary"}
+            item = {"claim": claim, "quote": quote, "url": url, "label": labels[0] if labels else "summary"}
             names = files.get(url_key(url))
             if not names:
                 item["miss"] = "no source for the URL"

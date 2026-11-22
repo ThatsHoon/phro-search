@@ -8,6 +8,7 @@ Commands below use `python3`; on Windows run `python` from Git Bash.
 |---|---|---|
 | `intake/` | intake cases for `claude plugin eval` (T5.3; commands in the top README) | the intake |
 | `routing/prompts.tsv`, `dev/routing.py` | routing | trigger phrases (backlog item 16, R15) |
+| `dev/replay_support.py` | support replay | the support reader brief |
 | `dev/score_round0.py` | round-0 recall | haiku searchers (R4), the citation list in round 0 (R8) |
 | `verifiers/planted.json`, `dev/plant_verifiers.py`, `dev/score_verifiers.py` | verifier set | the vote rule and the verifier brief (R6) |
 
@@ -51,6 +52,15 @@ python3 -I dev/score_verifiers.py evals/verifiers/runs/<stamp>/planted.tsv evals
 ```
 
 It prints each claim with its votes and verdict, the false refutations of true claims and the false survivals of false claims (by vote and by verdict), and an `R6` line: above 10 percent of true claims with a verdict ending refuted, the vote rule switches to "refuted needs a stated reason from the check list; could not check is no vote".
+
+## Support replay
+
+A delivered view and its archived sources are fixed inputs, so a second support pass on them measures only the reader brief: `build` writes the brief as `briefs.md` words it today, one `phro-search:local-reader` answers it, and `score` counts the ratings that changed against the view, the quotes left without a line and the gists.
+
+```bash
+python3 -I dev/replay_support.py build ~/research/<topic> ~/research/<topic>/extracts-<stem>.json brief.txt --limit 40
+python3 -I dev/replay_support.py score ~/research/<topic> ~/research/<topic>/extracts-<stem>.json reply.txt --sent 40
+```
 
 ## New gold items
 

@@ -9,7 +9,7 @@ rep = load("scripts/report.py")
 ELL = "\U00002026"
 HEAD = "\t".join(rep.INDEX_HEAD)
 NOTE = ('## Q1 x\nTakeaway: t\n'
-        '- F1. The model reaches 95 percent. Quote: "The model reaches 95 percent accuracy." https://arxiv.org/html/2401.00001v2 (paper)\n'
+        '- F1. The model reaches 95 percent. Quote: "The model reaches 95 percent accuracy." https://arxiv.org/html/2401.00001v2 (paper, own run) (note: see the summary)\n'
         '- F2. It spans two lines. Quote: "first half second half" (same page) https://example.org/a/ (official)\n'
         '- F3. Two pieces. Quote (as returned): "Intro ... 95 percent" https://arxiv.org/abs/2401.00001 (paper)\n'
         '- F4. Paraphrased. Quote: "not in the page" https://arxiv.org/abs/2401.00001 (paper)\n'

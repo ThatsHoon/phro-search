@@ -25,13 +25,13 @@ Check the topic for keyword traps before the first request. Reframe it, or ask o
 | Topic | Lanes |
 |---|---|
 | a tool, library or model release | hn, reddit, github, youtube; hf for a model release; ts for an open-source tool |
-| which open-source tools exist or are rising for a job | ts, github, hn, reddit |
+| which open-source tools are rising for a job | ts, github, hn, reddit |
 | a research direction | arxiv, hn, reddit, github, hf |
 | a product or company | hn, reddit, youtube |
 | a practice or workflow | hn, reddit, youtube, github |
 
 A lane runs when a subquery names it; reddit, github and youtube also run when the plan names dedicated subreddits, repositories or YouTube queries. A subquery that names no lanes runs every lane but hf and ts; ts also runs when the plan names `trendshift_topics`.
-- ts (Trendshift) searches nothing: it reads the trending GitHub repositories of the lists that fit the window (today's, this week's from 7 days, this month's from 28, this year's from 365) with stars and stars gained, and scores them against the ts subqueries, so most of a list drops as off topic. `trendshift_topics` adds the newest repositories of each topic, kept without the relevance floor: slugs from `https://trendshift.io/topics` (`ai-agent`, `ai-coding`, `ai-skills`, `ai-memory`, `mcp`, `rag`, `search-engine`, `document-parsing`, `web-scraping`, `browser-automation`, `llm-evaluation`, `speech-to-text`, `voice-agent`, `workflow-automation`). A list shows what gains stars now, not what works: stars gained are attention, and new topic entries often have few users. Each item's URL is the GitHub repository, so it joins the github lane's copy.
+- ts (Trendshift) searches nothing: it reads the trending GitHub repositories of the lists that fit the window (today's, this week's from 7 days, this month's from 28, this year's from 365) with stars and stars gained, and scores them against the ts subqueries, so most of a list drops as off topic. `trendshift_topics` adds the newest repositories of each topic, kept without the relevance floor: slugs from the full list at `https://trendshift.io/topics`, such as (`ai-agent`, `ai-coding`, `ai-skills`, `ai-memory`, `mcp`, `rag`, `search-engine`, `document-parsing`, `web-scraping`, `browser-automation`, `llm-evaluation`, `speech-to-text`, `voice-agent`, `workflow-automation`). A list shows what gains stars now, not what works: stars gained are attention, and new topic entries often have few users; the lane's note says how many of its on-topic items are such entries. Each item's URL is the GitHub repository, so it joins the github lane's copy.
 - hf (Hugging Face) matches model names only, so an hf subquery's `search_query` is the family or organization name (`Qwen3`, `gemma`); it lists the models created in the window with likes, downloads and trending score, and the daily papers of the window's newest 31 days with upvotes and comments, which join the arXiv lane's copy of the same paper. TikTok, Instagram and X have no keyless access: when a topic lives there (consumer products, creators), say so in the gaps instead of guessing.
 
 ## 4. Plan and run
@@ -56,6 +56,9 @@ Run `pulse.py <topic_dir> --plan <topic_dir>/pulse/plan.json`. `--days N` overri
 - `ok`; `no-results` (fetched, none on topic); `partial` (some requests failed);
 - `rate-limited` (GitHub allows 10 searches a minute without `GH_TOKEN`); `timeout` (cut at the deadline, what came in is kept);
 - `failed: <reason>`; `skipped` (no subreddits named, or yt-dlp missing).
+
+When a run misses the intent (a lane with no results from a long query, clusters about something else), fix the plan and run once more; the 90 s is per run. Hacker News, like Reddit, needs every word of a query: keep its `search_query` to two or three words. A cluster list is not the whole result: a known project that fell under the floor is still in the result's `items`.
+A pulse sees the window only, and GitHub's rows are the repositories pushed in it. "Which tools exist" asks for the established ones too: answer it with a report, or say in the brief that the list is the window's.
 
 Exit 1 means no lane returned anything: say so, with each lane's reason, and stop.
 

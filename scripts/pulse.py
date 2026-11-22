@@ -28,7 +28,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
-VERSION = "0.7.0"
+VERSION = "0.7.1"
 
 HN, ARCTIC = "https://hn.algolia.com/api/v1", "https://arctic-shift.photon-reddit.com/api"
 GH, ARXIV = "https://api.github.com", "https://export.arxiv.org/api/query"
@@ -554,9 +554,13 @@ def ts_search(st, ctx):
                          x.get("repository_description"))
             for label in labels:
                 yield label, it
+    listed = 0
     for slug in ctx.plan["trendshift_topics"]:
         for x in get(st, f"{TS}/topics/{slug}", "Trendshift", parse=ts_rows("initialRepositories")) or []:
+            listed += 1
             yield "topic", ts_item(x, when(x.get("created_at")), {"stars": whole(x.get("watchers"))}, x.get("description"), True)
+    if listed:
+        st["notes"].append(f"{listed} from topics, kept without the relevance floor")
 
 
 def reason_of(e):

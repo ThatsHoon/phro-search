@@ -43,7 +43,7 @@ Takeaway: <one or two sentences>
 - F<n>. <one falsifiable claim>. Quote: "<the sentence from the page that states it, copied exactly in its own language>" <URL> (<paper | official | first-hand | observed | summary>)
 Inferences: <what follows, marked as inference>
 Gaps: <what you looked for and did not find, with the queries tried>
-Keep each finding on one line, with nothing between `Quote:` and the opening quotation mark. A finding without a URL goes under Gaps. When your fetch tool only summarized the page, you have no exact words: write `Quote: none.` before the URL and never present the summary as a quote.
+Number the findings once, F1 onward, never starting again in a later section. Keep each finding on one line, with nothing between `Quote:` and the opening quotation mark. A finding without a URL goes under Gaps. When your fetch tool only summarized the page, you have no exact words: write `Quote: none.` before the URL and never present the summary as a quote.
 Reply with the notes, then one line per key question: answered, partly or gap.
 ```
 
@@ -52,7 +52,7 @@ One gap round at most: 1 or 2 researchers, only for a key question left without 
 ## Archive and locate
 
 1. Collect the URLs of the finding lines; one per host and path. Fetch at most 25 with `fetch.py <topic>/sources <name> <url>`, passing a paper's DOI so its legal open-access copies come first: first the pages behind findings the answer would rest on, then by label (paper, official, first-hand before summary). Reuse what `sources/` already holds; never download again. Every FAIL goes to `log.md`; a walled page behind a likely central finding goes to the user's browser, as in dig.
-2. Locate the findings: `locate.py <topic>` lists each one as FOUND with its place, or MISS with the reason. For a MISS that names a nearest line, read that line: if the page states the claim there, give its text exactly as the pick's `quotes`. Otherwise the finding stays URL-only.
+2. Locate the findings: `locate.py <topic>` lists each one as FOUND with its place, or MISS with the reason. For a MISS that names a nearest line, read that line: if the page states the claim there, give its text exactly as the pick's `quotes`. Otherwise the finding stays URL-only. A researcher's fetch tool fails on pages `fetch.py` reads, so a finding with `Quote: none.` whose URL is archived is not lost: grep the archived copy for the passage and give its text as the pick's `quotes`.
 3. Pick the findings the report may use, in a picks file (its shape is in `locate.py --help`), and run `locate.py <topic> <stem> --picks <file>`. It adds new ids to `claims.json` and writes the report's view. A URL-only finding the report still uses goes into `claims.json` by hand. Importance:
    - central: the answer would change if it were false; at most 5 in one report's view (10 in a deep run), each located in that view (`extracts-<stem>.json`); a URL-only finding is never central, nor is one whose source is retracted;
    - supporting: backs a section;
@@ -104,7 +104,7 @@ It serves the question: <Q>
 
 A support reader has already checked that the quote states the claim. Run at least one web search of your own beyond the quoted page.
 <the standing's check, below>
-Search from your starting point, then check, in order: does a credible source contradict it; the standing's check; is the source strong enough for the claim (a maker's page on its own product's results is weak); is it outdated; is it marketing or a picked benchmark. If you are unsure, the claim is refuted. A page that will not open for you is not doubt about the claim: when the figure's page stays closed and no other source carries it, reply `"refuted": false` with confidence low and start evidence with `blocked:`. At most 8 tool calls.
+Search from your starting point, then check, in order: does a credible source contradict it; the standing's check; is the source strong enough for the claim (a maker's page on its own product's results is weak); is it outdated; is it marketing or a picked benchmark. If you are unsure, the claim is refuted. A page that will not open for you is not doubt about the claim: start evidence with `blocked:`, and unless another page you opened in full states the same thing, reply `"refuted": false` with confidence low. A search result's excerpt is not a page you opened. At most 8 tool calls.
 Reply with one JSON object and nothing else:
 {"refuted": <true or false>, "confidence": "<high, medium or low>", "evidence": "<one or two sentences on what you checked>", "withheld": "<what the source keeps closed among code, weights, data, splits, baseline settings, hardware and failure cases; none; or not checked>", "counter_source": "<URL, only when a source contradicts the claim>"}
 ```
