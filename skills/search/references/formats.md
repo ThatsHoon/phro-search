@@ -94,13 +94,13 @@ Written by `fetch.py`, one row per fetched source, never edited by hand: a heade
 {"title": "...", "question": "...", "stopped": "<stop reason>",
  "claims": [{"claim": "...", "status": "sourced", "note": "...",
              "quotes": [{"file": "<file in sources/>", "line": 12, "end": 14, "text": "<verbatim>", "translation": "...", "mark": "...",
-                         "support": "full", "qualifier": {"file": "...", "line": 30, "text": "<verbatim>"}}]}],
+                         "support": "full", "gist": "...", "qualifier": {"file": "...", "line": 30, "text": "<verbatim>"}}]}],
  "disagreements": [{"topic": "...", "quotes": [{"file": "...", "line": 3, "text": "...", "who": "..."}]}],
  "unreached": ["<item>: <why>, <URL>"]}
 ```
 
 - `status` is `sourced`, `partial` or `none`. One claim per required claim, in the user's language. `note` is one flat line on who did what: no conclusions, no ratings.
-- `support` is the support reader's rating of the quote (full, partial, none or contradicts); a `sourced` claim needs a full one from a source that is not retracted. `qualifier` is the source's own sentence that limits the claim, located and checked like a quote.
+- `support` is the support reader's rating of the quote (full, partial, none or contradicts); a `sourced` claim needs a full one from a source that is not retracted. `qualifier` is the source's own sentence that limits the claim, located and checked like a quote. `gist` is the support reader's one or two sentences on how the source got to the passage (who measured or built what, on what, with what result), in the user's language; it adds nothing the source's own section does not say and is left out when the reader gave none.
 - `text` is copied from the source exactly: the same characters and spelling, auto-caption errors kept. Whitespace and line breaks may differ. Skip text with the ellipsis character (…); the pieces must appear in order (older PDF text copies, made in page layout, mix two columns on one line).
 - `line` is the `grep -n` line of the first piece, `end` the last line when the extract spans lines; the check looks 2 lines either side.
 - Dig writes `extracts.json`. Each report writes its own view, `extracts-<stem>.json`, with the stem of its `report-<stem>.md`; there each claim also carries `id`, its claims.json id, and holds that claim's located quotes, and the evidence page shows its votes.

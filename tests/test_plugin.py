@@ -290,7 +290,7 @@ class PluginTest(unittest.TestCase):
     def test_no_dashes_or_emoji(self):
         bad = [str(p.relative_to(ROOT)) for p in sorted(ROOT.rglob("*"))
                if p.is_file() and p.suffix in (".md", ".py", ".json")
-               and not {".git", "tests", "__pycache__"} & set(p.relative_to(ROOT).parts)
+               and not {".git", "tests", "__pycache__", "runs"} & set(p.relative_to(ROOT).parts)
                and TELLS.search(read(p))]
         self.assertEqual(bad, [])
 
@@ -298,7 +298,7 @@ class PluginTest(unittest.TestCase):
         # Tests too: a literal bidi or zero-width character hides what code does. Write escapes instead.
         bad = [str(p.relative_to(ROOT)) for p in sorted(ROOT.rglob("*"))
                if p.is_file() and p.suffix in (".md", ".py", ".json")
-               and not {".git", "__pycache__"} & set(p.relative_to(ROOT).parts) and INVISIBLE.search(read(p))]
+               and not {".git", "__pycache__", "runs"} & set(p.relative_to(ROOT).parts) and INVISIBLE.search(read(p))]
         self.assertEqual(bad, [])
 
     def test_agents_isolate_tools(self):

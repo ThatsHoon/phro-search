@@ -9,7 +9,7 @@ Commands below use `python3`; on Windows run `python` from Git Bash.
 | `intake/` | intake cases for `claude plugin eval` (T5.3; commands in the top README) | the intake |
 | `routing/prompts.tsv`, `dev/routing.py` | routing | trigger phrases (backlog item 16, R15) |
 | `dev/score_round0.py` | round-0 recall | haiku searchers (R4), the citation list in round 0 (R8) |
-| `dev/score_verifiers.py` | verifier set | the vote rule (R6) |
+| `verifiers/planted.json`, `dev/plant_verifiers.py`, `dev/score_verifiers.py` | verifier set | the vote rule and the verifier brief (R6) |
 
 ## Routing
 
@@ -41,10 +41,13 @@ python3 -I dev/score_round0.py gold.txt runs/a1/flood-mapping --found "round 0"
 
 ## Verifier set
 
-Make 20 to 30 planted claims from T2.4's `claims.json` (overstated, outdated, contradicted and true variants), let 3 verifiers vote on each, and list the truth in a planted file, one claim per line: `<claim id> <true|false> [<variant>]`. A default run sends one verifier first on a reviewed source, so the FALSE line's "votes not refuting" reads as the chance that it lets a false claim pass.
+`verifiers/planted.json` plants 24 central claims of delivered reports: 12 as delivered (true) and 12 false ones, overstated (the wording says more than the real quote), altered (a number or word changed in claim, quote and context) or contradicted. A true label rests on the verdict the claim got when it was delivered, so read a refuted true claim before counting it against the verifiers. `dev/plant_verifiers.py build` fills the verifier brief from `skills/search/references/report.md` as it stands, so a change to that brief is what the next run measures; `run` sends the briefs to headless verifiers (it needs a logged-in `claude`), or spawn `phro-search:verifier` once per brief and save each reply as it came to `votes/<brief stem>.json`; `collect` writes the votes. Runs live under `verifiers/runs/` (ignored by git).
 
 ```bash
-python3 -I dev/score_verifiers.py planted.tsv research/<topic>/claims.json
+python3 -I dev/plant_verifiers.py build evals/verifiers/planted.json ~/research evals/verifiers/runs/<stamp>
+python3 -I dev/plant_verifiers.py run evals/verifiers/runs/<stamp>
+python3 -I dev/plant_verifiers.py collect evals/verifiers/runs/<stamp>
+python3 -I dev/score_verifiers.py evals/verifiers/runs/<stamp>/planted.tsv evals/verifiers/runs/<stamp>/claims.json
 ```
 
 It prints each claim with its votes and verdict, the false refutations of true claims and the false survivals of false claims (by vote and by verdict), and an `R6` line: above 10 percent of true claims with a verdict ending refuted, the vote rule switches to "refuted needs a stated reason from the check list; could not check is no vote".

@@ -104,7 +104,7 @@ It serves the question: <Q>
 
 A support reader has already checked that the quote states the claim. Run at least one web search of your own beyond the quoted page.
 <the standing's check, below>
-Search from your starting point, then check, in order: does a credible source contradict it; the standing's check; is the source strong enough for the claim (a maker's page on its own product's results is weak); is it outdated; is it marketing or a picked benchmark. If you are unsure, the claim is refuted. At most 8 tool calls.
+Search from your starting point, then check, in order: does a credible source contradict it; the standing's check; is the source strong enough for the claim (a maker's page on its own product's results is weak); is it outdated; is it marketing or a picked benchmark. If you are unsure, the claim is refuted. A page that will not open for you is not doubt about the claim: when the figure's page stays closed and no other source carries it, reply `"refuted": false` with confidence low and start evidence with `blocked:`. At most 8 tool calls.
 Reply with one JSON object and nothing else:
 {"refuted": <true or false>, "confidence": "<high, medium or low>", "evidence": "<one or two sentences on what you checked>", "withheld": "<what the source keeps closed among code, weights, data, splits, baseline settings, hardware and failure cases; none; or not checked>", "counter_source": "<URL, only when a source contradicts the claim>"}
 ```
@@ -113,7 +113,7 @@ The check for `open-post` and `unknown`: "Nobody vetted this source before it ap
 
 The check for `reviewed`: "Review vouched for the results as shown, so do not redo them. Confirm the acceptance on the venue's own page or proceedings; an author's line is not enough. Then look for what the authors keep closed and name it in withheld. A closed item alone does not refute a number; refute when the acceptance fails or a source contradicts the number."
 
-Vote rule: a reply that is missing, not that JSON object, or without a true or false `refuted` is no vote. Record the votes under the claim in `claims.json`, each with today's date as `checked`, then its verdict: 2 refutations, refuted; one vote that holds with high or medium confidence, survived; any other single vote or none, unverified (a failed check, never read as refuted); otherwise survived. Verification runs once and is never repeated to rescue a claim; a claim is never reworded after its votes. `report.py` checks every verdict against its votes.
+Vote rule: a reply that is missing, not that JSON object, or without a true or false `refuted` is no vote. Record the votes under the claim in `claims.json`, each with today's date as `checked`, then its verdict: 2 refutations, refuted; otherwise a vote that holds with high or medium confidence, survived; otherwise unverified (a failed check, never read as refuted). Verification runs once and is never repeated to rescue a claim; a claim is never reworded after its votes. `report.py` checks every verdict against its votes.
 
 ## Write
 

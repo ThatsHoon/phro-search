@@ -2,7 +2,7 @@
 
 Catch up on a field, from generic words down to its original sources. Two things carry the mode: originals are archived, never summarized, and the stop is set by evidence, not by confidence.
 
-- No summaries: the user reads the originals; the agent points at them.
+- No summaries: the user reads the originals; the agent points at them and adds, under each quote, only how its source got there.
 - With two plausible directions, branch and compare instead of committing to one.
 - Chain when words fail: follow references and citations instead of describing the subject.
 
@@ -58,11 +58,14 @@ Never stop before round 1 is done, even when round 0 seems to cover every claim:
 
 ## Canonical audit
 
-In a field with papers, once a stop holds, run `chain.py topic <confirmed terms>` (add `--since <year>` when the brief asks for recent work: a second list of that period's most cited works). Mark each of the top 20 works in the log as one of: in the map; out of scope, with a one-line reason; missing, added to Next leads. Log "audit: k of 20" for the `# topic` list (k already in the map; of fewer when the list is shorter) as the run's recall estimate, and with `--since` also "audit since <year>: k of n" for the `# since` list, counted on its own.
+Once a stop holds, run `chain.py cocited <topic_dir>`: the works and the links that the archived sources themselves cite most, each marked `in` or `missing`. It needs no field terms, so it also holds in a new field and in one without papers. Mark each `missing` row in the log as out of scope, with a one-line reason (general background the whole field builds on counts), or missing, added to Next leads. Log "audit: k of n" for the works and "links: k of n" for the LINK rows (k in the map, n the rows in scope) as the run's recall estimate; with fewer than 5 sources resolved, log "audit: too few sources" for the works instead.
+
+- Audit round: when 3 or more rows stay missing and fewer than 4 rounds ran, run one more round on them, once: download each, locate the required claims in them, and send searchers only for what a download cannot reach. Then audit again and log both counts.
+- In a field with papers, `chain.py topic <confirmed terms>` (`--since <year>` for recent work) lists more leads. It is no recall estimate: its terms also match works outside the field.
 
 ## Evidence page
 
-1. Whatever the stop, first run the support pass on every located quote not yet rated, so each quote on the page carries its rating. Then write `extracts.json` (`references/formats.md`): one entry per required claim with excerpts copied verbatim from the sources, each with its support rating and qualifier, translations for quotes in other languages, marks, disagreements side by side, and what was not reached. The agent writes only headings, statuses, one-line notes and translations.
+1. Whatever the stop, first run the support pass on every located quote not yet rated, so each quote on the page carries its rating. Then write `extracts.json` (`references/formats.md`): one entry per required claim with excerpts copied verbatim from the sources, each with its support rating, qualifier and gist, translations for quotes in other languages, marks, disagreements side by side, and what was not reached. The agent writes only headings, statuses, one-line notes and translations; a gist is the support reader's line, translated.
 2. Run `report.py <topic_dir>`. Fix each MISMATCH by copying the source text exactly, never by editing the source or loosening the quote into a paraphrase. Auto-caption errors stay as they are.
 3. `report.py <topic_dir> --check` passes before delivery.
 

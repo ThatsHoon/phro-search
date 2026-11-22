@@ -27,7 +27,7 @@ State on 2026-11-02, for the next session that continues this work.
 - `agents/` holds three agents, `web-gatherer`, `verifier` and `local-reader`. They are spawned as `phro-search:<name>`.
 - `hooks/` holds the egress guard (`egress.sh`, `egress.py`) and the plan line check (`plan_line.sh`, `plan_line.py`).
 - `scripts/` holds stdlib Python run as `python -I`: fetch, chain, report, watch, pulse, models, check.
-- `dev/` holds maintainer tools: pdf_modes, agent_cost, routing, score_round0, score_verifiers, feedback_gold.
+- `dev/` holds maintainer tools: pdf_modes, agent_cost, routing, score_round0, plant_verifiers, score_verifiers, feedback_gold.
 - `evals/` holds the routing prompts and the README on running the R1 evals.
 
 ## How to verify
@@ -74,7 +74,7 @@ State on 2026-11-02, for the next session that continues this work.
 The numbers behind each are in structure-review.md section 7, round of 2026-11-02.
 
 1. Routing is at 26/28 in scope and 25/28 right mode over one run per prompt, against a threshold of 90 percent over 3 runs. `dev/routing.py --installed --runs 3` (about 42 USD) gives the number to judge; the owner decides when to spend it.
-2. The R1 eval runs that need the owner's data: gold lists for round-0 recall (`dev/score_round0.py`) and the planted verifier set (`dev/score_verifiers.py`, which decides R6's vote-rule switch).
+2. The R1 eval runs that need the owner's data: gold lists for round-0 recall (`dev/score_round0.py`) the planted verifier set was run on 2026-11-22 (structure-review.md section 7).
 3. T5.3, the rating of 5 real requests (plan:643).
 
 ## Open: needs another machine

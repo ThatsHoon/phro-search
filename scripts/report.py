@@ -8,9 +8,8 @@ Usage:
 When the topic has a claims.json (report mode), a claim in a view may carry its "id";
 the page then shows that claim's verdict, standing and votes. Every claims.json claim is checked:
 a standing is one of open-post, reviewed or unknown, and
-each verdict must follow from its votes (2 refutations: refuted; one vote that holds with
-high or medium confidence: survived; any other single vote or none: unverified; else
-survived), at most 3 votes, and a vote's "checked" date written YYYY-MM-DD. The claims a
+each verdict must follow from its votes (2 refutations: refuted; otherwise a vote that holds
+with high or medium confidence: survived; otherwise unverified), at most 3 votes, and a vote's "checked" date written YYYY-MM-DD. The claims a
 view cites are checked too: every id is in claims.json, each central one has a quote in the
 view that is not marked retracted, and the view cites at most 10 central claims and 40 in
 all, the limits of a deep run. In any view, a sourced claim needs a quote from a source that is not
@@ -46,7 +45,7 @@ import re
 import sys
 import urllib.parse
 
-VERSION = "0.6.2"
+VERSION = "0.7.0"
 
 _CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\U0000061c\U0000200b-\U0000200f\U0000202a-\U0000202e\U00002060-\U00002064\U00002066-\U00002069\U0000feff]")
 _QUOTES = str.maketrans("\U00002018\U00002019\U0000201a\U0000201b\U00002032\U0000201c\U0000201d\U0000201e\U0000201f\U00002033\U0000ff02\U0000ff07", "'''''\"\"\"\"\"\"'")
@@ -64,7 +63,7 @@ STATUS = {"sourced": "sourced", "partial": "partial", "none": "none",
 TOP = {"title": str, "question": str, "stopped": str, "claims": list, "disagreements?": list, "unreached?": list}
 CLAIM = {"claim": str, "status": str, "note?": str, "quotes": list, "id?": str}
 DISAGREEMENT = {"topic": str, "quotes": list}
-QUOTE = {"file": str, "line": int, "end?": int, "text": str, "translation?": str, "ja?": str, "mark?": str, "who?": str,
+QUOTE = {"file": str, "line": int, "end?": int, "text": str, "translation?": str, "ja?": str, "mark?": str, "who?": str, "gist?": str,
          "support?": str, "qualifier?": dict}
 QUALIFIER = {"file": str, "line": int, "end?": int, "text": str}  # the source's own sentence that limits the claim
 SUPPORT = ("full", "partial", "none", "contradicts")
@@ -100,7 +99,7 @@ h3{font-size:1rem;margin:1.5rem 0 .5rem}
 figure{margin:1rem 0;padding:1rem;background:var(--card);border:1px solid var(--line);border-radius:8px}
 blockquote{margin:0;padding-left:.8rem;border-left:3px solid var(--accent);white-space:pre-wrap}
 .who{font-weight:600;margin:0 0 .5rem}
-.tr{margin:.6rem 0 0}
+.tr,.gist{margin:.6rem 0 0}
 .tag{font-size:.75rem;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:0 .35em}
 .when{color:var(--muted)}
 .limit{margin:.6rem 0 0;font-size:.9rem}
@@ -184,13 +183,12 @@ def load_claims(path):
 
 
 def verdict(votes):
-    """The vote rule: 2 refutations kill a claim; one vote keeps it only if it holds and is not low in confidence;
-    any other single vote or none leaves it unverified, never refuted."""
+    """The vote rule: 2 refutations kill a claim; otherwise a vote keeps it only if it holds and is not low in
+    confidence; anything else leaves it unverified, never refuted."""
     if sum(v["refuted"] for v in votes) >= 2:
         return "refuted"
-    if len(votes) == 1 and not votes[0]["refuted"] and str(votes[0].get("confidence")).lower() != "low":
-        return "survived"
-    return "unverified" if len(votes) < 2 else "survived"
+    firm = any(not v["refuted"] and str(v.get("confidence")).lower() != "low" for v in votes)
+    return "survived" if firm else "unverified"
 
 
 def index_rows(src):
@@ -332,6 +330,8 @@ def quote_html(src, q, when=""):
     out.append(f"<blockquote>{esc(q['text'])}</blockquote>")
     if tr:
         out.append(f'<p class="tr"><span class="tag">translation</span> {esc(tr)}</p>')
+    if q.get("gist"):
+        out.append(f'<p class="gist"><span class="tag">how the source got there</span> {esc(q["gist"])}</p>')
     lim = q.get("qualifier")
     if lim:
         out.append(f'<p class="limit"><span class="tag">limit</span> {esc(lim["text"])} (sources/{esc(lim["file"])}:{lim["line"]})</p>')

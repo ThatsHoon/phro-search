@@ -13,6 +13,12 @@ Usage:
   chain.py related <id-or-doi> [-n 20]  works OpenAlex lists as related to the given work, most cited first
   chain.py author <name-or-id> [-n 20]  an author's works, most cited first
   chain.py oa <id-or-doi>               the work's open-access copies, best first
+  chain.py cocited <topic_dir> [-n 20] [--min 2]
+                                        what a topic's archived sources cite most, and whether the topic has it:
+                                        works that --min or more of the sources with a DOI or an arXiv id reference
+                                        (up to 60 sources asked, most cocited first, then most cited), then links
+                                        that sources on --min or more other hosts point at (read from the archived
+                                        text, no request); each is `in` when sources/index.tsv or map.md holds it
 
 An id is W123, https://openalex.org/W123, a bare DOI or a doi.org URL; an author id is A123.
 No key is needed; OPENALEX_API_KEY from the environment is sent when set and never printed.
@@ -26,7 +32,11 @@ Rows, tab-separated: <year> <cited_by_count> <W id> <title> <doi or -> <free pdf
 oa rows: <published|accepted|submitted|-> <repository|publisher|other> <pdf url or -> <landing url or -> <source or ->
   <license or ->, copies with a PDF link first, then landing pages; in each, published before accepted before
   submitted, and repository copies (arXiv included) first
+cocited rows: <sources citing it> <in|missing> then the work's row; LINK <hosts citing it> <in|missing> <url>
 Other lines, a label and then tab-separated fields:
+  # cocited <k> of <n> sources resolved <m> works cited by <min> or more   first line of cocited
+  # audit <k> of <n> in the map                 after the cocited rows; k and n count the rows printed
+  # links <k> of <n> in the map                 after the LINK rows
   # work <W id> <year> <title> <flags or ->      first line of refs, cites, related and oa
   # topic <terms as sent> <N> matches           first line of topic
   # since <YEAR> <N> matches                    before topic's second list
@@ -36,6 +46,8 @@ Other lines, a label and then tab-separated fields:
   FAIL <reason>                                  an error; exit code 1
 """
 import argparse
+import collections
+import csv
 import http.client
 import json
 import os
@@ -50,7 +62,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-VERSION = "0.6.2"
+VERSION = "0.7.0"
 API = "https://api.openalex.org"
 UA = f"Mozilla/5.0 (compatible; phro-search/{VERSION}; +https://github.com/ThatsHoon/phro-search)"
 CAP = 10 * 1024 * 1024  # bytes read per API page
@@ -390,6 +402,93 @@ def author(name, n):
     show(works("author.id:" + aid, n), "# note: no works listed for that author.")
 
 
+MAX_SOURCES = 60  # works asked for their references in one run, inside the deadline at 1 s apart
+DOI = re.compile(r"10\.\d{4,9}/[^\s?#&\"<>]+", re.I)
+ARXIV = re.compile(r"arxiv\.org/(?:abs|pdf|html)/(\d{4}\.\d{4,5})", re.I)
+LINK = re.compile(r"https?://[^\s)<>\]\"'`|]+")
+STATIC = re.compile(r"\.(?:png|jpe?g|gif|svg|ico|css|js|woff2?|webp)$", re.I)
+
+
+def source_key(row):
+    """The DOI of an index row, from its URL as asked or as read (an arXiv link gives its arXiv DOI), or None."""
+    text = urllib.parse.unquote(f"{row.get('url') or ''} {row.get('final') or ''}")
+    m = ARXIV.search(text)
+    if m:
+        return "10.48550/arxiv." + m.group(1)
+    m = DOI.search(text)
+    return m and m.group(0).rstrip(".,;)").lower()
+
+
+def link_id(url):
+    """(host, host and path) of a link as compared: no scheme, www, query, fragment or trailing slash; a GitHub link
+    reduced to its repository. None for a site's front page or a static file."""
+    u = urllib.parse.urlsplit(url.rstrip(".,;:"))
+    host = re.sub(r"^www\.", "", (u.hostname or "").lower())
+    path = u.path.rstrip("/")
+    if host == "github.com":
+        path = "/".join(path.lower().split("/")[:3])
+    if not host or not path or STATIC.search(path):
+        return None
+    return host, host + path
+
+
+def cocited(topic, n, least):
+    index = Path(topic).expanduser() / "sources" / "index.tsv"
+    if not index.is_file():
+        raise Fail(f"no sources/index.tsv in {clean(topic)}")
+    with index.open(encoding="utf-8-sig", newline="") as f:
+        rows = list(csv.DictReader(f, delimiter="\t", quoting=csv.QUOTE_NONE))
+    held = " ".join(f"{r.get('url') or ''} {r.get('final') or ''}" for r in rows)
+    map_md = index.parents[1] / "map.md"
+    held = urllib.parse.unquote(held + (" " + map_md.read_text(encoding="utf-8-sig") if map_md.is_file() else "")).lower()
+    keys = list(dict.fromkeys(k for k in map(source_key, rows) if k))
+    tally, own, resolved, cut = collections.Counter(), set(), 0, ""
+    for key in keys[:MAX_SOURCES]:
+        try:
+            w = work(key)
+        except Fail as e:
+            if str(e).startswith("not in OpenAlex"):
+                continue
+            if "deadline" not in str(e):
+                raise
+            cut = "; cut at the run deadline"
+            break
+        resolved += 1
+        own.add(short(w.get("id")))
+        tally.update({short(u) for u in w.get("referenced_works") or []})
+    top = [wid for wid, c in tally.most_common() if c >= least]
+    print(f"# cocited\t{resolved} of {len(keys)} sources resolved{cut}\t{len(top)} works cited by {least} or more")
+    found = [r for i in range(0, min(len(top), 4 * BATCH), BATCH) for r in works("openalex:" + "|".join(top[i:i + BATCH]), BATCH)] if top else []
+    found = sorted(found, key=lambda r: (-tally[short(r.get("id"))], -(r.get("cited_by_count") or 0)))[:n]
+    have = 0
+    for r in found:
+        doi = str(r.get("doi") or "").removeprefix("https://doi.org/").lower()
+        known = short(r.get("id")) in own or bool(doi and doi in held)
+        have += known
+        print(f"{tally[short(r.get('id'))]}\t{'in' if known else 'missing'}\t{row(r)}")
+    if not found:
+        print("# note: no work is cited by that many sources; with few sources that have a DOI this says nothing about recall.")
+    print(f"# audit\t{have} of {len(found)} in the map")
+    hosts = collections.defaultdict(set)
+    for r in rows:
+        mine = link_id(r.get("final") or r.get("url") or "")
+        for name in str(r.get("files") or "").split(","):
+            path = index.parent / name.strip()
+            if path.suffix not in (".md", ".txt") or path.name.endswith(".layout.txt") or not path.is_file():
+                continue
+            for url in set(LINK.findall(path.read_text(encoding="utf-8", errors="replace"))):
+                lid = link_id(url)
+                if lid and mine and lid[0] != mine[0]:
+                    hosts[lid[1]].add(mine[0])
+    links = sorted(((len(v), k) for k, v in hosts.items() if len(v) >= least), key=lambda t: (-t[0], t[1]))[:n]
+    have = 0
+    for c, k in links:
+        known = k in held
+        have += known
+        print(f"LINK\t{c}\t{'in' if known else 'missing'}\thttps://{clean(k, 300)}")
+    print(f"# links\t{have} of {len(links)} in the map")
+
+
 def count(s):
     if not s.isdecimal() or not 1 <= int(s) <= 200:
         raise argparse.ArgumentTypeError("must be a number from 1 to 200")
@@ -429,6 +528,9 @@ def main(argv=None):
             p.add_argument("--since", type=year, metavar="YEAR", help="only works published in or after this year")
     p = sub.add_parser("oa", help="the work's open-access copies, best first")
     p.add_argument("work", type=work_arg, help="W id, openalex.org URL, DOI or doi.org URL")
+    p = sub.add_parser("cocited", parents=[limit], help="what a topic's archived sources cite most, and whether the topic has it")
+    p.add_argument("topic_dir", help="topic folder, such as ~/research/<topic>")
+    p.add_argument("--min", type=count, default=2, metavar="K", dest="least", help="sources, or hosts, that must cite it (default 2)")
     p = sub.add_parser("author", parents=[limit], help="an author's works, most cited first")
     p.add_argument("name", nargs="+", help="author name, or an A id or openalex.org author URL")
     args = ap.parse_args(argv)
@@ -441,6 +543,8 @@ def main(argv=None):
             author(" ".join(args.name), args.n)
         elif args.cmd == "topic":
             topic(" ".join(args.terms), args.n, args.since)
+        elif args.cmd == "cocited":
+            cocited(args.topic_dir, args.n, args.least)
         elif args.cmd == "oa":
             oa(args.work)
         else:

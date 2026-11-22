@@ -54,7 +54,8 @@ class VerifierScoreTest(unittest.TestCase):
 
     def test_a_single_vote_follows_the_rule(self):
         self.assertEqual(score.verdict([False]), "survived")
-        self.assertEqual(score.verdict([False], low=True), "unverified")
+        self.assertEqual(score.verdict([False], firm=False), "unverified")
+        self.assertEqual(score.verdict([True, False], firm=False), "unverified")
         self.assertEqual(score.verdict([True]), "unverified")
         self.claims.write_text(json.dumps([{"id": "c1", "votes": [dict(vote(False), confidence="low")]}]), encoding="utf-8")
         self.assertIn("CLAIM\tc1\ttrue\trefuted 0/1\tunverified\tno verdict", self.run_score()[1])

@@ -1,6 +1,6 @@
 # pulse
 
-What communities said, shipped or argued about in the last N days (default 30). `pulse.py` collects keyless lanes (Hacker News, Reddit through arctic-shift, GitHub, arXiv, YouTube through yt-dlp, Hugging Face), then scores, merges and clusters the items; this session plans the run, judges the clusters and writes the brief. Engagement shows attention, not truth: a pulse measures opinion, so whatever the brief leans on gets its primary link (repository, paper, release, official post).
+What communities said, shipped or argued about in the last N days (default 30). `pulse.py` collects keyless lanes (Hacker News, Reddit through arctic-shift, GitHub, arXiv, YouTube through yt-dlp, Hugging Face, Trendshift), then scores, merges and clusters the items; this session plans the run, judges the clusters and writes the brief. Engagement shows attention, not truth: a pulse measures opinion, so whatever the brief leans on gets its primary link (repository, paper, release, official post).
 
 ## 1. Pre-flight
 
@@ -24,12 +24,14 @@ Check the topic for keyword traps before the first request. Reframe it, or ask o
 
 | Topic | Lanes |
 |---|---|
-| a tool, library or model release | hn, reddit, github, youtube; hf for a model release |
+| a tool, library or model release | hn, reddit, github, youtube; hf for a model release; ts for an open-source tool |
+| which open-source tools exist or are rising for a job | ts, github, hn, reddit |
 | a research direction | arxiv, hn, reddit, github, hf |
 | a product or company | hn, reddit, youtube |
 | a practice or workflow | hn, reddit, youtube, github |
 
-A lane runs when a subquery names it; reddit, github and youtube also run when the plan names dedicated subreddits, repositories or YouTube queries. A subquery that names no lanes runs every lane but hf.
+A lane runs when a subquery names it; reddit, github and youtube also run when the plan names dedicated subreddits, repositories or YouTube queries. A subquery that names no lanes runs every lane but hf and ts; ts also runs when the plan names `trendshift_topics`.
+- ts (Trendshift) searches nothing: it reads the trending GitHub repositories of the lists that fit the window (today's, this week's from 7 days, this month's from 28, this year's from 365) with stars and stars gained, and scores them against the ts subqueries, so most of a list drops as off topic. `trendshift_topics` adds the newest repositories of each topic, kept without the relevance floor: slugs from `https://trendshift.io/topics` (`ai-agent`, `ai-coding`, `ai-skills`, `ai-memory`, `mcp`, `rag`, `search-engine`, `document-parsing`, `web-scraping`, `browser-automation`, `llm-evaluation`, `speech-to-text`, `voice-agent`, `workflow-automation`). A list shows what gains stars now, not what works: stars gained are attention, and new topic entries often have few users. Each item's URL is the GitHub repository, so it joins the github lane's copy.
 - hf (Hugging Face) matches model names only, so an hf subquery's `search_query` is the family or organization name (`Qwen3`, `gemma`); it lists the models created in the window with likes, downloads and trending score, and the daily papers of the window's newest 31 days with upvotes and comments, which join the arXiv lane's copy of the same paper. TikTok, Instagram and X have no keyless access: when a topic lives there (consumer products, creators), say so in the gaps instead of guessing.
 
 ## 4. Plan and run
@@ -41,10 +43,10 @@ Write `<topic>/pulse/plan.json` (each result keeps a copy, so a rerun may overwr
  "subqueries": [{"label": "main", "search_query": "<keywords with the anchor>", "ranking_query": "<what an on-topic item is about>",
                  "lanes": ["hn", "reddit", "github", "arxiv", "youtube"], "weight": 1.0}],
  "subreddits": ["<broad>"], "dedicated_subreddits": ["<the entity's own>"], "reddit_queries": ["<one or two words>"], "github_repos": ["<owner/name>"],
- "youtube_queries": ["<spoken phrasing>"]}
+ "youtube_queries": ["<spoken phrasing>"], "trendshift_topics": ["<topic slug>"]}
 ```
 
-- `label` is unique and not `dedicated`, `reddit`, `repo` or `youtube`. `weight` defaults to 1.0, `ranking_query` to the search query; a leading `r/` on a subreddit is dropped.
+- `label` is unique and not `dedicated`, `reddit`, `repo`, `youtube` or `topic`. `weight` defaults to 1.0, `ranking_query` to the search query; a leading `r/` on a subreddit is dropped.
 - 1 to 4 subqueries, the first one the topic itself. `search_query` is keywords, with no dates and no meta words ("news", "update", "latest"). `ranking_query` says in words what an on-topic item is about. `weight`: 1.0 for the primary subquery, 0.6 to 0.8 secondary, 0.3 to 0.5 peripheral.
 - `freshness`: `strict` for breaking news, `balanced` by default, `evergreen` for slow fields where a month-old post still matters.
 
@@ -77,7 +79,7 @@ Write `<topic>/pulse/<stem>.md` (the stem of the result, such as `2026-10-30`) i
 # <topic>: <N> days to <as-of date>
 <one-line takeaway>
 
-<coverage line: every lane the run listed, by name (Hacker News, Reddit, GitHub, arXiv, YouTube, Hugging Face), with what it returned: a count, or its status and reason>
+<coverage line: every lane the run listed, by name (Hacker News, Reddit, GitHub, arXiv, YouTube, Hugging Face, Trendshift), with what it returned: a count, or its status and reason>
 
 ## <a heading that states what changed>
 <what changed and how strong: lanes, engagement, dates; the primary link>
@@ -105,6 +107,7 @@ In the user's language, with no lead-in: the takeaway, each cluster's heading wi
 ## Drill and hand-off
 
 - "Drill into <cluster>": a new pulse on that cluster alone, its terms as subqueries, its subreddits and repositories named, with `--deep`. Each run gets its own stem; earlier runs are never overwritten.
+- To see how a surfaced repository is built (its architecture, workflow or prompts): hand to dig with the repository as the seed. Its own files are the originals: `fetch.py` its README and the files that carry the logic from their raw URLs (`https://raw.githubusercontent.com/<owner>/<repo>/<branch>/<path>`), and locate claims in them like any source.
 - To dig: when the user wants the originals behind a cluster or the field's background, hand the brief to dig with the cluster's primary links (repositories, papers, releases) as the first sources, and ask only what changes.
 - To report: when the user must decide between options the pulse surfaced.
 

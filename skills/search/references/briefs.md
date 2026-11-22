@@ -40,12 +40,14 @@ For each quote below, read the section around it (heading to heading, or 40 line
 - none: it does not state the claim;
 - contradicts: it states the opposite, or a condition that undoes the claim.
 When a sentence in the source limits the claim (a condition, a scope, a caveat), copy it exactly as the qualifier.
+The gist is one or two sentences on how the source got to the passage: who measured or built what, on what, with what result, taken from the same section; `-` when the section does not say.
+The quotes are listed by file. Read each file once, wide enough for all its quotes, and send the reads of several files in one turn: you have 25 turns for the whole list.
 
 Quotes:
 <claim id or number>. <claim text> | <file>:<line> "<quote>"
 
 Reply with one tab-separated line per quote and nothing else:
-<claim id or number>  <file>:<line>  <full|partial|none|contradicts>  <qualifier file:line or ->  <qualifier text or ->
+<claim id or number>  <file>:<line>  <full|partial|none|contradicts>  <qualifier file:line or ->  <qualifier text or ->  <gist or ->
 ```
 
-Write each rating as the quote's `support` and each qualifier as its `qualifier` (`references/formats.md`). Never change a rating to fit a claim; change the claim's status or wording.
+List the quotes sorted by file. Write each rating as the quote's `support`, each qualifier as its `qualifier` and each gist, in the user's language, as its `gist` (`references/formats.md`). A quote the reply has no line for is not rated: send it to another reader. Never change a rating to fit a claim; change the claim's status or wording.

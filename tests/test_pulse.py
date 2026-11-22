@@ -63,6 +63,18 @@ def daily(pid, title, upvotes=10, comments=0, summary=""):
                       "summary": summary, "upvotes": upvotes}, "title": title, "numComments": comments}
 
 
+def page(key, rows):
+    """A Trendshift page: the rows under key in the data the page embeds, split over two pieces."""
+    data = '5:["$","$L6",null,{"' + key + '":' + json.dumps(rows) + "}]" + chr(10)
+    cut = len(data) // 2
+    return "".join(f"<script>self.__next_f.push([1,{json.dumps(part)}])</script>" for part in (data[:cut], data[cut:])).encode()
+
+
+def trending(name, stars, gained, desc, rid=7):
+    return {"rank": 1, "full_name": name, "repository_id": rid, "repository_description": desc, "repository_stars": stars,
+            "repository_stars_gained": gained, "tags": [{"display_name": "AI agent", "slug": "ai-agent"}]}
+
+
 class Resp(io.BytesIO):
     """A response body with headers, for a route that must answer with a Link header."""
 
@@ -363,7 +375,7 @@ class PulseTest(unittest.TestCase):
         self.assertEqual(result["items"], [])  # an issue body is not read past its lead: under the floor
         _, lines, _, _ = self.run_pulse({"subqueries": [sub(lanes=("reddit",))], "subreddits": ["rust"]},
                                         [(("/posts/search",), js({"data": None, "error": "Timeout. Maybe slow down a bit"}))])
-        self.assertIn("arctic-shift: Timeout. Maybe slow down a bit", next(x for x in lines if x.startswith("LANE	reddit")))
+        self.assertIn("arctic-shift: Timeout. Maybe slow down a bit", next(x for x in lines if x.startswith("LANE\treddit")))
 
     def test_relevance_caps_generic_matches_and_rewards_the_phrase(self):
         sq = {"search_query": "open source model", "ranking_query": "open source model for widget engines"}
@@ -500,6 +512,45 @@ class PulseTest(unittest.TestCase):
                           {"hf": {"upvotes": 42, "comments": 3}}, "Widget engines for multilingual speech"))
         self.assertEqual(self.lanes(lines), {"hf": "ok"})
         self.assertIn("40 likes, 900 downloads, 12 trending", "\n".join(lines))
+
+    def test_ts_lane_reads_the_lists_that_fit_the_window_and_named_topics(self):
+        weekly = [trending("acme/Widget-Engine", 900, 400, "A widget engine for Rust"), trending("other/cooking", 50, 5, "Recipes")]
+        today = [trending("acme/Widget-Engine", 900, 30, "A widget engine for Rust")]
+        newest = [{"full_name": "new/tiny-tool", "repository_id": 9, "description": "Unrelated words", "watchers": 12,
+                   "created_at": "2026-10-28T08:00:00Z", "tags": []},
+                  {"full_name": "old/tool", "repository_id": 3, "description": "", "watchers": 1, "created_at": "2026-01-01T00:00:00Z"}]
+        code, lines, result, opener = self.run_pulse(
+            {"subqueries": [sub(lanes=("ts",))], "trendshift_topics": ["ai-agent"]},
+            [(("trendshift.io/weekly",), page("initialData", weekly)), (("trendshift.io/topics/ai-agent",), page("initialRepositories", newest)),
+             (("trendshift.io/",), page("initialData", today))], "--days", "7")
+        self.assertEqual(code, 0)
+        self.assertEqual(opener.urls, [f"{m.TS}/weekly", f"{m.TS}/", f"{m.TS}/topics/ai-agent"])
+        by = {i["id"]: i for i in result["items"]}
+        self.assertEqual(sorted(by), ["ts:acme/widget-engine", "ts:new/tiny-tool"])  # off topic and before the window drop
+        top, tiny = by["ts:acme/widget-engine"], by["ts:new/tiny-tool"]
+        self.assertEqual((top["url"], top["links"]["ts"], top["date"], top["engagement"]),
+                         ("https://github.com/acme/Widget-Engine", f"{m.TS}/repositories/7", AS_OF, {"ts": {"stars": 900, "gained": 400}}))
+        self.assertIn("AI agent", top["snippet"])
+        self.assertEqual((tiny["date"], tiny["exempt"], tiny["engagement"]), ("2026-10-28", True, {"ts": {"stars": 12}}))
+        self.assertEqual(self.lanes(lines), {"ts": "ok"})
+
+    def test_ts_runs_only_when_named_and_joins_the_github_copy(self):
+        code, lines, result, opener = self.run_pulse({"subqueries": [{"search_query": "widget engine"}]}, [])
+        self.assertFalse(any("trendshift.io" in u for u in opener.urls))
+        self.assertNotIn("ts", self.lanes(lines))
+        code, lines, result, opener = self.run_pulse(
+            {"subqueries": [sub(lanes=("github", "ts"))]},
+            [(("search/repositories",), js({"items": [repo("acme/widget-engine", "2026-10-29", 900, "A widget engine for Rust")]})),
+             (("search/issues",), js({"items": []})),
+             (("trendshift.io/",), page("initialData", [trending("acme/Widget-Engine", 900, 30, "A widget engine for Rust")]))], "--days", "3")
+        self.assertEqual([(i["lanes"], sorted(i["engagement"])) for i in result["items"]], [(["github", "ts"], ["github", "ts"])])
+
+    def test_ts_changed_page_is_a_lane_failure_and_a_bad_slug_a_bad_plan(self):
+        code, lines, result, opener = self.run_pulse({"subqueries": [sub(lanes=("ts",))]},
+                                                     [(("trendshift.io/",), b"<html>no data here</html>")], "--days", "1")
+        self.assertEqual((code, self.lanes(lines)["ts"]), (1, "failed: unreadable response from Trendshift"))
+        code, lines, result, opener = self.run_pulse({"subqueries": [sub()], "trendshift_topics": ["AI Agent"]}, [])
+        self.assertEqual((code, opener.urls), (2, []))
 
     def test_hf_runs_only_when_a_subquery_names_it(self):
         code, lines, result, opener = self.run_pulse({"subqueries": [{"search_query": "widget engine"}]}, [])

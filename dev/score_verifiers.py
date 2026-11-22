@@ -10,8 +10,7 @@ the votes the verifiers gave (references/report.md).
 
 A vote is one parsed reply, with refuted true or false; anything else is no vote. The verdict follows the vote
 rule of report.md, computed from the votes (a verdict field that disagrees gets a # note): 2 refutations,
-refuted; one vote that holds with high or medium confidence, survived; any other single vote or none, unverified;
-otherwise survived. A run sends one verifier first on a reviewed source, so on the FALSE line "votes not refuting" is
+refuted; otherwise a vote that holds with high or medium confidence, survived; otherwise unverified. A run sends one verifier first on a reviewed source, so on the FALSE line "votes not refuting" is
 the chance that a single verifier lets a false claim pass.
 
 Output, tab-separated:
@@ -50,11 +49,11 @@ def votes(claim):
     return [v["refuted"] for v in claim.get("votes") or [] if isinstance(v, dict) and isinstance(v.get("refuted"), bool)]
 
 
-def verdict(vs, low=False):
-    """low: the claim's single vote, if that is all it has, is low in confidence."""
+def verdict(vs, firm=True):
+    """firm: a vote that holds is high or medium in confidence."""
     if sum(vs) >= 2:
         return "refuted"
-    return "survived" if len(vs) >= 2 or (vs == [False] and not low) else "unverified"
+    return "survived" if False in vs and firm else "unverified"
 
 
 def pct(k, n):
@@ -83,7 +82,7 @@ def main(argv=None):
             print(f"MISSING\t{cid}\tnot in claims.json")
             continue
         vs = votes(c)
-        v = verdict(vs, any(str(x.get("confidence")).lower() == "low" for x in c.get("votes") or [] if isinstance(x, dict)))
+        v = verdict(vs, any(x.get("refuted") is False and str(x.get("confidence")).lower() != "low" for x in c.get("votes") or [] if isinstance(x, dict)))
         if len(vs) < 3:
             notes.append(f"# {cid}: {len(vs)} of 3 votes")
         if c.get("verdict") and c["verdict"] != v:

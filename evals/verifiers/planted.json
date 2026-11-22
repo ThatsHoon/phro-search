@@ -1,0 +1,214 @@
+[
+ {
+  "id": "p01",
+  "topic": "beamng-traffic-research",
+  "claim": "c3",
+  "truth": true,
+  "variant": "true"
+ },
+ {
+  "id": "p02",
+  "topic": "beamng-traffic-research",
+  "claim": "c1",
+  "truth": true,
+  "variant": "true"
+ },
+ {
+  "id": "p03",
+  "topic": "ios-dev-on-windows-no-mac",
+  "claim": "c1",
+  "truth": true,
+  "variant": "true"
+ },
+ {
+  "id": "p04",
+  "topic": "ios-dev-on-windows-no-mac",
+  "claim": "c21",
+  "truth": true,
+  "variant": "true"
+ },
+ {
+  "id": "p05",
+  "topic": "meeting-stt-diarization",
+  "claim": "c5",
+  "truth": true,
+  "variant": "true"
+ },
+ {
+  "id": "p06",
+  "topic": "meeting-stt-diarization",
+  "claim": "c2",
+  "truth": true,
+  "variant": "true"
+ },
+ {
+  "id": "p07",
+  "topic": "participant-video-collection",
+  "claim": "c1",
+  "truth": true,
+  "variant": "true"
+ },
+ {
+  "id": "p08",
+  "topic": "participant-video-collection",
+  "claim": "c13",
+  "truth": true,
+  "variant": "true"
+ },
+ {
+  "id": "p09",
+  "topic": "plugin-authoring-toolkits",
+  "claim": "c2",
+  "truth": true,
+  "variant": "true"
+ },
+ {
+  "id": "p10",
+  "topic": "term-study-graph-ui",
+  "claim": "c3",
+  "truth": true,
+  "variant": "true"
+ },
+ {
+  "id": "p11",
+  "topic": "kr-research-face-voice-privacy-law",
+  "claim": "c4",
+  "truth": true,
+  "variant": "true"
+ },
+ {
+  "id": "p12",
+  "topic": "beamng-sim-rig",
+  "claim": "c21",
+  "truth": true,
+  "variant": "true"
+ },
+ {
+  "id": "p13",
+  "topic": "ios-dev-on-windows-no-mac",
+  "claim": "c2",
+  "truth": false,
+  "variant": "overstated",
+  "claim_text": "Use of GitHub-hosted runners, larger runners included, is free in both public and private repositories."
+ },
+ {
+  "id": "p14",
+  "topic": "beamng-sim-rig",
+  "claim": "c6",
+  "truth": false,
+  "variant": "overstated",
+  "claim_text": "Current BeamNG has stable, production-ready VR support on PC OpenXR headsets across all of its renderers."
+ },
+ {
+  "id": "p15",
+  "topic": "meeting-stt-diarization",
+  "claim": "c4",
+  "truth": false,
+  "variant": "overstated",
+  "claim_text": "In the Handy benchmark, whisper-large-v3 scores 4.89% WER on Korean conversational meeting speech."
+ },
+ {
+  "id": "p16",
+  "topic": "participant-video-collection",
+  "claim": "c4",
+  "truth": false,
+  "variant": "overstated",
+  "claim_text": "Android Doze cancels queued WorkManager uploads, and they never run again until the user reopens the app."
+ },
+ {
+  "id": "p17",
+  "topic": "beamng-sim-rig",
+  "claim": "c9",
+  "truth": false,
+  "variant": "overstated",
+  "claim_text": "A low-cost gaming-wheel rig was shown invalid for driving research: every measured driving behaviour differed significantly from the medium-cost rig (18 participants)."
+ },
+ {
+  "id": "p18",
+  "topic": "beamng-traffic-research",
+  "claim": "c4",
+  "truth": false,
+  "variant": "overstated",
+  "claim_text": "A peer-reviewed USENIX Security 2025 full paper measured BeamNG.tech's vehicle dynamics as more accurate than CARLA's in telematics error."
+ },
+ {
+  "id": "p19",
+  "topic": "plugin-authoring-toolkits",
+  "claim": "c1",
+  "truth": false,
+  "variant": "altered",
+  "claim_text": "plugin-dev ships nine skills, among them hook-development, mcp-integration, plugin-structure, plugin-settings, command-development, agent-development and skill-development.",
+  "replace": [
+   [
+    "seven specialized skills",
+    "nine specialized skills"
+   ]
+  ]
+ },
+ {
+  "id": "p20",
+  "topic": "ai-text-humanizer-skills",
+  "claim": "c5",
+  "truth": false,
+  "variant": "altered",
+  "claim_text": "Over-editing guard: a warning above a 20% change rate and a forced stop above 40%.",
+  "replace": [
+   [
+    "30%",
+    "20%"
+   ],
+   [
+    "50%",
+    "40%"
+   ]
+  ]
+ },
+ {
+  "id": "p21",
+  "topic": "ai-document-reader-plugins",
+  "claim": "c4",
+  "truth": false,
+  "variant": "contradicted",
+  "claim_text": "Claude's PDF support takes 500 to 1,000 text tokens per page, plus image tokens, since each page enters as an image together with its extracted text."
+ },
+ {
+  "id": "p22",
+  "topic": "term-study-graph-ui",
+  "claim": "c5",
+  "truth": false,
+  "variant": "altered",
+  "claim_text": "Learning graphs in this approach put prerequisite or foundational concepts on the right and advanced concepts on the left.",
+  "replace": [
+   [
+    "At the far right",
+    "At the far left"
+   ],
+   [
+    "At the left",
+    "At the right"
+   ]
+  ]
+ },
+ {
+  "id": "p23",
+  "topic": "beamng-traffic-research",
+  "claim": "c21",
+  "truth": false,
+  "variant": "altered",
+  "claim_text": "In the validation crash test, the physical test peaked at 12.1 g at 62 ms after impact and the soft-body simulation at 11.9 g at 68 ms; the relative error of the soft-body peak was 1.7 percent.",
+  "replace": [
+   [
+    "11.2 g at 132 ms",
+    "11.9 g at 68 ms"
+   ]
+  ]
+ },
+ {
+  "id": "p24",
+  "topic": "kr-research-face-voice-privacy-law",
+  "claim": "c5",
+  "truth": false,
+  "variant": "contradicted",
+  "claim_text": "The Communications Secrecy Act bars recording non-public conversations between others (Art. 14(1)), and Art. 16(1)(1) punishes recording or listening to them in breach of Art. 3 with imprisonment of up to 3 years or a fine."
+ }
+]

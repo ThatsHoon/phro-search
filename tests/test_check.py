@@ -275,12 +275,21 @@ VERDICTS = [{"id": "c1", "verdict": "survived"}, {"id": "C2", "verdict": "surviv
 
 
 class ReportKindTest(unittest.TestCase):
+    def test_a_report_is_in_the_language_of_the_brief_title(self):
+        line = "0:language: the brief's title is in Hangul and the text has none; write it in the user's language"
+        self.assertIn(line, self.run_report(REPORT, title="한 대에서 쓸 도구")[1])
+        self.assertNotIn("language", self.run_report(REPORT, title="Polars or pandas")[1])
+        self.assertNotIn("language", self.run_report(REPORT.replace("Both held", "둘 다 held"), title="한글")[1])
+        self.assertIn(line, self.run_report(REPORT + chr(10) + "> 한글 quote" + chr(10), title="한글")[1])
+
     """--kind report: BLUF first, every section up to the conclusion cites, the BLUF and the conclusion cite survivors."""
 
-    def run_report(self, text, claims=VERDICTS, located=("c1", "c2"), view="extracts-2026-10-30.json"):
+    def run_report(self, text, claims=VERDICTS, located=("c1", "c2"), view="extracts-2026-10-30.json", title=None):
         with tempfile.TemporaryDirectory() as d:
             path = Path(d) / "report-2026-10-30.md"
             path.write_text(text, encoding="utf-8")
+            if title:
+                (Path(d) / "map.md").write_text("## Brief" + chr(10) + f"Title: {title}" + chr(10), encoding="utf-8")
             if claims is not None:
                 (Path(d) / "claims.json").write_text(json.dumps(claims), encoding="utf-8")
             if view:

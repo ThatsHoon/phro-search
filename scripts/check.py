@@ -7,6 +7,8 @@ rules: phrase, symbol, dash, invisible: one hit fails.
        density, per-doc, opener, bold: fail over a limit; a line 0 summary, then each hit with a snippet.
 Fenced code, quote lines (">"), inline code and URLs are not checked, except for invisible characters; a no-break
 space (U+00A0, U+202F) or a soft hyphen in a quote line is allowed, since a quote keeps its source's characters.
+With any --kind, language: when the Title line of the brief in the topic's map.md (beside the file; two folders up
+       for a pulse brief) is written in Hangul, kana or Han characters, the writer's own prose has some too.
 --kind report also checks a report's structure against the claims.json and the evidence view beside it
        (extracts-<stem>.json for report-<stem>.md, else extracts.json):
        bluf: the title is followed by one paragraph, it cites a claim as [c1] or [c1, c2], and it names its
@@ -35,7 +37,7 @@ space (U+00A0, U+202F) or a soft hyphen in a quote line is allowed, since a quot
 import argparse, itertools, json, re, sys, urllib.parse
 from pathlib import Path
 
-VERSION = "0.6.2"
+VERSION = "0.7.0"
 
 # One hit fails. English entries match whole words; Korean entries match anywhere in the text.
 HARD_PHRASES = [
@@ -102,6 +104,21 @@ def scope(raw):
 def snippet(text, pos):
     """The rest of the line from pos: at most 80 characters, control characters removed."""
     return re.sub(r"[\x00-\x1f\x7f-\x9f]+", " ", text[pos:pos + 80].split("\n")[0]).strip()
+
+
+SCRIPTS = (("Hangul", "[\uAC00-\uD7A3]"), ("kana", "[\u3040-\u30FF]"), ("Han characters", "[\u4E00-\u9FFF]"))
+
+
+def language_problems(raw, topic):
+    """The deliverable against the script of the brief's title in the topic's map.md."""
+    try:
+        title = re.search(r"^Title:(.*)$", (topic / "map.md").read_text(encoding="utf-8-sig"), re.M)
+    except OSError:
+        return []
+    name = next((n for n, pat in SCRIPTS if title and re.search(pat, title.group(1))), None)
+    if not name or re.search(dict(SCRIPTS)[name], scope(raw)):
+        return []
+    return [(0, "language", f"the brief's title is in {name} and the text has none; write it in the user's language")]
 
 
 def check(raw):
@@ -233,7 +250,7 @@ def report_problems(raw, verdicts, unlocated=frozenset(), view="its evidence vie
 
 
 # --kind pulse. pulse.py's lane names:
-NAMES = {"hn": "Hacker News", "reddit": "Reddit", "github": "GitHub", "arxiv": "arXiv", "youtube": "YouTube", "hf": "Hugging Face"}
+NAMES = {"hn": "Hacker News", "reddit": "Reddit", "github": "GitHub", "arxiv": "arXiv", "youtube": "YouTube", "hf": "Hugging Face", "ts": "Trendshift"}
 LINK = re.compile(r"https?://[^\s)>\]]+")
 ELLIPSIS = re.compile(r"\.\.\.|\U00002026")
 WRAP = "\"'\U0000201c\U0000201d\U00002018\U00002019"  # quote marks around a whole quote
@@ -409,6 +426,9 @@ def main(argv=None):
         if view is None:
             problems.append((0, "view", f"no {views[0].name} beside the report; write the report's evidence view"))
         problems += report_problems(raw, verdicts, central - located if view else frozenset(), view.name if view else "", unranked)
+    if args.kind and args.file != "-":
+        folder = Path(args.file).resolve().parent
+        problems += language_problems(raw, folder.parent if args.kind == "pulse" else folder)
     if args.kind == "pulse":
         if args.file == "-":
             print("FAIL\t--kind pulse reads the pulse.py result beside the brief; pass the file, not -")

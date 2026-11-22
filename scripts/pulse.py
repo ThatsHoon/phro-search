@@ -5,7 +5,10 @@ lanes: hn (Hacker News stories through Algolia), reddit (arctic-shift, each redd
        github (repository and issue search, and the repositories the plan names), arxiv (export API),
        youtube (yt-dlp, when installed), hf (Hugging Face, keyless: models created in the window whose name matches
        the subquery, up to 3 pages of the newest, with likes, downloads and trending score; daily papers of the window's newest 31 days, with
-       upvotes and comments); hf runs only when a subquery names it
+       upvotes and comments), ts (Trendshift, keyless: the trending GitHub repositories of the lists that fit the
+       window, today's, then this week's from 7 days, this month's from 28 and this year's from 365, with stars and
+       stars gained; and the newest repositories of each topic the plan names); hf and ts run only when a subquery
+       names them, ts also when the plan names topics
 The window is UTC: the N days that end with the as-of day (default today). Items outside it drop; undated ones stay.
 output, tab-separated:
   # window <from> to <to> (UTC)
@@ -25,16 +28,17 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
-VERSION = "0.6.2"
+VERSION = "0.7.0"
 
 HN, ARCTIC = "https://hn.algolia.com/api/v1", "https://arctic-shift.photon-reddit.com/api"
 GH, ARXIV = "https://api.github.com", "https://export.arxiv.org/api/query"
 HF = "https://huggingface.co"
+TS = "https://trendshift.io"
 UA = f"Mozilla/5.0 (compatible; phro-search/{VERSION}; +https://github.com/ThatsHoon/phro-search)"
 CAP = 10 * 1024 * 1024  # bytes per response
 DEFAULT_LANES = ("hn", "reddit", "github", "arxiv", "youtube")  # a subquery that names no lanes runs these
-LANES = DEFAULT_LANES + ("hf",)
-NAMES = {"hn": "Hacker News", "reddit": "Reddit", "github": "GitHub", "arxiv": "arXiv", "youtube": "YouTube", "hf": "Hugging Face"}
+LANES = DEFAULT_LANES + ("hf", "ts")
+NAMES = {"hn": "Hacker News", "reddit": "Reddit", "github": "GitHub", "arxiv": "arXiv", "youtube": "YouTube", "hf": "Hugging Face", "ts": "Trendshift"}
 HF_DAYS, HF_PAGES = 31, 3  # daily-paper dates asked per run (the window's newest); model list pages read per subquery
 DEPTH = {"quick": (20, 15), "default": (50, 40), "deep": (100, 60)}  # results per request, items clustered
 DEADLINE = 90  # seconds for every lane together
@@ -57,6 +61,9 @@ GENERIC = frozenset("ai ml llm llms model models tool tools app apps open source
                     "system systems project new best guide tutorial news update updates release releases".split())
 TOKEN = re.compile(r"[^\W_]+")
 SUBREDDIT = re.compile(r"[A-Za-z0-9_]{2,21}")
+TS_SLUG = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
+TS_CHUNK = re.compile(rb'self\.__next_f\.push\(\[1,("(?:[^"\\]|\\.)*")\]\)')  # one piece of a page's embedded data
+TS_LISTS = (("yearly", 365), ("monthly", 28), ("weekly", 7), ("", 1))  # a trending list and the shortest window it fits
 REPO = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*")
 YT_FILTER = ((1, "EgIIAg%253D%253D"), (7, "EgIIAw%253D%253D"), (31, "EgIIBA%253D%253D"), (366, "EgIIBQ%253D%253D"))  # uploaded today, this week, month, year
 BOTS = re.compile(r"(?i)automoderator|.+-modteam")
@@ -509,6 +516,49 @@ def hf_search(st, ctx):
                 yield sq["label"], it
 
 
+def ts_rows(key):
+    """A parser for a Trendshift page: the list under key in the data the page embeds. A page without it raises
+    ValueError, so a changed page is the lane's error, never an empty answer."""
+    def parse(body):
+        data = "".join(json.loads(c) for c in TS_CHUNK.findall(body))
+        at = data.find(f'"{key}":[')
+        if at < 0:
+            raise ValueError(f"no {key}")
+        rows = json.JSONDecoder().raw_decode(data, at + len(key) + 3)[0]
+        return [x for x in rows if isinstance(x, dict) and REPO.fullmatch(str(x.get("full_name")))]
+    return parse
+
+
+def ts_item(x, date, counts, desc, exempt=False):
+    """A repository of a Trendshift list as an item on its GitHub URL, so it joins the GitHub lane's copy."""
+    tags = ", ".join(str(t.get("display_name")) for t in x.get("tags") or [] if isinstance(t, dict) and t.get("display_name"))
+    rid = x.get("repository_id")
+    return entry("ts", x["full_name"].lower(), f"https://github.com/{x['full_name']}", x["full_name"], x["full_name"].split("/")[0],
+                 date, counts, "; ".join(filter(None, (str(desc or ""), tags))),
+                 f"{TS}/repositories/{rid}" if isinstance(rid, int) else f"{TS}/", exempt)
+
+
+def ts_search(st, ctx):
+    """The trending lists that fit the window, the longest first so a repository keeps that list's stars gained, scored
+    against the ts subqueries and dated to the as-of day, since a list says what trends now; then the newest
+    repositories of each topic the plan names, dated by their creation and kept without the relevance floor."""
+    labels = [sq["label"] for sq in ctx.queries("ts")]
+    noon = datetime(ctx.last.year, ctx.last.month, ctx.last.day, 12, tzinfo=timezone.utc)
+    if labels and ctx.last != datetime.now(timezone.utc).date():
+        st["notes"].append("the trending lists are today's, not the as-of day's")
+    for path, least in TS_LISTS if labels else ():
+        if ctx.days < least:
+            continue
+        for x in get(st, f"{TS}/{path}", "Trendshift", parse=ts_rows("initialData")) or []:
+            it = ts_item(x, noon, {"stars": whole(x.get("repository_stars")), "gained": whole(x.get("repository_stars_gained"))},
+                         x.get("repository_description"))
+            for label in labels:
+                yield label, it
+    for slug in ctx.plan["trendshift_topics"]:
+        for x in get(st, f"{TS}/topics/{slug}", "Trendshift", parse=ts_rows("initialRepositories")) or []:
+            yield "topic", ts_item(x, when(x.get("created_at")), {"stars": whole(x.get("watchers"))}, x.get("description"), True)
+
+
 def reason_of(e):
     """An exception as a short reason: its type and, when it has one, its message."""
     msg = clean(e, 120)
@@ -533,7 +583,7 @@ def ytdlp(st, ctx, cmd):
 
 SEARCH = {"hn": (hn_search, hn_comments), "reddit": (reddit_search, reddit_comments),
           "github": (github_search, github_comments), "arxiv": (arxiv_search, None), "youtube": (youtube_search, None),
-          "hf": (hf_search, None)}
+          "hf": (hf_search, None), "ts": (ts_search, None)}
 
 
 def run_lane(name, st, ctx):
@@ -781,7 +831,7 @@ def load_plan(path, days):
             raise ValueError(f"subquery {n}: lanes must be a non-empty list from {', '.join(LANES)}")
         if isinstance(w, bool) or not isinstance(w, (int, float)) or not 0 < w <= 1:
             raise ValueError(f"subquery {n}: weight must be over 0 and at most 1")
-        if sq["label"] in labels | {"dedicated", "reddit", "repo", "youtube"}:
+        if sq["label"] in labels | {"dedicated", "reddit", "repo", "youtube", "topic"}:
             raise ValueError(f"subquery {n}: the label {sq['label']} is taken")
         labels.add(sq["label"])
     plan.setdefault("freshness", "balanced")
@@ -796,6 +846,9 @@ def load_plan(path, days):
         if not isinstance(vals, list) or not all(isinstance(v, str) and rx.fullmatch(v.removeprefix("r/")) for v in vals):
             raise ValueError(f"{key} must be a list of names like {like}")
         plan[key] = [v.removeprefix("r/") for v in vals]
+    tt = plan.setdefault("trendshift_topics", [])
+    if not isinstance(tt, list) or not all(isinstance(v, str) and TS_SLUG.fullmatch(v) for v in tt):
+        raise ValueError("trendshift_topics must be a list of topic slugs like ai-agent")
     yq = plan.setdefault("youtube_queries", [])
     if not isinstance(yq, list) or not all(isinstance(v, str) and v.strip() for v in yq):
         raise ValueError("youtube_queries must be a list of search phrases")
@@ -868,7 +921,7 @@ def main(argv=None):
         print(f"FAIL\tegress\tcannot read the term list: {clean(e)}")
         return 2
     sent = [sq["search_query"] for sq in plan["subqueries"]] + plan["subreddits"] + plan["dedicated_subreddits"]
-    for text in sent + plan["reddit_queries"] + plan["github_repos"] + plan["youtube_queries"]:
+    for text in sent + plan["reddit_queries"] + plan["github_repos"] + plan["youtube_queries"] + plan["trendshift_topics"]:
         hit = egress_hit(text, terms)
         if hit:
             print(f"FAIL\t{clean(text, 80)}\tegress: '{hit[0]}' is listed in {hit[1]}; use a generic problem statement")
@@ -882,7 +935,8 @@ def main(argv=None):
                           gh={"Accept": "application/vnd.github+json", **({"Authorization": f"Bearer {token}"} if token else {})},
                           queries=lambda lane: [sq for sq in plan["subqueries"] if lane in sq["lanes"]])
     wanted = {lane for sq in plan["subqueries"] for lane in sq["lanes"]}
-    wanted |= {lane for lane, key in (("reddit", "dedicated_subreddits"), ("github", "github_repos"), ("youtube", "youtube_queries"))
+    wanted |= {lane for lane, key in (("reddit", "dedicated_subreddits"), ("github", "github_repos"), ("youtube", "youtube_queries"),
+                                      ("ts", "trendshift_topics"))
                if plan[key]}
     skip = {}
     if not plan["subreddits"] and not plan["dedicated_subreddits"]:

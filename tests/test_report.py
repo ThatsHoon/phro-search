@@ -91,6 +91,13 @@ class ReportTest(unittest.TestCase):
         code, out = self.report(only_ellipsis, "--check")
         self.assertEqual((code, out.splitlines()[0].split("\t")[3]), (1, "not found near the line"))
 
+    def test_a_quote_shows_its_gist(self):
+        q = dict(quote("a.md", 1, "alpha"), gist="Measured on 12 <cars>.")
+        html = self.page(self.topic({"a.md": "alpha" + chr(10)}, [claim(q)]))
+        self.assertIn('<p class="gist"><span class="tag">how the source got there</span> Measured on 12 &lt;cars&gt;.</p>', html)
+        bad = self.topic({"a.md": "alpha" + chr(10)}, [claim(dict(q, gist=3))])
+        self.assertEqual(self.report(bad, "--check")[0], 1)
+
     def test_legacy_status_values_and_ja_key(self):
         claims = [claim(quote("a.md", 1, "alpha"), status=s) for s in LEGACY_STATUS]
         claims[0]["quotes"][0].update(ja=KO_TRANSLATION, context_note="old extra key")
@@ -320,7 +327,9 @@ class ClaimsTest(unittest.TestCase):
                  ([vote(False, confidence="low")], "survived", "unverified"),  # unless it doubts itself
                  ([vote(True)], "survived", "unverified"),  # one refutation alone settles nothing
                  ([], "refuted", "unverified"),
-                 ([vote(False), vote(True)], None, "survived")]
+                 ([vote(False), vote(True)], None, "survived"),
+                 ([vote(False, confidence="low"), vote(True)], "survived", "unverified"),  # no vote holds it firmly
+                 ([vote(False, confidence="low"), vote(True), vote(False)], "unverified", "survived")]
         for votes, stored, expected in cases:
             topic = self.topic([claimed("c1", votes=votes, **({"verdict": stored} if stored else {}))])
             code, out = self.report(topic)

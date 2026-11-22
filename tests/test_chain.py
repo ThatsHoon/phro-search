@@ -567,6 +567,51 @@ class ChainTest(unittest.TestCase):
         self.assertEqual(lines, ["# work\tW6\t2026\tAlone\t-", "# note: OpenAlex lists no related works for this one; "
                                  "try chain.py cites or refs."])
 
+    def cocited_topic(self):
+        topic = Path(self.home) / "topic"
+        (topic / "sources").mkdir(parents=True)
+        rows = ["name\turl\tfinal\tfetched\tpublished\tmodified\textraction\tversion\tmarks\tfiles",
+                "a\thttps://doi.org/10.1000/A\thttps://pub.example/article/1\t-\t-\t-\t-\t-\t-\ta.md",
+                "b\thttps://arxiv.org/abs/2401.00001v2\thttps://arxiv.org/abs/2401.00001v2\t-\t-\t-\t-\t-\t-\tb.pdf, b.txt, b.layout.txt",
+                "blog\thttps://blog.example/post\thttps://blog.example/post\t-\t-\t-\t-\t-\t-\tblog.md"]
+        (topic / "sources" / "index.tsv").write_text(chr(10).join(rows) + chr(10), encoding="utf-8")
+        (topic / "sources" / "a.md").write_text("see https://github.com/Acme/Tool/blob/main/x.py and https://docs.example.org/guide/, "
+                                                "https://pub.example/other https://example.com/ https://x.example/logo.png", encoding="utf-8")
+        (topic / "sources" / "b.txt").write_text("code at https://github.com/acme/tool. docs (https://docs.example.org/guide)", encoding="utf-8")
+        (topic / "sources" / "b.layout.txt").write_text("https://only.example/layout", encoding="utf-8")
+        (topic / "sources" / "blog.md").write_text("[tool](https://github.com/acme/tool) https://x.example/logo.png", encoding="utf-8")
+        (topic / "map.md").write_text("| paper | Card 1986 | https://doi.org/10.1145/5401.5405 |" + chr(10) + "https://docs.example.org/guide", encoding="utf-8")
+        return topic
+
+    def cocited_api(self, p, q):
+        refs = {"/works/doi:10.1000/a": ("W1", ["W1974170312", "W195302104", "W1602667807"]),
+                "/works/doi:10.48550/arxiv.2401.00001": ("W2", ["W1974170312", "W195302104"])}
+        if p.lower() in refs:
+            wid, cited = refs[p.lower()]
+            return {"id": "https://openalex.org/" + wid, "referenced_works": ["https://openalex.org/" + c for c in cited]}
+        return api(p, q)
+
+    def test_cocited_counts_what_the_sources_cite_and_marks_what_the_topic_holds(self):
+        code, lines, urls = self.call("cocited", str(self.cocited_topic()), handler=self.cocited_api)
+        self.assertEqual(code, 0)
+        self.assertEqual([path(u).lower() for u in urls], ["/works/doi:10.1000/a", "/works/doi:10.48550/arxiv.2401.00001", "/works"])
+        self.assertEqual(lines[0], "# cocited\t2 of 2 sources resolved\t2 works cited by 2 or more")
+        self.assertEqual([l.split("\t")[:2] + [l.split("\t")[4]] for l in lines[1:3]],
+                         [["2", "in", "W1974170312"], ["2", "missing", "W195302104"]])
+        self.assertEqual(lines[3:], ["# audit\t1 of 2 in the map", "LINK\t3\tmissing\thttps://github.com/acme/tool",
+                                     "LINK\t2\tin\thttps://docs.example.org/guide", "# links\t1 of 2 in the map"])
+
+    def test_cocited_min_and_a_topic_without_ids_or_sources(self):
+        topic = self.cocited_topic()
+        _, lines, _ = self.call("cocited", str(topic), "--min", "3", handler=self.cocited_api)
+        self.assertEqual(lines, ["# cocited\t2 of 2 sources resolved\t0 works cited by 3 or more",
+                                 "# note: no work is cited by that many sources; with few sources that have a DOI this says nothing about recall.",
+                                 "# audit\t0 of 0 in the map", "LINK\t3\tmissing\thttps://github.com/acme/tool", "# links\t0 of 1 in the map"])
+        _, lines, urls = self.call("cocited", str(topic), handler=lambda p, q: http_error(404))
+        self.assertEqual((lines[0], len(urls)), ("# cocited\t0 of 2 sources resolved\t0 works cited by 2 or more", 2))
+        code, lines, _ = self.call("cocited", str(Path(self.home) / "none"))
+        self.assertEqual((code, lines[0].split("\t")[0]), (1, "FAIL"))
+
     def test_bad_usage_exits_2(self):
         for argv in (["refs", "just a title"], ["cites", "W1", "-n", "0"], ["refs", "W1", "-n", "201"], ["find"], [],
                      ["cites", "W1", "--since", "20"], ["cites", "W1", "--sort", "newest"], ["oa", "a title"],
