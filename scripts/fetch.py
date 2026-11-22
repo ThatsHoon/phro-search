@@ -1,7 +1,8 @@
 """Download one original source into a research topic's sources/ folder; refuse anything that is not the real thing.
 
 Usage:
-  fetch.py <sources_dir> <name> <url-or-path>
+  fetch.py <sources_dir> <name> <url-or-path> [--title "<the work's title>"] [--replace]
+  fetch.py <sources_dir> <name> <saved-file> --from <url-or-doi>
 
   name         file stem matching ^[a-z0-9][a-z0-9.-]*$, for example bates-1989-berrypicking
   url-or-path  an http(s) URL, a DOI (bare, doi: or a doi.org URL), or a page or PDF saved from a
@@ -15,7 +16,16 @@ kept as <name>.pdf. An arXiv link is read from its HTML version first and from t
 is missing, damaged or short. A DOI tries the open-access copies OpenAlex lists (PDF links before
 landing pages; then published, accepted, submitted; repository copies first) before the publisher's page; the
 lookup costs no OpenAlex credits, and OPENALEX_API_KEY is sent when set. Nothing is written on
-FAIL, and an existing <name>.* is never overwritten.
+FAIL, and an existing <name>.* is never overwritten, except with --replace: the name's files are swapped for the
+new copy once that copy passed every check, and the earlier files stay when it fails.
+
+The copy must be the work asked for. --title names the work a URL or a file must hold; a DOI's title comes from
+OpenAlex. When the title's words are not in the text, an open-access copy is passed over for the next one, and
+anything else fails with "not the work". A page already held under another name (the same final URL) fails too.
+
+A page that answers with a bot check or a 403 is the user's to open: they save it from their browser, and --from
+names the URL or DOI it came from. The index row then keeps that address as url and local:<file> as final, a later
+request for the same address reuses the copy, and a DOI gives the title the file must hold and its retraction flag.
 
 A dead public page (http 404 or 410, a DNS or TLS failure, a second timeout, a link with a path redirected to the
 site's front page) is taken from the
@@ -42,14 +52,15 @@ A reason for a missing tool (pdftotext, pdftoppm, tesseract, yt-dlp) ends in a s
 Marks, comma-separated: ocr, auto-captions, arxiv-html; published-copy, accepted-copy, submitted-copy
 or copy (no version stated) for an open-access copy of a DOI, with landing-page when it came from a
 landing page rather than a PDF link; archived-copy for a dead page read from its Wayback snapshot;
-retracted when OpenAlex marks the work retracted; unchecked when OpenAlex could not be asked, so neither
+abstract-only when a publisher's page is read for a work OpenAlex lists as closed, or the final URL is an abstract
+page (/abs/, /abstract/): the text is the abstract, not the work; retracted when OpenAlex marks the work retracted; unchecked when OpenAlex could not be asked, so neither
 copies nor a retraction were checked; reused for a source fetched before (a reuse adds no index row).
 """
 import argparse, datetime, html.parser, http.client, json, os, re, shutil, socket, ssl, subprocess, sys, tempfile, time
 import unicodedata, urllib.error, urllib.parse, urllib.request
 from pathlib import Path
 
-VERSION = "0.7.1"
+VERSION = "0.7.2"
 ARXIV = "https://arxiv.org"
 OPENALEX = "https://api.openalex.org"
 DOI = "https://doi.org"
@@ -82,7 +93,7 @@ WALL_PHRASES = (
 ARXIV_NOTICES = ("conversion to html had a fatal error", "html is not available for the source", "no html for")
 HTTP_REASONS = {
     401: "http 401: login required",
-    403: "http 403: open it in a browser and pass the saved file path",
+    403: "http 403: open it in a browser and pass the saved file with --from",
     404: "http 404",
     429: "http 429: still rate limited after 3 retries",
     503: "http 503: still unavailable after 3 retries",
@@ -248,7 +259,7 @@ def get(url):
                 return body, r.headers.get("Content-Type", ""), r.geturl()
         except urllib.error.HTTPError as e:
             if bot_check(e):
-                raise Fail(f"http {e.code}: bot check; open it in a browser and pass the saved file path") from None
+                raise Fail(f"http {e.code}: bot check; open it in a browser and pass the saved file with --from") from None
             if not (e.code == 429 or 500 <= e.code < 600) or backoff is None:
                 raise (Dead if e.code in (404, 410) else Fail)(HTTP_REASONS.get(e.code, f"http {e.code}")) from None
             short, wait = f"http {e.code}", retry_wait(e, backoff)
@@ -659,7 +670,7 @@ def oa_order(w):
 def openalex_work(doi):
     """A DOI's OpenAlex record (a lookup by id costs no credits); {} when OpenAlex does not know the DOI,
     None when it could not be asked (an error, a rate limit, a reply that is not JSON)."""
-    params = {"select": "id,type,is_retracted,locations"}
+    params = {"select": "id,type,title,is_retracted,open_access,locations"}
     key = os.environ.get("OPENALEX_API_KEY", "").strip()
     if key:
         params["api_key"] = key
@@ -673,9 +684,24 @@ def openalex_work(doi):
     return w if isinstance(w, dict) else None
 
 
-def load_doi(work, doi):
-    """A DOI: its open-access copies first (published, accepted, then submitted versions), then the publisher's page."""
+def not_the_work(title, text):
+    """Why text is not the work with this title, or None: most of the title's words must be in its first pages."""
+    words = [x for x in re.findall(r"[^\W_]+", (title or "").lower()) if len(x) > 2]
+    if len(words) < 3:
+        return None
+    head = text[:30000].lower()
+    have = set(re.findall(r"[^\W_]+", head))
+    if sum(x in have for x in words) >= 0.8 * len(words) or "".join(words) in re.sub(r"[\W_]+", "", head):
+        return None
+    first = next((line for line in text.splitlines() if line.strip()), "")
+    return f'not the work: its title "{clean(title, 120)}" is not in the text, which starts "{clean(first, 60)}"'
+
+
+def load_doi(work, doi, title=None):
+    """A DOI: its open-access copies first (published, accepted, then submitted versions), then the publisher's page.
+    A copy without the work's title (the one given, else OpenAlex's) is passed over."""
     w = openalex_work(doi)
+    title = title or (w or {}).get("title")
     late = ["unchecked"] if w is None else ["retracted"] * bool(w.get("is_retracted"))
     names = {"publishedVersion": "published", "acceptedVersion": "accepted", "submittedVersion": "submitted"}
     failed = 0
@@ -687,6 +713,9 @@ def load_doi(work, doi):
         except (Fail, ValueError):  # a malformed URL from OpenAlex counts as a copy that failed
             failed += 1
             continue
+        if not_the_work(title, r["text"]):
+            failed += 1
+            continue
         version = names.get(loc.get("version"), "")
         r["marks"] += [f"{version}-copy" if version else "copy"] + ["landing-page"] * (not loc.get("pdf_url")) + late
         r["version"] = version or r["version"]
@@ -696,16 +725,45 @@ def load_doi(work, doi):
     except Fail as e:
         tried = f" ({failed} open-access cop{'y' if failed == 1 else 'ies'} failed too)" if failed else ""
         raise Fail(f"{e}{tried}") from None
-    r["marks"] += late
+    if why := not_the_work(title, r["text"]):
+        raise Fail(why)
+    pdfs = re.findall(r"\]\((https?://[^)\s]+?\.pdf)\)", r["text"], re.I) if r["extraction"] == "html" and weighted(r["text"]) < WALL_SCAN else []
+    for n, link in enumerate(pdfs[:2] if title else []):  # a short page that links a PDF is the work's landing page
+        sub = work / f"linked{n}"
+        sub.mkdir()
+        try:
+            full = load_url(sub, link, want_pdf=True)
+        except (Fail, ValueError):
+            continue
+        if not not_the_work(title, full["text"]):
+            full["marks"] += late
+            return full
+    closed = r["extraction"] == "html" and ((w or {}).get("open_access") or {}).get("is_oa") is False
+    r["marks"] += ["landing-page"] * bool(pdfs) + ["abstract-only"] * (closed and "abstract-only" not in r["marks"]) + late
     return r
 
 
-def load(work, src):
-    """What a URL, a DOI or a local file gives (see got)."""
+def load(work, src, title=None, origin=None):
+    """What a URL, a DOI or a local file gives (see got); title names the work it must hold, and origin the DOI
+    or URL a local file was saved from: a DOI gives the title and the retraction flag."""
+    late = []
+    if doi := doi_of(origin or ""):
+        egress(origin)
+        w = openalex_work(doi)
+        title = title or (w or {}).get("title")
+        late = ["unchecked"] if w is None else ["retracted"] * bool(w.get("is_retracted"))
+    r = load_any(work, src, title)
+    r["marks"] = list(r["marks"]) + late
+    if why := not_the_work(title, r["text"]):
+        raise Fail(why)
+    return r
+
+
+def load_any(work, src, title=None):
     doi = doi_of(src)
     if doi and (re.match(r"https?://", src, re.I) or not Path(src).expanduser().exists()):
         egress(src)
-        return load_doi(work, doi)
+        return load_doi(work, doi, title)
     if not re.match(r"https?://", src, re.I):
         p = Path(src).expanduser()
         if not p.is_file():
@@ -746,7 +804,10 @@ def load_url(work, src, want_pdf=False, archive=False):
             raise
         return wayback(work, asked, str(e), want_pdf)
     paths = [urllib.parse.urlsplit(x).path.lower() for x in (src, final)]
-    return convert(work, data, ctype, final, paths, want_pdf)
+    r = convert(work, data, ctype, final, paths, want_pdf)
+    if r["extraction"] == "html" and re.search(r"/(?:abs|abstract)/", paths[1]):
+        r["marks"].append("abstract-only")
+    return r
 
 
 def front_page(asked, final):
@@ -849,14 +910,17 @@ def ok_line(name, readable, text, marks):
     return "\t".join(["OK", name, readable, str(len(text)), clean(first, 120)] + [",".join(marks)] * bool(marks))
 
 
-def fetch(sources, name, src):
-    """The OK line for one source; raises Fail before anything is written to sources."""
+def fetch(sources, name, src, title=None, replace=False, origin=None):
+    """The OK line for one source; raises Fail before anything is written to sources. replace swaps the files of a
+    taken name for the new copy once it is staged; origin is the DOI or URL a local file was saved from."""
     if not re.fullmatch(r"[a-z0-9][a-z0-9.-]*", name):
         raise Fail("bad name")
     local = not re.match(r"https?://", src, re.I) and not (doi_of(src) and not Path(src).expanduser().exists())
-    rows, key = read_index(sources), None if local else source_key(src)
+    if origin and not (local and source_key(origin)):
+        raise Fail("--from takes the DOI or URL that a saved file came from")
+    rows, key = read_index(sources), source_key(origin or src)
     newest = list({row["name"]: row for row in rows}.values())  # a name fetched again replaces its older rows
-    for row in reversed(newest):
+    for row in reversed([] if replace else newest):
         files = row["files"].split(",")
         readable = next((f for f in files if f in (row["name"] + ".md", row["name"] + ".txt")), None)
         if key and readable and source_key(row["url"]) == key and (sources / readable).is_file():
@@ -864,12 +928,16 @@ def fetch(sources, name, src):
             return ok_line(row["name"], readable, text, [m for m in row["marks"].split(",") if m not in ("", "-")] + ["reused"])
     old = [p.name for p in sorted(sources.glob(f"{name}.*"))
            if p.stem.lower() == name or p.name.lower() == f"{name}.layout.txt"]
-    if old:
+    if old and not replace:
         holder = next((row for row in reversed(rows) if row["name"] == name), None)
         raise Fail(f"exists: {old[0]}" + (f", fetched from {holder['url']}" if holder else ""))
     sources.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
-        r = load(Path(tmp), src)
+        r = load(Path(tmp), src, title, origin)
+        same = next((row["name"] for row in newest if row["name"] != name and r["final"] != "-"
+                     and source_key(row["final"]) == source_key(r["final"])), None)
+        if same:
+            raise Fail(f"the same page as {same}: {r['final']}")
         staged = Path(tmp) / "save"
         staged.mkdir()
         for suffix, body in r["files"].items():
@@ -877,14 +945,17 @@ def fetch(sources, name, src):
                 (staged / f"{name}{suffix}").write_text(body, encoding="utf-8", newline="")
             else:
                 (staged / f"{name}{suffix}").write_bytes(body)
-        doi = doi_of(src)
-        url = f"local:{Path(src).name}" if local else f"https://doi.org/{doi}" if doi else src
+        doi = doi_of(origin or src)
+        saved = f"local:{Path(src).name}"
+        url = f"https://doi.org/{doi}" if doi else origin or (saved if local else src)
         fetched = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        cells = [name, url, r["final"], fetched, r["published"], r["modified"], r["extraction"], r["version"],
+        cells = [name, url, saved if origin else r["final"], fetched, r["published"], r["modified"], r["extraction"], r["version"],
                  ",".join(r["marks"]), ",".join(f"{name}{s}" for s in sorted(r["files"]))]
         index = sources / INDEX
         head = "" if index.is_file() else "\t".join(INDEX_HEAD) + "\n"
         with index.open("a", encoding="utf-8", newline="") as out:  # opened first: an index that cannot be written stops the fetch here
+            for f in old:
+                (sources / f).unlink()
             for f in sorted(staged.iterdir()):
                 shutil.move(str(f), str(sources / f.name))
             out.write(head + "\t".join(clean(c, None if i in (1, 2) else 500) or "-" for i, c in enumerate(cells)) + "\n")
@@ -897,12 +968,15 @@ def main(argv=None):
     ap.add_argument("sources_dir", type=Path, help="the topic's sources folder; created when missing")
     ap.add_argument("name", help="file stem: lowercase letters, digits, dots and hyphens")
     ap.add_argument("source", metavar="url-or-path", help="an http(s) URL, or the path of a local page or PDF")
+    ap.add_argument("--title", help="the work's title; the copy fails when its words are not in the text")
+    ap.add_argument("--replace", action="store_true", help="swap the name's files for the new copy when it passes")
+    ap.add_argument("--from", dest="origin", metavar="URL-OR-DOI", help="where a saved file came from")
     a = ap.parse_args(argv)
     a.sources_dir = a.sources_dir.expanduser()  # a quoted ~ reaches the script unexpanded
     global _end
     _end = time.monotonic() + DEADLINE
     try:
-        print(fetch(a.sources_dir, a.name, a.source))
+        print(fetch(a.sources_dir, a.name, a.source, a.title, a.replace, a.origin))
         return 0
     except (Fail, OSError, ValueError) as e:
         print(f"FAIL\t{clean(a.name, 120)}\t{clean(e)}")

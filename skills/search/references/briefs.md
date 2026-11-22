@@ -20,7 +20,7 @@ Return four lists:
 - venues: the conferences, journals, lists, repositories, tags and channels where this field's experts write or its canonical material is published
 - canonical sources: title, author, year, and a free legal URL
 Split everything into: found / searched but absent / not searched.
-Write no summaries: copy names, titles and URLs exactly as found. Open the pages your strongest items rest on, and mark every item taken from a result snippet alone with (snippet). Say how many result pages you actually opened.
+Write no summaries: copy names, titles and URLs exactly as found. Budget: about 20 tool calls, at least half of them opening pages. Before replying, open the page behind each canonical source you list, up to 8; when one will not open, try one other free copy of it, then mark it (blocked), whatever kept it closed (a 403, a bot check, a file too large or unreadable). Mark every item taken from a result snippet alone with (snippet). Say how many result pages you actually opened.
 For unknown terms read coarse to fine: an encyclopedia article's references, a special dictionary, a textbook or lecture notes, a survey, then the original. In a field without papers: glossaries and introductions, then the people named there, then their own records.
 If <language> has no entry words for this field, start in English.
 Find the venues; do not pick them from a fixed list. Only with no clue at all, consider: conferences, journals and arXiv; personal blogs; developer post sites; video channels; repositories; forums.

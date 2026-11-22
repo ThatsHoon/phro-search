@@ -601,6 +601,18 @@ class ChainTest(unittest.TestCase):
         self.assertEqual(lines[3:], ["# audit\t1 of 2 in the map", "LINK\t3\tmissing\thttps://github.com/acme/tool",
                                      "LINK\t2\tin\thttps://docs.example.org/Guide", "# links\t1 of 2 in the map"])
 
+    def test_cocited_counts_a_name_once_and_no_lead_as_held(self):
+        topic = self.cocited_topic()
+        index = topic / "sources" / "index.tsv"
+        lines = index.read_text(encoding="utf-8").splitlines()
+        index.write_text(chr(10).join(lines[:1] + ["a	https://old.example/a	https://old.example/a	-	-	-	-	-	-	a.md"] + lines[1:]) + chr(10), encoding="utf-8")
+        (topic / "map.md").write_text("## Sources" + chr(10) + "| paper | Card 1986 | https://doi.org/10.1145/5401.5405 |" + chr(10)
+                                      + "## Next leads" + chr(10) + "- https://docs.example.org/Guide: cited twice", encoding="utf-8")
+        _, lines, _ = self.call("cocited", str(topic), handler=self.cocited_api)
+        self.assertEqual(lines[0], "# cocited	2 of 2 sources with a DOI or arXiv id resolved (3 sources)	2 works cited by 2 or more")
+        self.assertEqual(lines[3:], ["# audit	1 of 2 in the map", "LINK	3	missing	https://github.com/acme/tool",
+                                     "LINK	2	missing	https://docs.example.org/Guide", "# links	0 of 2 in the map"])
+
     def test_cocited_min_and_a_topic_without_ids_or_sources(self):
         topic = self.cocited_topic()
         _, lines, _ = self.call("cocited", str(topic), "--min", "3", handler=self.cocited_api)

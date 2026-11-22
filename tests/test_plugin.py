@@ -157,7 +157,7 @@ class PluginTest(unittest.TestCase):
         self.assertNotIn("measurements) when the question is contested", before)  # every choice, not only contested ones
         self.assertRegex(before, r"choice between options[^\n]*independent viewpoint")
         self.assertRegex(before, r"\| a choice between options on criteria \| 4 or 5")
-        self.assertIn('"PLAN: report; 5 researchers, up to 2 support readers, up to 15 verifier calls; ceiling 24 agent calls"', before)
+        self.assertIn('"PLAN: report; 5 researchers, up to 2 support readers, up to 15 verifier calls, up to 3 prose reader calls; ceiling 27 agent calls"', before)
         write = re.search(r"^## Write\n(.*?)(?=^## Deliver)", report, re.M | re.S).group(1)
         for words in ("decision table", "When another option wins", "What would change this answer", "1 to 3",
                       "unknown", "unverified", "entities", "key questions", "landscape", "standards"):

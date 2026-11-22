@@ -104,10 +104,10 @@ class FetchTest(unittest.TestCase):
             return subprocess.CompletedProcess(cmd, 0, out.encode() if isinstance(out, str) else b"", b"")
         self.patch(m.subprocess, "run", run)
 
-    def fetch(self, name, source):
+    def fetch(self, name, source, *extra):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            code = m.main([str(self.src), name, str(source)])
+            code = m.main([str(self.src), name, str(source), *extra])
         lines = out.getvalue().splitlines()
         self.assertEqual(len(lines), 1, lines)
         return code, lines[0].split("\t")
@@ -278,7 +278,7 @@ class FetchTest(unittest.TestCase):
             {"is_oa": True, "version": "publishedVersion", "pdf_url": "{u}/pub.pdf", "source": {"type": "journal"}}]}
         self.doi_server(work, **{"/pub.pdf": (403, {}, b""), "/10.1234/abc": (403, {}, b"")})
         self.assertEqual(self.fetch("p", "10.1234/abc"), (1, ["FAIL", "p", "http 403: open it in a browser and pass the "
-                                                                    "saved file path (1 open-access copy failed too)"]))
+                                                                    "saved file with --from (1 open-access copy failed too)"]))
         self.assertFalse(self.src.exists() and self.saved())
 
     def test_doi_of_a_retracted_work_is_marked(self):
@@ -357,6 +357,31 @@ class FetchTest(unittest.TestCase):
         rows = self.index()
         self.assertEqual([(r["url"], r["extraction"], r["published"], r["files"]) for r in rows],
                          [("local:saved.pdf", "pdftotext", "2021-03-04", f"{n}.layout.txt,{n}.pdf,{n}.txt") for n in ("one", "two")])
+
+    def test_a_saved_file_keeps_the_address_it_came_from(self):
+        page = self.tmp / "saved.md"
+        page.write_text("A blocked post\n" + "word " * 400, encoding="utf-8")
+        url = "https://example.org/blocked"
+        self.assertEqual(self.fetch("post", page, "--from", url)[0], 0)
+        self.assertEqual([(r["url"], r["final"]) for r in self.index()], [(url, "local:saved.md")])
+        self.assertEqual(self.fetch("again", url)[1][1:3] + self.fetch("again", url)[1][-1:], ["post", "post.md", "reused"])
+        self.assertEqual(self.fetch("x", url, "--from", url)[1][2], "--from takes the DOI or URL that a saved file came from")
+        self.assertEqual(self.fetch("y", page, "--from", "somewhere")[1][2], "--from takes the DOI or URL that a saved file came from")
+
+    def test_a_saved_file_is_checked_against_its_doi(self):
+        work = {"id": "https://openalex.org/W1", "type": "article", "title": "Spaced retrieval in vocabulary learning",
+                "is_retracted": True, "locations": []}
+        s = self.doi_server(work)
+        other = self.tmp / "other.md"
+        other.write_text("Task sequencing and oral performance\n" + "word " * 400, encoding="utf-8")
+        code, f = self.fetch("paper", other, "--from", "10.1234/abc")
+        self.assertEqual((code, f[2][:13]), (1, "not the work:"))
+        right = self.tmp / "right.md"
+        right.write_text("Spaced retrieval in vocabulary learning\n" + "word " * 400, encoding="utf-8")
+        code, f = self.fetch("paper", right, "--from", "10.1234/abc")
+        self.assertEqual((code, f[-1]), (0, "retracted"))
+        self.assertEqual([(r["url"], r["final"]) for r in self.index()], [("https://doi.org/10.1234/abc", "local:right.md")])
+        self.assertEqual(self.paths(s), ["/works/doi:10.1234/abc"] * 2)
 
     def test_caption_upload_date(self):
         info = {"title": "Talk", "language": "en", "upload_date": "20240115", "subtitles": {"en": [{}]}}
@@ -531,7 +556,7 @@ class FetchTest(unittest.TestCase):
                         "/busy": [(429, {}, b""), (200, HTML, page("<article>" + LONG + "</article>"))]})
         self.patch(m, "WAYBACK", s.url)
         for path, reason in (("/404", "http 404; no archived copy"), ("/401", "http 401: login required"),
-                             ("/403", "http 403: open it in a browser and pass the saved file path"),
+                             ("/403", "http 403: open it in a browser and pass the saved file with --from"),
                              ("/451", "http 451: unavailable for legal reasons"), ("/500", "http 500"),
                              ("/jammed", "http 429: still rate limited after 3 retries")):
             self.assertEqual(self.fetch("e", s.url + path), (1, ["FAIL", "e", reason]))
@@ -547,10 +572,10 @@ class FetchTest(unittest.TestCase):
                         "/later": [(503, {"Retry-After": "30"}, b""), (200, HTML, page("<article>" + LONG + "</article>"))]})
         self.assertEqual(self.fetch("flaky", s.url + "/flaky")[0], 0)  # a 5xx is retried
         self.assertEqual(s.seen.count("/flaky"), 2)
-        bot = "http 503: bot check; open it in a browser and pass the saved file path"
+        bot = "http 503: bot check; open it in a browser and pass the saved file with --from"
         self.assertEqual(self.fetch("w", s.url + "/wall"), (1, ["FAIL", "w", bot]))  # a bot check is a wall
         self.assertEqual(self.fetch("w", s.url + "/flagged"), (1, ["FAIL", "w", bot]))
-        self.assertEqual(self.fetch("g", s.url + "/github")[1][2], "http 403: open it in a browser and pass the saved file path")
+        self.assertEqual(self.fetch("g", s.url + "/github")[1][2], "http 403: open it in a browser and pass the saved file with --from")
         self.assertEqual([s.seen.count(x) for x in ("/wall", "/flagged", "/github")], [1, 1, 1])
         self.patch(m, "DEADLINE", 5)  # a Retry-After that would pass the run deadline is not waited for
         self.assertEqual(self.fetch("l", s.url + "/later"), (1, ["FAIL", "l", "http 503; run deadline reached"]))
@@ -583,6 +608,84 @@ class FetchTest(unittest.TestCase):
         code, out = self.fetch("t2", "https://example.org/b")  # a second timeout makes the page dead: Wayback is asked
         self.assertEqual((code, out[2]), (1, "timeout; Wayback: dns"))
         self.assertEqual(len(timeouts), 5)
+
+    def test_doi_copy_of_another_work_is_passed_over(self):
+        title = "Evaluating the reading outcomes of beginning courses"
+        work = {"id": "W6", "title": title, "locations": [
+            {"is_oa": True, "version": "publishedVersion", "pdf_url": "{u}/other.pdf", "source": {"type": "repository"}},
+            {"is_oa": True, "version": "acceptedVersion", "pdf_url": "{u}/right.pdf", "source": {"type": "repository"}}]}
+        pdf = (200, {"Content-Type": "application/pdf"}, PDF)
+        s = self.doi_server(work, **{"/other.pdf": pdf, "/right.pdf": pdf,
+                                     "/10.1234/abc": (200, HTML, page("<article>" + LONG + "</article>"))})
+        texts = iter(["A report on something else\n" + "word " * 400, "", "Evaluating the Reading Out-\ncomes of Beginning Courses\n" + "word " * 400, ""])
+        self.tools(pdftotext=lambda cmd: Path(cmd[-1]).write_text(next(texts), encoding="utf-8"))
+        code, f = self.fetch("paper", "10.1234/abc")
+        self.assertEqual((code, f[5]), (0, "accepted-copy"), f)
+        self.assertEqual(self.paths(s), ["/works/doi:10.1234/abc", "/other.pdf", "/right.pdf"])
+        self.src = self.tmp / "sources-publisher"
+        s = self.doi_server({"id": "W6", "title": title, "locations": []},
+                            **{"/10.1234/abc": (200, HTML, page("<article>" + LONG + "</article>"))})
+        code, f = self.fetch("p", "10.1234/abc")
+        self.assertEqual(code, 1)
+        self.assertTrue(f[2].startswith(f'not the work: its title "{title}" is not in the text, which starts "evidence'), f)
+
+    def test_doi_landing_page_gives_way_to_the_pdf_it_links(self):
+        title = "English language syllabuses: definition and types"
+        landing = page(f'<article><h1>{title}</h1><p>' + "abstract " * 200 + '</p><a href="/files/9-5.pdf">Full Paper PDF</a></article>')
+        work = {"id": "W8", "title": title, "open_access": {"is_oa": True}, "locations": []}
+        s = self.doi_server(work, **{"/10.1234/abc": (200, HTML, landing), "/files/9-5.pdf": (200, {"Content-Type": "application/pdf"}, PDF)})
+        self.tools(pdftotext=lambda cmd: Path(cmd[-1]).write_text(title + "\n" + "word " * 400, encoding="utf-8"))
+        code, f = self.fetch("sabbah-2018", "10.1234/abc")
+        self.assertEqual((code, f[2], len(f)), (0, "sabbah-2018.txt", 5), f)
+        self.assertEqual(self.paths(s), ["/works/doi:10.1234/abc", "/10.1234/abc", "/files/9-5.pdf"])
+        self.src = self.tmp / "sources-no-pdf"
+        s = self.doi_server(work, **{"/10.1234/abc": (200, HTML, landing), "/files/9-5.pdf": (403, {}, b"")})
+        code, f = self.fetch("sabbah-2018", "10.1234/abc")
+        self.assertEqual((code, f[2], f[5]), (0, "sabbah-2018.md", "landing-page"), f)
+
+    def test_title_names_the_work_a_url_must_hold(self):
+        s = self.serve({"/report.html": (200, HTML, page("<article><h1>Jiang 2021, reading outcomes</h1>" + LONG + "</article>"))})
+        code, f = self.fetch("vesselinov-2012", s.url + "/report.html", "--title", "Duolingo Effectiveness Study: Final Report")
+        self.assertEqual((code, f[1], f[2][:13]), (1, "vesselinov-2012", "not the work:"))
+        self.assertFalse(self.src.exists() and self.saved())
+        self.assertEqual(self.fetch("jiang-2021", s.url + "/report.html", "--title", "Reading outcomes (Jiang, 2021)")[0], 0)
+
+    def test_abstract_pages_are_marked(self):
+        body = (200, HTML, page("<article>" + LONG + "</article>"))
+        s = self.serve({"/core/article/abs/some-title/ABC": body, "/doi/abstract/10.1/x": body, "/full/abstract-art": body})
+        self.assertEqual(self.fetch("a", s.url + "/core/article/abs/some-title/ABC")[1][5], "abstract-only")
+        self.assertEqual(self.fetch("b", s.url + "/doi/abstract/10.1/x")[1][5], "abstract-only")
+        self.assertEqual(len(self.fetch("c", s.url + "/full/abstract-art")[1]), 5)
+        self.src = self.tmp / "sources-closed"
+        self.doi_server({"id": "W7", "open_access": {"is_oa": False}, "locations": []}, **{"/10.1234/abc": body})
+        self.assertEqual(self.fetch("d", "10.1234/abc")[1][5], "abstract-only")
+        self.src = self.tmp / "sources-open"
+        self.doi_server({"id": "W7", "open_access": {"is_oa": True}, "locations": []}, **{"/10.1234/abc": body})
+        self.assertEqual(len(self.fetch("e", "10.1234/abc")[1]), 5)
+
+    def test_a_page_already_held_under_another_name_is_refused(self):
+        table = {"/item": (200, HTML, page("<article>" + LONG + "</article>"))}
+        s = self.serve(table)
+        table["/old-link"] = (302, {"Location": s.url + "/item"}, b"")
+        table["/other-link"] = (302, {"Location": s.url + "/item"}, b"")
+        self.assertEqual(self.fetch("boers-2021", s.url + "/old-link")[0], 0)
+        self.assertEqual(self.fetch("boers-2023", s.url + "/other-link"),
+                         (1, ["FAIL", "boers-2023", f"the same page as boers-2021: {s.url}/item"]))
+        self.assertEqual(self.saved(), ["boers-2021.md"])
+
+    def test_replace_swaps_a_name_only_when_the_new_copy_is_good(self):
+        s = self.serve({"/abstract-page": (200, HTML, page("<article>old " + LONG + "</article>")),
+                        "/full": (200, HTML, page("<article>new " + LONG + "</article>")), "/gone": (403, {}, b"")})
+        self.assertEqual(self.fetch("w", s.url + "/abstract-page")[0], 0)
+        (self.src / "w.layout.txt").write_text("stale layout copy", encoding="utf-8")
+        self.assertEqual(self.fetch("w", s.url + "/gone", "--replace")[0], 1)
+        self.assertTrue(self.read("w.md").startswith("old"))
+        code, f = self.fetch("w", s.url + "/full", "--replace")
+        self.assertEqual((code, f[2]), (0, "w.md"))
+        self.assertTrue(self.read("w.md").startswith("new"))
+        self.assertEqual(self.saved(), ["w.md"])
+        self.assertEqual([r["url"] for r in m.read_index(self.src)], [s.url + "/abstract-page", s.url + "/full"])
+        self.assertEqual(self.fetch("x", s.url + "/abstract-page")[1][1], "x")  # the replaced row is no longer reused
 
     def test_existing_name_is_refused(self):
         self.src.mkdir()
@@ -777,7 +880,7 @@ class FetchTest(unittest.TestCase):
                                          b'"timestamp": "20200304050607"}}}'), "no archived copy"),
                               ((200, {}, b"<html>busy</html>"), "Wayback: not a JSON reply"),
                               ((200, {}, b'["x"]'), "Wayback: not a JSON reply"),
-                              ((403, {}, b""), "Wayback: http 403: open it in a browser and pass the saved file path")):
+                              ((403, {}, b""), "Wayback: http 403: open it in a browser and pass the saved file with --from")):
             with self.subTest(reason=reason):
                 s = self.archive({"/gone": (404, {}, b""), "/wayback/available": reply})
                 s.seen.clear()

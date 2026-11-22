@@ -9,6 +9,7 @@ Commands below use `python3`; on Windows run `python` from Git Bash.
 | `intake/` | intake cases for `claude plugin eval` (T5.3; commands in the top README) | the intake |
 | `routing/prompts.tsv`, `dev/routing.py` | routing | trigger phrases (backlog item 16, R15) |
 | `dev/replay_support.py` | support replay | the support reader brief |
+| `scripts/prose.py` | prose pass on delivered reports | the report's writing rules and the prose pass |
 | `dev/score_round0.py` | round-0 recall | haiku searchers (R4), the citation list in round 0 (R8) |
 | `verifiers/planted.json`, `dev/plant_verifiers.py`, `dev/score_verifiers.py` | verifier set | the vote rule and the verifier brief (R6) |
 
@@ -60,6 +61,15 @@ A delivered view and its archived sources are fixed inputs, so a second support 
 ```bash
 python3 -I dev/replay_support.py build ~/research/<topic> ~/research/<topic>/extracts-<stem>.json brief.txt --limit 40
 python3 -I dev/replay_support.py score ~/research/<topic> ~/research/<topic>/extracts-<stem>.json reply.txt --sent 40
+```
+
+## Prose pass
+
+A delivered report, its claims and its view are fixed inputs, so `prose.py` on them measures what the writer did with the evidence: the share of cited statements a reader rates stretched, unbacked or wrong. `--plant` adds changed copies, and a reply that passes one as stated is not counted. Two readers on the same brief show how far one reply can be trusted.
+
+```bash
+python3 -I scripts/prose.py brief ~/research/<topic>/report-<stem>.md brief.txt --plant 4
+python3 -I scripts/prose.py score ~/research/<topic>/report-<stem>.md brief.txt reply.txt
 ```
 
 ## New gold items

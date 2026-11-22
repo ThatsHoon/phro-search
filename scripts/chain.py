@@ -18,7 +18,7 @@ Usage:
                                         works that --min or more of the sources with a DOI or an arXiv id reference
                                         (up to 60 sources asked, most cocited first, then most cited), then links
                                         that sources on --min or more other hosts point at (read from the archived
-                                        text, no request); each is `in` when sources/index.tsv or map.md holds it
+                                        text, no request); each is `in` when sources/index.tsv or map.md above its Next leads holds it
 
 An id is W123, https://openalex.org/W123, a bare DOI or a doi.org URL; an author id is A123.
 No key is needed; OPENALEX_API_KEY from the environment is sent when set and never printed.
@@ -63,7 +63,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-VERSION = "0.7.1"
+VERSION = "0.7.2"
 API = "https://api.openalex.org"
 UA = f"Mozilla/5.0 (compatible; phro-search/{VERSION}; +https://github.com/ThatsHoon/phro-search)"
 CAP = 10 * 1024 * 1024  # bytes read per API page
@@ -440,10 +440,11 @@ def cocited(topic, n, least):
     if not index.is_file():
         raise Fail(f"no sources/index.tsv in {clean(topic)}")
     with index.open(encoding="utf-8-sig", newline="") as f:
-        rows = list(csv.DictReader(f, delimiter="\t", quoting=csv.QUOTE_NONE))
+        rows = list({r.get("name"): r for r in csv.DictReader(f, delimiter="\t", quoting=csv.QUOTE_NONE)}.values())
     held = " ".join(f"{r.get('url') or ''} {r.get('final') or ''}" for r in rows)
     map_md = index.parents[1] / "map.md"
-    held = urllib.parse.unquote(held + (" " + map_md.read_text(encoding="utf-8-sig") if map_md.is_file() else "")).lower()
+    mapped = re.split(r"(?im)^## next leads\b", map_md.read_text(encoding="utf-8-sig"))[0] if map_md.is_file() else ""
+    held = urllib.parse.unquote(f"{held} {mapped}").lower()
     keys = list(dict.fromkeys(k for k in map(source_key, rows) if k))
     tally, own, resolved, cut = collections.Counter(), set(), 0, ""
     for key in keys[:MAX_SOURCES]:
