@@ -118,6 +118,26 @@ class LocateTest(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(rep.main([str(self.topic), "s", "--check"]), 0)
 
+    def test_a_finding_without_exact_words_takes_a_quote_from_the_pick(self):
+        (self.topic / "notes" / "flood.md").write_text(
+            NOTE + '- F7. Summarized only. Quote: none. https://arxiv.org/abs/2401.00001 (paper; the tool summarized it)\n',
+            encoding="utf-8")
+        self.assertIn("MISS\tflood F7\tno quote\thttps://arxiv.org/abs/2401.00001", self.run_it()[1])
+        code, out = self.run_it("s", "--picks", self.picks(
+            {"id": "c1", "findings": ["flood F7"], "importance": "supporting", "claim": "x",
+             "quotes": [{"file": "p.md", "line": 3, "text": "reaches 95 percent accuracy"}]},
+            {"id": "c2", "findings": ["flood F6"], "importance": "supporting", "claim": "y",
+             "quotes": [{"file": "a.md", "line": 2, "text": "first half"}]}))
+        self.assertEqual(code, 1)
+        self.assertEqual(out, ["PICK\tc2\tflood F6\tno quote", "FAIL\t1 picks cannot be used; nothing written"])
+        code, out = self.run_it("s", "--picks", self.picks(
+            {"id": "c1", "findings": ["flood F7"], "importance": "supporting", "claim": "x",
+             "quotes": [{"file": "p.md", "line": 3, "text": "reaches 95 percent accuracy"}]}))
+        self.assertEqual(code, 0, out)
+        claim = json.loads((self.topic / "claims.json").read_text(encoding="utf-8"))[0]
+        self.assertEqual((claim["claim"], claim["url"], claim["label"], claim["quote"]),
+                         ("Summarized only.", "https://arxiv.org/abs/2401.00001", "paper", "reaches 95 percent accuracy"))
+
     def test_a_short_quote_is_not_placed(self):
         self.assertIsNone(loc.find(self.topic / "sources", "p.md", "95 percent"))
         self.assertEqual(loc.find(self.topic / "sources", "p.md", "the MODEL reaches 95")[:2], (3, 3))  # case and markup ignored

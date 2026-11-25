@@ -39,8 +39,9 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import report as rep  # noqa: E402  (python -I leaves the script's folder off the path)
 
-VERSION = "0.7.2"
+VERSION = "0.7.3"
 FINDING = re.compile(r"^- F(\d+)\.\s*(.*?)\s*Quote[^:\"]*:\s*\"(.*)\"(.*?)(https?://\S+)(.*)$")
+UNQUOTED = re.compile(r"^- F(\d+)\.\s*(.*?)\s*Quote[^:\"]*:\s*none\b\.?(.*?)(https?://\S+)(.*)$", re.I)
 LABEL = re.compile(r"\((paper|official|first-hand|observed|summary)\b[^)]*\)")
 TEXT = (".md", ".txt")
 MIN_QUOTE = 12
@@ -124,7 +125,10 @@ def findings(topic):
             key = f"{note.stem} F{head.group(1)}"
             m = FINDING.match(raw.rstrip("\r"))
             if not m:
-                out[key] = {"miss": "no quote", "url": "-"}
+                u = UNQUOTED.match(raw.rstrip("\r"))
+                out[key] = {"miss": "no quote", "url": "-"} if not u else {
+                    "miss": "no quote", "claim": u.group(2), "url": u.group(4).rstrip(".,;)"),
+                    "label": (LABEL.findall(u.group(5)) or ["summary"])[0]}
                 continue
             claim, quote, url, tail = m.group(2), m.group(3), m.group(5).rstrip(".,;)"), m.group(6)
             labels = LABEL.findall(tail)
@@ -162,7 +166,7 @@ def write(topic, stem, picks, found):
         for key in pick["findings"]:
             item = found.get(key)
             reason = "no such finding" if item is None else item.get("miss")
-            if reason and (item is None or not pick.get("quotes")):
+            if reason and (item is None or "claim" not in item or not pick.get("quotes")):
                 problems.append((pick["id"], key, reason))
     if problems:
         for p in problems:

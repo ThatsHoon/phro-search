@@ -37,7 +37,7 @@ With any --kind, language: when the Title line of the brief in the topic's map.m
 import argparse, itertools, json, re, sys, urllib.parse
 from pathlib import Path
 
-VERSION = "0.7.2"
+VERSION = "0.7.3"
 
 # One hit fails. English entries match whole words; Korean entries match anywhere in the text.
 HARD_PHRASES = [

@@ -28,7 +28,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
-VERSION = "0.7.2"
+VERSION = "0.7.3"
 
 HN, ARCTIC = "https://hn.algolia.com/api/v1", "https://arctic-shift.photon-reddit.com/api"
 GH, ARXIV = "https://api.github.com", "https://export.arxiv.org/api/query"

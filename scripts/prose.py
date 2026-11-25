@@ -31,7 +31,7 @@ import re
 import sys
 from pathlib import Path
 
-VERSION = "0.7.2"
+VERSION = "0.7.3"
 
 CITE = re.compile(r"\[(c\d+(?:,\s*c\d+)*)\]")
 RATINGS = ("stated", "stretched", "unbacked", "wrong")
